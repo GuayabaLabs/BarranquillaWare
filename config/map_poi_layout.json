@@ -1,0 +1,966 @@
+{
+  "pois": {
+    "mallorquin": {
+      "name": "Parque Mallorquín",
+      "x": 203,
+      "y": 155,
+      "width": 127,
+      "angle": 0.0
+    },
+    "uninorte": {
+      "name": "Campus Uninorte",
+      "x": 145,
+      "y": 505,
+      "width": 390,
+      "angle": 0.0
+    },
+    "buenavista": {
+      "name": "C.C. Buenavista",
+      "x": 856,
+      "y": 501,
+      "width": 585,
+      "angle": 0.0
+    },
+    "ventana": {
+      "name": "Ventana al Mundo",
+      "x": 1830,
+      "y": 236,
+      "width": 125,
+      "angle": 0.0
+    },
+    "malecon": {
+      "name": "Gran Malecón",
+      "x": 2689,
+      "y": 503,
+      "width": 270,
+      "angle": 0.0
+    },
+    "aleta": {
+      "name": "Aleta del Tiburón",
+      "x": 2740,
+      "y": 806,
+      "width": 135,
+      "angle": 0.0
+    },
+    "metropolitano": {
+      "name": "Estadio Metropolitano",
+      "x": 1778,
+      "y": 1242,
+      "width": 365,
+      "angle": 0.0
+    },
+    "aeropuerto": {
+      "name": "Aeropuerto Ernesto Cortissoz",
+      "x": 2625,
+      "y": 1221,
+      "width": 540,
+      "angle": 0.0
+    }
+  },
+  "street_shader": {
+    "color": [
+      245,
+      185,
+      55
+    ],
+    "alpha": 120,
+    "width": 6
+  },
+  "street_network": {
+    "nodes": [
+      {
+        "id": 0,
+        "name": "Nodo 1",
+        "x": 808,
+        "y": 464,
+        "is_stop": true
+      },
+      {
+        "id": 7,
+        "name": "Nodo 8",
+        "x": 260,
+        "y": 210,
+        "is_stop": false
+      },
+      {
+        "id": 23,
+        "name": "Nodo 24",
+        "x": 1826,
+        "y": 538,
+        "is_stop": true
+      },
+      {
+        "id": 24,
+        "name": "Nodo 25",
+        "x": 1977,
+        "y": 533,
+        "is_stop": false
+      },
+      {
+        "id": 25,
+        "name": "Nodo 26",
+        "x": 1970,
+        "y": 446,
+        "is_stop": false
+      },
+      {
+        "id": 26,
+        "name": "Nodo 27",
+        "x": 1797,
+        "y": 469,
+        "is_stop": false
+      },
+      {
+        "id": 27,
+        "name": "Nodo 28",
+        "x": 1456,
+        "y": 396,
+        "is_stop": false
+      },
+      {
+        "id": 35,
+        "name": "Nodo 36",
+        "x": 3045,
+        "y": 1507,
+        "is_stop": true
+      },
+      {
+        "id": 39,
+        "x": 601,
+        "y": 1311,
+        "is_stop": false,
+        "name": "Nodo 40"
+      },
+      {
+        "id": 40,
+        "x": 2295,
+        "y": 705,
+        "is_stop": false,
+        "name": "Nodo 41"
+      },
+      {
+        "id": 41,
+        "x": 1936,
+        "y": 951,
+        "is_stop": false,
+        "name": "Nodo 42"
+      },
+      {
+        "id": 42,
+        "x": 1598,
+        "y": 1215,
+        "is_stop": false,
+        "name": "Nodo 43"
+      },
+      {
+        "id": 43,
+        "x": 1369,
+        "y": 1078,
+        "is_stop": false,
+        "name": "Nodo 44"
+      },
+      {
+        "id": 46,
+        "x": 613,
+        "y": 1371,
+        "is_stop": false,
+        "name": "Nodo 47"
+      },
+      {
+        "id": 47,
+        "x": 523,
+        "y": 1371,
+        "is_stop": false,
+        "name": "Nodo 48"
+      },
+      {
+        "id": 48,
+        "x": 520,
+        "y": 1319,
+        "is_stop": false,
+        "name": "Nodo 49"
+      },
+      {
+        "id": 49,
+        "x": 291,
+        "y": 1527,
+        "is_stop": false,
+        "name": "Nodo 50"
+      },
+      {
+        "id": 50,
+        "x": 1090,
+        "y": 1682,
+        "is_stop": false,
+        "name": "Nodo 51"
+      },
+      {
+        "id": 51,
+        "x": 1291,
+        "y": 1707,
+        "is_stop": false,
+        "name": "Nodo 52"
+      },
+      {
+        "id": 52,
+        "x": 1495,
+        "y": 1431,
+        "is_stop": false,
+        "name": "Nodo 53"
+      },
+      {
+        "id": 53,
+        "x": 1636,
+        "y": 1349,
+        "is_stop": true,
+        "name": "Nodo 54"
+      },
+      {
+        "id": 54,
+        "x": 1564,
+        "y": 1877,
+        "is_stop": false,
+        "name": "Nodo 55"
+      },
+      {
+        "id": 55,
+        "x": 1687,
+        "y": 1277,
+        "is_stop": false,
+        "name": "Nodo 56"
+      },
+      {
+        "id": 56,
+        "x": 2033,
+        "y": 1198,
+        "is_stop": false,
+        "name": "Nodo 57"
+      },
+      {
+        "id": 57,
+        "x": 2243,
+        "y": 1306,
+        "is_stop": false,
+        "name": "Nodo 58"
+      },
+      {
+        "id": 58,
+        "x": 2473,
+        "y": 1138,
+        "is_stop": false,
+        "name": "Nodo 59"
+      },
+      {
+        "id": 59,
+        "x": 2693,
+        "y": 988,
+        "is_stop": true,
+        "name": "Nodo 60"
+      },
+      {
+        "id": 60,
+        "x": 2890,
+        "y": 1019,
+        "is_stop": false,
+        "name": "Nodo 61"
+      },
+      {
+        "id": 61,
+        "x": 2878,
+        "y": 904,
+        "is_stop": false,
+        "name": "Nodo 62"
+      },
+      {
+        "id": 62,
+        "x": 2701,
+        "y": 931,
+        "is_stop": false,
+        "name": "Nodo 63"
+      },
+      {
+        "id": 63,
+        "x": 2782,
+        "y": 818,
+        "is_stop": true,
+        "name": "Nodo 64"
+      },
+      {
+        "id": 64,
+        "x": 3082,
+        "y": 1137,
+        "is_stop": false,
+        "name": "Nodo 65"
+      },
+      {
+        "id": 65,
+        "x": 3328,
+        "y": 1283,
+        "is_stop": false,
+        "name": "Nodo 66"
+      },
+      {
+        "id": 66,
+        "x": 2859,
+        "y": 1650,
+        "is_stop": false,
+        "name": "Nodo 67"
+      },
+      {
+        "id": 67,
+        "x": 1881,
+        "y": 1565,
+        "is_stop": false,
+        "name": "Nodo 68"
+      },
+      {
+        "id": 68,
+        "x": 2214,
+        "y": 1501,
+        "is_stop": false,
+        "name": "Nodo 69"
+      },
+      {
+        "id": 69,
+        "x": 1992,
+        "y": 1868,
+        "is_stop": false,
+        "name": "Nodo 70"
+      },
+      {
+        "id": 70,
+        "x": 366,
+        "y": 1025,
+        "is_stop": false,
+        "name": "Nodo 71"
+      },
+      {
+        "id": 71,
+        "x": 543,
+        "y": 811,
+        "is_stop": true,
+        "name": "Nodo 72"
+      },
+      {
+        "id": 74,
+        "x": 906,
+        "y": 1106,
+        "is_stop": false,
+        "name": "Nodo 75"
+      },
+      {
+        "id": 75,
+        "x": 1159,
+        "y": 946,
+        "is_stop": false,
+        "name": "Nodo 76"
+      },
+      {
+        "id": 76,
+        "x": 1377,
+        "y": 804,
+        "is_stop": true,
+        "name": "Nodo 77"
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 27,
+        "ctrl_x": 996,
+        "ctrl_y": 357,
+        "hidden": false
+      },
+      {
+        "from": 23,
+        "to": 26,
+        "ctrl_x": 1813,
+        "ctrl_y": 499,
+        "hidden": false
+      },
+      {
+        "from": 27,
+        "to": 26,
+        "ctrl_x": 1669,
+        "ctrl_y": 403,
+        "hidden": false
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "ctrl_x": 1860,
+        "ctrl_y": 385,
+        "hidden": true
+      },
+      {
+        "from": 25,
+        "to": 24,
+        "ctrl_x": 2010,
+        "ctrl_y": 488,
+        "hidden": false
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "ctrl_x": 1901,
+        "ctrl_y": 535,
+        "hidden": false
+      },
+      {
+        "from": 24,
+        "to": 40,
+        "ctrl_x": 2136,
+        "ctrl_y": 619,
+        "hidden": false
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "ctrl_x": 2113,
+        "ctrl_y": 825,
+        "hidden": false
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "ctrl_x": 1765,
+        "ctrl_y": 1083,
+        "hidden": false
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "ctrl_x": 1483,
+        "ctrl_y": 1146,
+        "hidden": false
+      },
+      {
+        "from": 39,
+        "to": 46,
+        "ctrl_x": 640,
+        "ctrl_y": 1340,
+        "hidden": false
+      },
+      {
+        "from": 46,
+        "to": 47,
+        "ctrl_x": 562,
+        "ctrl_y": 1395,
+        "hidden": false
+      },
+      {
+        "from": 47,
+        "to": 48,
+        "ctrl_x": 490,
+        "ctrl_y": 1359,
+        "hidden": false
+      },
+      {
+        "from": 48,
+        "to": 39,
+        "ctrl_x": 565,
+        "ctrl_y": 1293,
+        "hidden": false
+      },
+      {
+        "from": 47,
+        "to": 49,
+        "ctrl_x": 407,
+        "ctrl_y": 1449,
+        "hidden": false
+      },
+      {
+        "from": 46,
+        "to": 50,
+        "ctrl_x": 851,
+        "ctrl_y": 1526,
+        "hidden": false
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "ctrl_x": 1189,
+        "ctrl_y": 1737,
+        "hidden": false
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "ctrl_x": 1410,
+        "ctrl_y": 1568,
+        "hidden": false
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "ctrl_x": 1546,
+        "ctrl_y": 1341,
+        "hidden": false
+      },
+      {
+        "from": 51,
+        "to": 54,
+        "ctrl_x": 1427,
+        "ctrl_y": 1792,
+        "hidden": false
+      },
+      {
+        "from": 53,
+        "to": 55,
+        "ctrl_x": 1654,
+        "ctrl_y": 1307,
+        "hidden": false
+      },
+      {
+        "from": 42,
+        "to": 55,
+        "ctrl_x": 1642,
+        "ctrl_y": 1246,
+        "hidden": false
+      },
+      {
+        "from": 55,
+        "to": 56,
+        "ctrl_x": 1788,
+        "ctrl_y": 1177,
+        "hidden": false
+      },
+      {
+        "from": 56,
+        "to": 57,
+        "ctrl_x": 2177,
+        "ctrl_y": 1222,
+        "hidden": false
+      },
+      {
+        "from": 57,
+        "to": 58,
+        "ctrl_x": 2358,
+        "ctrl_y": 1222,
+        "hidden": false
+      },
+      {
+        "from": 58,
+        "to": 59,
+        "ctrl_x": 2580,
+        "ctrl_y": 1060,
+        "hidden": false
+      },
+      {
+        "from": 59,
+        "to": 60,
+        "ctrl_x": 2791,
+        "ctrl_y": 1057,
+        "hidden": false
+      },
+      {
+        "from": 60,
+        "to": 61,
+        "ctrl_x": 2965,
+        "ctrl_y": 953,
+        "hidden": false
+      },
+      {
+        "from": 61,
+        "to": 62,
+        "ctrl_x": 2774,
+        "ctrl_y": 872,
+        "hidden": true
+      },
+      {
+        "from": 62,
+        "to": 59,
+        "ctrl_x": 2680,
+        "ctrl_y": 946,
+        "hidden": false
+      },
+      {
+        "from": 61,
+        "to": 63,
+        "ctrl_x": 2830,
+        "ctrl_y": 861,
+        "hidden": true
+      },
+      {
+        "from": 63,
+        "to": 40,
+        "ctrl_x": 2434,
+        "ctrl_y": 598,
+        "hidden": true
+      },
+      {
+        "from": 40,
+        "to": 62,
+        "ctrl_x": 2498,
+        "ctrl_y": 818,
+        "hidden": false
+      },
+      {
+        "from": 60,
+        "to": 64,
+        "ctrl_x": 2985,
+        "ctrl_y": 1074,
+        "hidden": false
+      },
+      {
+        "from": 64,
+        "to": 65,
+        "ctrl_x": 3213,
+        "ctrl_y": 1208,
+        "hidden": false
+      },
+      {
+        "from": 65,
+        "to": 35,
+        "ctrl_x": 3186,
+        "ctrl_y": 1395,
+        "hidden": false
+      },
+      {
+        "from": 35,
+        "to": 66,
+        "ctrl_x": 2951,
+        "ctrl_y": 1578,
+        "hidden": false
+      },
+      {
+        "from": 53,
+        "to": 67,
+        "ctrl_x": 1645,
+        "ctrl_y": 1533,
+        "hidden": false
+      },
+      {
+        "from": 67,
+        "to": 68,
+        "ctrl_x": 2070,
+        "ctrl_y": 1582,
+        "hidden": false
+      },
+      {
+        "from": 57,
+        "to": 68,
+        "ctrl_x": 2288,
+        "ctrl_y": 1415,
+        "hidden": false
+      },
+      {
+        "from": 68,
+        "to": 69,
+        "ctrl_x": 2085,
+        "ctrl_y": 1681,
+        "hidden": false
+      },
+      {
+        "from": 48,
+        "to": 70,
+        "ctrl_x": 295,
+        "ctrl_y": 1212,
+        "hidden": false
+      },
+      {
+        "from": 70,
+        "to": 71,
+        "ctrl_x": 421,
+        "ctrl_y": 892,
+        "hidden": false
+      },
+      {
+        "from": 71,
+        "to": 0,
+        "ctrl_x": 693,
+        "ctrl_y": 590,
+        "hidden": false
+      },
+      {
+        "from": 39,
+        "to": 74,
+        "ctrl_x": 753,
+        "ctrl_y": 1208,
+        "hidden": false
+      },
+      {
+        "from": 74,
+        "to": 75,
+        "ctrl_x": 1032,
+        "ctrl_y": 1026,
+        "hidden": false
+      },
+      {
+        "from": 43,
+        "to": 75,
+        "ctrl_x": 1264,
+        "ctrl_y": 1012,
+        "hidden": false
+      },
+      {
+        "from": 75,
+        "to": 76,
+        "ctrl_x": 1267,
+        "ctrl_y": 874,
+        "hidden": false
+      },
+      {
+        "from": 76,
+        "to": 23,
+        "ctrl_x": 1601,
+        "ctrl_y": 671,
+        "hidden": false
+      }
+    ]
+  },
+  "custom_paths": [
+    {
+      "x": 808,
+      "y": 464,
+      "is_stop": true,
+      "name": "Nodo 1"
+    },
+    {
+      "x": 260,
+      "y": 210,
+      "is_stop": false,
+      "name": "Nodo 8"
+    },
+    {
+      "x": 1826,
+      "y": 538,
+      "is_stop": true,
+      "name": "Nodo 24"
+    },
+    {
+      "x": 1977,
+      "y": 533,
+      "is_stop": false,
+      "name": "Nodo 25"
+    },
+    {
+      "x": 1970,
+      "y": 446,
+      "is_stop": false,
+      "name": "Nodo 26"
+    },
+    {
+      "x": 1797,
+      "y": 469,
+      "is_stop": false,
+      "name": "Nodo 27"
+    },
+    {
+      "x": 1456,
+      "y": 396,
+      "is_stop": false,
+      "name": "Nodo 28"
+    },
+    {
+      "x": 3045,
+      "y": 1507,
+      "is_stop": true,
+      "name": "Nodo 36"
+    },
+    {
+      "x": 601,
+      "y": 1311,
+      "is_stop": false,
+      "name": "Nodo 40"
+    },
+    {
+      "x": 2295,
+      "y": 705,
+      "is_stop": false,
+      "name": "Nodo 41"
+    },
+    {
+      "x": 1936,
+      "y": 951,
+      "is_stop": false,
+      "name": "Nodo 42"
+    },
+    {
+      "x": 1598,
+      "y": 1215,
+      "is_stop": false,
+      "name": "Nodo 43"
+    },
+    {
+      "x": 1369,
+      "y": 1078,
+      "is_stop": false,
+      "name": "Nodo 44"
+    },
+    {
+      "x": 613,
+      "y": 1371,
+      "is_stop": false,
+      "name": "Nodo 47"
+    },
+    {
+      "x": 523,
+      "y": 1371,
+      "is_stop": false,
+      "name": "Nodo 48"
+    },
+    {
+      "x": 520,
+      "y": 1319,
+      "is_stop": false,
+      "name": "Nodo 49"
+    },
+    {
+      "x": 291,
+      "y": 1527,
+      "is_stop": false,
+      "name": "Nodo 50"
+    },
+    {
+      "x": 1090,
+      "y": 1682,
+      "is_stop": false,
+      "name": "Nodo 51"
+    },
+    {
+      "x": 1291,
+      "y": 1707,
+      "is_stop": false,
+      "name": "Nodo 52"
+    },
+    {
+      "x": 1495,
+      "y": 1431,
+      "is_stop": false,
+      "name": "Nodo 53"
+    },
+    {
+      "x": 1636,
+      "y": 1349,
+      "is_stop": true,
+      "name": "Nodo 54"
+    },
+    {
+      "x": 1564,
+      "y": 1877,
+      "is_stop": false,
+      "name": "Nodo 55"
+    },
+    {
+      "x": 1687,
+      "y": 1277,
+      "is_stop": false,
+      "name": "Nodo 56"
+    },
+    {
+      "x": 2033,
+      "y": 1198,
+      "is_stop": false,
+      "name": "Nodo 57"
+    },
+    {
+      "x": 2243,
+      "y": 1306,
+      "is_stop": false,
+      "name": "Nodo 58"
+    },
+    {
+      "x": 2473,
+      "y": 1138,
+      "is_stop": false,
+      "name": "Nodo 59"
+    },
+    {
+      "x": 2693,
+      "y": 988,
+      "is_stop": true,
+      "name": "Nodo 60"
+    },
+    {
+      "x": 2890,
+      "y": 1019,
+      "is_stop": false,
+      "name": "Nodo 61"
+    },
+    {
+      "x": 2878,
+      "y": 904,
+      "is_stop": false,
+      "name": "Nodo 62"
+    },
+    {
+      "x": 2701,
+      "y": 931,
+      "is_stop": false,
+      "name": "Nodo 63"
+    },
+    {
+      "x": 2782,
+      "y": 818,
+      "is_stop": true,
+      "name": "Nodo 64"
+    },
+    {
+      "x": 3082,
+      "y": 1137,
+      "is_stop": false,
+      "name": "Nodo 65"
+    },
+    {
+      "x": 3328,
+      "y": 1283,
+      "is_stop": false,
+      "name": "Nodo 66"
+    },
+    {
+      "x": 2859,
+      "y": 1650,
+      "is_stop": false,
+      "name": "Nodo 67"
+    },
+    {
+      "x": 1881,
+      "y": 1565,
+      "is_stop": false,
+      "name": "Nodo 68"
+    },
+    {
+      "x": 2214,
+      "y": 1501,
+      "is_stop": false,
+      "name": "Nodo 69"
+    },
+    {
+      "x": 1992,
+      "y": 1868,
+      "is_stop": false,
+      "name": "Nodo 70"
+    },
+    {
+      "x": 366,
+      "y": 1025,
+      "is_stop": false,
+      "name": "Nodo 71"
+    },
+    {
+      "x": 543,
+      "y": 811,
+      "is_stop": true,
+      "name": "Nodo 72"
+    },
+    {
+      "x": 906,
+      "y": 1106,
+      "is_stop": false,
+      "name": "Nodo 75"
+    },
+    {
+      "x": 1159,
+      "y": 946,
+      "is_stop": false,
+      "name": "Nodo 76"
+    },
+    {
+      "x": 1377,
+      "y": 804,
+      "is_stop": true,
+      "name": "Nodo 77"
+    }
+  ]
+}
