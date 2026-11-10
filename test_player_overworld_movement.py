@@ -55,10 +55,10 @@ def test_overworld_navigation_suite():
     print(f"[OK] Jugador completó viaje hasta nodo {dest_id} ({scene.player_pos}) en {steps * 0.016:.2f}s.")
     print(f"[OK] Seguimiento de cámara 2.A verificado: cámara siguió de ({cam_start_x:.1f}) a ({scene.camera.x:.1f})")
 
-    # 5. Verificación de Point & Click hacia Ventana al Mundo (nodo 24 a través del túnel 26->25->24)
-    path_to_ventana = scene._find_shortest_path(dest_id, 24)
-    assert path_to_ventana is not None, "BFS no encontró ruta hacia nodo 24"
-    scene._start_path_travel(path_to_ventana)
+    # 5. Verificación de Point & Click hacia el túnel (nodo 25 a través de la arista oculta 26->25)
+    path_to_tunnel = scene._find_shortest_path(dest_id, 25)
+    assert path_to_tunnel is not None, "BFS no encontró ruta hacia nodo 25"
+    scene._start_path_travel(path_to_tunnel)
     assert scene.player_is_moving
 
     # Verificar que al pasar por el tramo oculto el alpha disminuye
@@ -70,12 +70,14 @@ def test_overworld_navigation_suite():
 
     assert min_alpha < 0.25, f"El avatar no se ocultó en el túnel (min_alpha fue {min_alpha})"
     assert scene.player_alpha == 1.0, "El avatar debió restaurar alpha = 1.0 al llegar al destino"
-    assert scene.player_node_id == 24, f"El jugador debió llegar a nodo 24, llegó a {scene.player_node_id}"
-    print(f"[OK] Ocultamiento en túnel verificado con fade-out a alpha={min_alpha:.2f} y reaparición en nodo 24.")
+    assert scene.player_node_id == 25, f"El jugador debió llegar a nodo 25, llegó a {scene.player_node_id}"
+    print(f"[OK] Ocultamiento en túnel verificado con fade-out a alpha={min_alpha:.2f} y reaparición en nodo 25.")
 
-    # 6. Point & Click sobre el nodo 2 (Parada Uninorte)
+    # 6. Point & Click sobre la parada de Uninorte
+    uninorte_target_id = scene._get_poi_target_node("uninorte")
+    assert uninorte_target_id is not None, "No se encontró nodo objetivo para uninorte"
     nodes, _, node_map, _, _ = scene._get_street_graph()
-    target_node = node_map[2]
+    target_node = node_map[uninorte_target_id]
     screen_click_x = int(target_node["x"] - scene.camera.x)
     screen_click_y = int(target_node["y"] - scene.camera.y)
     evt_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": (screen_click_x, screen_click_y)})
@@ -83,11 +85,11 @@ def test_overworld_navigation_suite():
     scene.handle_event(evt_down)
     scene.handle_event(evt_up)
 
-    assert scene.player_is_moving, "Point & Click debió iniciar movimiento hacia nodo 2"
+    assert scene.player_is_moving, f"Point & Click debió iniciar movimiento hacia nodo {uninorte_target_id}"
     while scene.player_is_moving:
         scene.update(0.016)
 
-    assert scene.player_node_id == 2, f"Jugador debió llegar a nodo 2, llegó a {scene.player_node_id}"
+    assert scene.player_node_id == uninorte_target_id, f"Jugador debió llegar a nodo {uninorte_target_id}, llegó a {scene.player_node_id}"
     print(f"[OK] Point & Click completó navegación hasta nodo {scene.player_node_id}")
 
     # 7. Verificación de apertura de Quest Card con SPACE estando en nodo de parada
