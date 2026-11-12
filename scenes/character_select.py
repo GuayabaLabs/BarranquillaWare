@@ -54,13 +54,11 @@ class CharacterCard:
         self.theme_color: Tuple[int, int, int] = config.get("theme_color", (255, 218, 55))
         self.target_height = target_height
 
-        # Recortar ruido alfa de compresión para obtener el perímetro exacto de la tarjeta
-        clean_sprite = self._crop_true_content(sprite)
-        orig_w = clean_sprite.get_width()
-        orig_h = clean_sprite.get_height()
+        orig_w = sprite.get_width()
+        orig_h = sprite.get_height()
         self.base_width = int(orig_w * target_height / orig_h)
         self.base_height = target_height
-        self.base_sprite = pygame.transform.smoothscale(clean_sprite, (self.base_width, self.base_height))
+        self.base_sprite = pygame.transform.smoothscale(sprite, (self.base_width, self.base_height))
 
         self.center_x, self.center_y = center_pos
         self.rect = pygame.Rect(0, 0, self.base_width, self.base_height)
@@ -79,18 +77,6 @@ class CharacterCard:
 
         # Pre-computar textura de resplandor suave en el color temático del personaje
         self.glow_texture = self._create_soft_glow(self.base_width, self.base_height, color=self.theme_color)
-
-    @staticmethod
-    def _crop_true_content(surface: pygame.Surface, alpha_threshold: int = 20) -> pygame.Surface:
-        mask = pygame.mask.from_surface(surface, alpha_threshold)
-        rects = mask.get_bounding_rects()
-        if not rects:
-            return surface
-        bbox = rects[0]
-        sub = surface.subsurface(bbox)
-        clean = pygame.Surface((bbox.width, bbox.height), pygame.SRCALPHA)
-        clean.blit(sub, (0, 0))
-        return clean
 
     def _create_soft_glow(self, width: int, height: int, color: Tuple[int, int, int] = (255, 218, 55)) -> pygame.Surface:
         pad = 60
@@ -147,20 +133,27 @@ class CharacterCard:
             glow_scale = 1.0 + pulse * 0.05
             gw = int(self.glow_texture.get_width() * glow_scale)
             gh = int(self.glow_texture.get_height() * glow_scale)
-            scaled_glow = pygame.transform.smoothscale(self.glow_texture, (gw, gh))
-            surface.blit(scaled_glow, scaled_glow.get_rect(center=(self.center_x, int(draw_y))))
+            if getattr(self, "_cached_sel_glow_size", None) != (gw, gh):
+                self._cached_sel_glow_size = (gw, gh)
+                self._cached_sel_glow = pygame.transform.smoothscale(self.glow_texture, (gw, gh))
+            surface.blit(self._cached_sel_glow, self._cached_sel_glow.get_rect(center=(self.center_x, int(draw_y))))
         elif self.is_hovered:
             # Hover suave con el color temático del personaje (sin amarillos genéricos)
             gw = int(self.glow_texture.get_width() * 0.98)
             gh = int(self.glow_texture.get_height() * 0.98)
-            hover_glow = pygame.transform.smoothscale(self.glow_texture, (gw, gh))
-            hover_glow.set_alpha(115)
-            surface.blit(hover_glow, hover_glow.get_rect(center=(self.center_x, int(draw_y))))
+            if getattr(self, "_cached_hov_glow_size", None) != (gw, gh):
+                self._cached_hov_glow_size = (gw, gh)
+                hover_glow = pygame.transform.smoothscale(self.glow_texture, (gw, gh))
+                hover_glow.set_alpha(115)
+                self._cached_hov_glow = hover_glow
+            surface.blit(self._cached_hov_glow, self._cached_hov_glow.get_rect(center=(self.center_x, int(draw_y))))
 
         # Renderizar la tarjeta limpia (la ilustración en sí como caja oficial)
-        scaled_sprite = pygame.transform.smoothscale(self.base_sprite, (draw_w, draw_h))
-        dest_rect = scaled_sprite.get_rect(center=(self.center_x, int(draw_y)))
-        surface.blit(scaled_sprite, dest_rect)
+        if getattr(self, "_cached_sprite_size", None) != (draw_w, draw_h):
+            self._cached_sprite_size = (draw_w, draw_h)
+            self._cached_sprite = pygame.transform.smoothscale(self.base_sprite, (draw_w, draw_h))
+        dest_rect = self._cached_sprite.get_rect(center=(self.center_x, int(draw_y)))
+        surface.blit(self._cached_sprite, dest_rect)
 
 
 class CharacterSelectScene(BaseState):
@@ -246,7 +239,14 @@ class CharacterSelectScene(BaseState):
 
         self.cards: List[CharacterCard] = []
         for i, config in enumerate(CHARACTER_CATALOG):
-            sprite = self.assets.load_surface(config["asset_filename"])
+            try:
+                sprite = self.assets.load_cropped_surface(config["asset_filename"], alpha_threshold=20)
+            except Exception as e:
+                print(f"[CharacterSelect] Fallback para {config['asset_filename']}: {e}")
+                # Fallback seguro con placeholder si falta el asset
+                sprite = pygame.Surface((300, 490), pygame.SRCALPHA)
+                pygame.draw.rect(sprite, config.get("theme_color", (100, 100, 100)), (0, 0, 300, 490), border_radius=16)
+
             card = CharacterCard(
                 config=config,
                 center_pos=(centers_x[i], card_y),

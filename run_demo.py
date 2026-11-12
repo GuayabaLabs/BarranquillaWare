@@ -16,9 +16,7 @@ Uso:
     python run_demo.py --scene character
 """
 
-import sys
 import argparse
-import pygame
 
 from core.engine import Engine
 from scenes.main_menu import MainMenuScene

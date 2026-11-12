@@ -1,5 +1,4 @@
 import os
-import math
 import pygame
 
 # Headless SDL video setup
@@ -27,12 +26,15 @@ def test_overworld_navigation_suite():
     assert not scene.player_is_moving, "El jugador no debería estar moviéndose al inicio"
     print(f"[OK] Inicialización en nodo {scene.player_node_id} en posición {scene.player_pos}")
 
-    # 2. Verificación de tokens para los distintos personajes (52x62)
+    # 2. Verificación de tokens y chibis para los distintos personajes
     for char_id in ["shakira", "katherine", "char", "westcol"]:
         scene.character_id = char_id
         scene._build_player_token()
+        scene._load_player_chibi()
         assert scene.player_token_surf.get_size() == (52, 62), f"Tamaño incorrecto de token para {char_id}"
-        print(f"[OK] Token badge estilizado generado para personaje '{char_id}' (52x62)")
+        assert scene.player_chibi_surf is not None, f"Chibi no cargó para {char_id}"
+        assert scene.player_chibi_surf.get_height() == 70, f"Altura incorrecta de chibi para {char_id}"
+        print(f"[OK] Token y Chibi generados para personaje '{char_id}' (chibi size: {scene.player_chibi_surf.get_size()})")
 
     # 3. Navegación D-Pad (Flecha Derecha / K_d) desde nodo 0 hacia la derecha
     # Desde nodo 0 (808, 464) la dirección derecha viaja hacia nodo 6 (1150, 450) y luego nodo 7 (1500, 430)
@@ -92,14 +94,12 @@ def test_overworld_navigation_suite():
     assert scene.player_node_id == uninorte_target_id, f"Jugador debió llegar a nodo {uninorte_target_id}, llegó a {scene.player_node_id}"
     print(f"[OK] Point & Click completó navegación hasta nodo {scene.player_node_id}")
 
-    # 7. Verificación de apertura de Quest Card con SPACE estando en nodo de parada
+    # 7. Verificación de notificación de llegada con SPACE estando en nodo de parada
     evt_space = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE})
     scene.handle_event(evt_space)
-    assert scene.quest_card_open, "Pulsar SPACE en el nodo de parada debió abrir la tarjeta de misión del POI"
-    assert scene.active_poi == "uninorte", f"Se esperaba POI uninorte, se abrió {scene.active_poi}"
-    print(f"[OK] Tecla SPACE abrió tarjeta de misión para POI '{scene.active_poi}'")
-    scene._close_quest_card()
-    assert not scene.quest_card_open
+    assert scene.toast_msg is not None, "Pulsar SPACE en el nodo de parada debió activar toast informativo del POI"
+    assert "UNINORTE" in scene.toast_msg, f"Se esperaba mención de UNINORTE en toast: {scene.toast_msg}"
+    print(f"[OK] Tecla SPACE desplegó toast informativo: '{scene.toast_msg}'")
 
     # 8. Verificación de renderizado completo sin fallos
     test_surface = pygame.Surface((1920, 1080))

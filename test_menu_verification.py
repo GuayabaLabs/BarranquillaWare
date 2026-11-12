@@ -59,13 +59,29 @@ def run_verification():
     assert len(mode_scene.juice_particles.particles) > 0, "Debieron generarse partículas de Juice en la paloma."
     print("[OK] Interacción táctil de la paloma verificada.")
 
-    # Probar navegación a Selección de Personaje tras pulsar un modo de juego
+    # Probar que Modo Arcade muestra toast informativo sin cambiar de estado
     arcade_pos = mode_scene.btn_arcade.rect.center
     mode_scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {'pos': arcade_pos, 'button': 1}))
     mode_scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {'pos': arcade_pos, 'button': 1}))
+    assert mode_scene.toast_msg == "¡MODO ARCADE EN DESARROLLO!", "Modo Arcade debe desplegar toast informativo de desarrollo."
+    assert mode_scene.toast_timer > 0.0, "El timer de toast debe ser positivo."
+    print("[OK] Modo Arcade en desarrollo verificado con toast informativo.")
+
+    # Probar que Modo Libre muestra toast informativo sin cambiar de estado
+    libre_pos = mode_scene.btn_libre.rect.center
+    mode_scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {'pos': libre_pos, 'button': 1}))
+    mode_scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {'pos': libre_pos, 'button': 1}))
+    assert mode_scene.toast_msg == "¡MODO LIBRE EN DESARROLLO!", "Modo Libre debe desplegar toast informativo de desarrollo."
+    assert mode_scene.toast_timer > 0.0, "El timer de toast debe ser positivo."
+    print("[OK] Modo Libre en desarrollo verificado con toast informativo.")
+
+    # Probar navegación a Selección de Personaje tras pulsar Modo Historia
+    historia_pos = mode_scene.btn_historia.rect.center
+    mode_scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {'pos': historia_pos, 'button': 1}))
+    mode_scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {'pos': historia_pos, 'button': 1}))
     
     char_trans = engine.state_machine.current_state
-    assert isinstance(char_trans, SlideTransitionState), "Pulsar un modo de juego debe disparar SlideTransitionState a Selección de Personaje."
+    assert isinstance(char_trans, SlideTransitionState), "Pulsar Modo Historia debe disparar SlideTransitionState a Selección de Personaje."
     assert char_trans.direction == "left", "La transición a Selección de Personaje debe deslizar a la izquierda."
     assert engine.audio.current_track == "dodo_airlines_acnh_ost_seleccion_modo.ogg", "La música de Selección de Modo debe continuar sin reiniciarse."
     print("[OK] Transición a Selección de Personaje activada con música continua (Dodo Airlines OST).")

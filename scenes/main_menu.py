@@ -6,6 +6,7 @@ from core.state_machine import BaseState
 from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
 from core.settings import SettingsManager
+from core.map_settings import MapSettingsState
 from ui.button import UIButton
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
@@ -132,7 +133,7 @@ class MainMenuScene(BaseState):
 
         centers_y = [518, 652, 788, 922]
         self.btn_jugar = UIButton((self.screen_w // 2, centers_y[0]), btn_jugar_surf, on_click=self._on_play_clicked)
-        self.btn_opciones = UIButton((self.screen_w // 2, centers_y[1]), btn_opciones_surf, on_click=lambda: self._open_modal("opciones"))
+        self.btn_opciones = UIButton((self.screen_w // 2, centers_y[1]), btn_opciones_surf, on_click=self._on_open_settings)
         self.btn_estadisticas = UIButton((self.screen_w // 2, centers_y[2]), btn_estadisticas_surf, on_click=lambda: self._open_modal("estadisticas"))
         self.btn_salir = UIButton((self.screen_w // 2, centers_y[3]), btn_salir_surf, on_click=self._on_exit_clicked)
 
@@ -173,6 +174,24 @@ class MainMenuScene(BaseState):
 
     def _open_modal(self, modal_name: str) -> None:
         self.active_modal = modal_name
+
+    def _on_open_settings(self) -> None:
+        """Abre el mismo panel provisional usado desde el mapa."""
+        if self.state_machine:
+            self.state_machine.push_state(
+                MapSettingsState(on_calibrate=self._on_calibrate_from_settings)
+            )
+
+    def _on_calibrate_from_settings(self) -> None:
+        if not self.state_machine:
+            return
+        self.state_machine.pop_state()
+        from microgames.coaster_launcher import CoasterCalibrationState
+        self.state_machine.change_state(
+            CoasterCalibrationState(
+                on_complete_callback=lambda _ok: self.state_machine.change_state(self)
+            )
+        )
 
     def _return_from_mode_select(self) -> None:
         if not self.state_machine:

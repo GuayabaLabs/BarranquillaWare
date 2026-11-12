@@ -1,0 +1,126 @@
+import os
+
+# Ejecución headless de Pygame para testing sin ventana física
+os.environ["SDL_VIDEODRIVER"] = "dummy"
+os.environ["SDL_AUDIODRIVER"] = "dummy"
+
+import pygame
+pygame.init()
+pygame.display.set_mode((1920, 1080))
+
+from ui.social_hud import SocialHUD
+from ui.side_drawer import SideNavDrawer
+from scenes.story_map import StoryMapScene
+
+def test_social_hud():
+    print("[TEST] 1. Inicializando SocialHUD con texturas oficiales...")
+    hud = SocialHUD(1920, 1080)
+    assert len(hud.pills) == 3, f"Esperadas 3 pills, obtenidas: {len(hud.pills)}"
+    assert "seguidores" in hud.pills
+    assert "likes" in hud.pills
+    assert "logros" in hud.pills
+
+    # Validar que los números están desactivados por defecto
+    for k, pill in hud.pills.items():
+        assert pill.value_text is None, f"La pill {k} no debe tener número por defecto"
+        assert pill.width == 258 and pill.height == 86, f"Dimensiones incorrectas: {pill.width}x{pill.height}"
+
+    # Validar render sobre superficie
+    test_surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+    hud.update(0.016)
+    hud.render(test_surf)
+    print("  -> SocialHUD con texturas oficiales renderizado exitosamente.")
+
+    # Validar asignación futura de métrica
+    hud.set_metric("seguidores", "12.5K")
+    assert hud.pills["seguidores"].value_text == "12.5K"
+    hud.render(test_surf)
+    print("  -> Asignación de métrica dinámica verificada.")
+
+def test_side_drawer():
+    print("[TEST] 2. Inicializando SideNavDrawer a escala de referencia...")
+    selected_nav = []
+    drawer = SideNavDrawer(1920, 1080, on_nav_selected=lambda item_id: selected_nav.append(item_id))
+
+    # Estado inicial: colapsado
+    assert not drawer.is_open, "El drawer debe iniciar cerrado"
+    assert drawer.anim_t == 0.0, "anim_t inicial debe ser 0.0"
+
+    # Verificar que el botón de pestaña exterior está en el borde visible
+    tab_rect = drawer._get_tab_rect()
+    print(f"  -> Tab Rect colapsado: {tab_rect}")
+    assert tab_rect.right > 0, f"La pestaña colapsada debe asomarse en pantalla, actual: {tab_rect}"
+
+    # Simular clic en la pestaña
+    click_pos = (max(5, tab_rect.centerx), tab_rect.centery)
+    event_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": click_pos})
+    consumed = drawer.handle_event(event_down)
+    assert consumed, "El evento de clic en pestaña debe ser consumido"
+
+    event_up = pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": 1, "pos": click_pos})
+    consumed_up = drawer.handle_event(event_up)
+    assert consumed_up, "El evento de soltar en pestaña debe ser consumido"
+    assert drawer.is_open, "El drawer debe abrirse tras el clic en la pestaña"
+
+    # Simular varios frames de animación
+    for _ in range(30):
+        drawer.update(0.016)
+    assert drawer.anim_t > 0.95, f"El drawer debe expandirse suavemente, anim_t={drawer.anim_t}"
+    assert drawer.is_blocking(), "El drawer debe bloquear la interacción del mapa mientras está abierto"
+
+    # Simular clic en un item interno ('mensajes')
+    item_rect = drawer._get_item_screen_rect(drawer.nav_items[1])  # Index 1 = mensajes
+    drawer.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": item_rect.center}))
+    drawer.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": 1, "pos": item_rect.center}))
+    assert "mensajes" in selected_nav, f"Callback de mensajes no fue disparado: {selected_nav}"
+    assert drawer.active_tab == "mensajes"
+
+    # Simular clic fuera del panel (x=1000) para auto-cerrar
+    click_outside = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": (1000, 500)})
+    consumed_out = drawer.handle_event(click_outside)
+    assert consumed_out, "Clic fuera debe ser consumido"
+    assert not drawer.is_open, "El drawer debe colapsarse al hacer clic fuera"
+
+    # Simular retorno a colapsado
+    for _ in range(40):
+        drawer.update(0.016)
+    assert drawer.anim_t == 0.0 or drawer.anim_t < 0.01, f"anim_t debe volver a 0.0, actual: {drawer.anim_t}"
+
+    # Renderizado
+    test_surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+    drawer.render(test_surf)
+    print("  -> SideNavDrawer ciclo de apertura, interacción y cierre verificado.")
+
+def test_story_map_integration():
+    print("[TEST] 3. Verificando integración completa en StoryMapScene...")
+    scene = StoryMapScene(character_id="paloma")
+    assert hasattr(scene, "social_hud"), "StoryMapScene debe contener social_hud"
+    assert hasattr(scene, "side_drawer"), "StoryMapScene debe contener side_drawer"
+
+    # Tick y render
+    test_surf = pygame.Surface((1920, 1080))
+    scene.update(0.016)
+    scene.render(test_surf)
+
+    # Probar que el drawer consume el evento a nivel de escena
+    tab_rect = scene.side_drawer._get_tab_rect()
+    click_pos = (max(5, tab_rect.centerx), tab_rect.centery)
+    down_ev = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": click_pos})
+    scene.handle_event(down_ev)
+    assert scene.side_drawer.tab_pressed, "scene.handle_event debió enviar evento a side_drawer"
+
+    up_ev = pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": 1, "pos": click_pos})
+    scene.handle_event(up_ev)
+    assert scene.side_drawer.is_open, "El drawer debe abrirse a través de la escena"
+
+    # Un update de la escena
+    scene.update(0.05)
+    assert scene.side_drawer.is_blocking(), "El drawer debe bloquear el arrastre del mapa en la escena"
+
+    print("  -> Integración en StoryMapScene validada con éxito.")
+
+if __name__ == "__main__":
+    test_social_hud()
+    test_side_drawer()
+    test_story_map_integration()
+    print("\n[ÉXITO] Todas las pruebas empíricas pasaron satisfactoriamente.")
