@@ -15,6 +15,8 @@ class AssetManager:
         self._cache: Dict[str, pygame.Surface] = {}
         self._raw_cache: Dict[str, pygame.Surface] = {}
         self._audio_cache: Dict[int, List[pygame.Surface]] = {}
+        self._font_cache: Dict[str, pygame.font.Font] = {}
+        self.fonts_dir = os.path.join(self.base_dir, "fonts")
 
     @classmethod
     def get_instance(cls, base_dir: str = "assets") -> 'AssetManager':
@@ -45,14 +47,26 @@ class AssetManager:
         self._raw_cache[filename_fragment] = surf
         return surf
 
-    def load_cropped_surface(self, filename_fragment: str) -> pygame.Surface:
+    def load_cropped_surface(self, filename_fragment: str, alpha_threshold: int = 0) -> pygame.Surface:
         """Carga y recorta la superficie a su caja visible real sin bordes transparentes sobrantes."""
-        cache_key = f"cropped_{filename_fragment}"
+        cache_key = f"cropped_{filename_fragment}_{alpha_threshold}"
         if cache_key in self._cache:
             return self._cache[cache_key]
 
         raw = self.load_surface(filename_fragment, has_alpha=True)
-        rect = raw.get_bounding_rect()
+        if alpha_threshold > 0:
+            arr = pygame.surfarray.pixels_alpha(raw)
+            mask = arr > alpha_threshold
+            ys = mask.any(axis=0).nonzero()[0]
+            xs = mask.any(axis=1).nonzero()[0]
+            del arr
+            if len(xs) > 0 and len(ys) > 0:
+                rect = pygame.Rect(int(xs[0]), int(ys[0]), int(xs[-1] - xs[0] + 1), int(ys[-1] - ys[0] + 1))
+            else:
+                rect = raw.get_bounding_rect()
+        else:
+            rect = raw.get_bounding_rect()
+
         if rect.width <= 0 or rect.height <= 0:
             return raw
 
@@ -125,3 +139,47 @@ class AssetManager:
 
         self._audio_cache[target_size] = frames
         return frames
+
+    def get_font(self, font_name: str, size: int, bold: bool = False) -> pygame.font.Font:
+        """
+        Carga una fuente con fallback robusto:
+        1. Intenta cargar archivo local empaquetado (.ttf) en assets/fonts/
+        2. Intenta cargar mediante pygame.font.SysFont
+        3. Fallback a pygame.font.Font(None, size)
+        """
+        cache_key = f"{font_name}_{size}_{bold}"
+        if cache_key in self._font_cache:
+            return self._font_cache[cache_key]
+
+        # Mapeo de nombres comunes a fuentes locales empaquetadas
+        font_map = {
+            "impact": "Impact.ttf",
+            "arial black": "Impact.ttf",
+            "arial": "ArialBold.ttf" if bold else "ArialBold.ttf",
+        }
+
+        # 1. Probar fuente local empaquetada
+        font_obj: Optional[pygame.font.Font] = None
+        for key, ttf_file in font_map.items():
+            if key in font_name.lower():
+                candidate_path = os.path.join(self.fonts_dir, ttf_file)
+                if os.path.exists(candidate_path):
+                    try:
+                        font_obj = pygame.font.Font(candidate_path, size)
+                        break
+                    except Exception:
+                        font_obj = None
+
+        # 2. Probar SysFont
+        if font_obj is None:
+            try:
+                font_obj = pygame.font.SysFont(font_name, size, bold=bold)
+            except Exception:
+                font_obj = None
+
+        # 3. Fallback final por defecto
+        if font_obj is None:
+            font_obj = pygame.font.Font(None, size)
+
+        self._font_cache[cache_key] = font_obj
+        return font_obj

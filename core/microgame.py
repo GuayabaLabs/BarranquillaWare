@@ -44,10 +44,11 @@ class BaseMicrogame(BaseState):
         self.is_won: bool = False
         self.is_finished: bool = False
 
-        # Tipografías oficiales de Microjuego
-        self.font_command = pygame.font.SysFont("Arial Black, Impact, sans-serif", 72)
-        self.font_outro = pygame.font.SysFont("Arial Black, Impact, sans-serif", 84)
-        self.font_timer = pygame.font.SysFont("Arial Black, Impact, sans-serif", 28)
+        # Tipografías oficiales de Microjuego con fallback empaquetado
+        self.font_command = self.assets.get_font("Arial Black, Impact, sans-serif", 72)
+        self.font_outro = self.assets.get_font("Arial Black, Impact, sans-serif", 84)
+        self.font_timer = self.assets.get_font("Arial Black, Impact, sans-serif", 28)
+        self._outro_shader_cache: dict = {}
 
         self.setup_game()
 
@@ -160,46 +161,152 @@ class BaseMicrogame(BaseState):
         pygame.draw.circle(surface, (255, 150, 40), (fuse_x, fuse_y), spark_r + 4, width=2)
 
     def _render_command_intro(self, surface: pygame.Surface) -> None:
-        """Despliega el comando imperativo con animación elástica de entrada."""
-        progress = min(1.0, self.intro_timer / (self.intro_duration * 0.5))
-        scale = 1.0 + math.sin(progress * math.pi) * 0.25
+        """
+        Despliega el comando imperativo con animación suave y soporte multilínea (separado por \n):
+        - Entrada elástica con escala.
+        - Mantenimiento nítido.
+        - Fade-out progresivo con alfa en el tramo final (evita corte abrupto).
+        """
+        fade_start = self.intro_duration * 0.65
+        if self.intro_timer > fade_start:
+            alpha_ratio = max(0.0, 1.0 - (self.intro_timer - fade_start) / (self.intro_duration - fade_start))
+        else:
+            alpha_ratio = 1.0
 
-        txt = self.font_command.render(self.command_text, True, (255, 250, 235))
-        # Borde negro de impacto
-        txt_border = self.font_command.render(self.command_text, True, (25, 20, 15))
+        if alpha_ratio <= 0.01:
+            return
 
-        banner_w = int(txt.get_width() * scale) + 120
-        banner_h = int(txt.get_height() * scale) + 40
+        alpha_int = int(255 * alpha_ratio)
+
+        # Escala suave
+        progress = min(1.0, self.intro_timer / (self.intro_duration * 0.4))
+        scale = 1.0 + math.sin(progress * math.pi) * 0.16
+
+        lines = self.command_text.split("\n")
+        rendered_lines = []
+        max_w = 0
+        total_h = 0
+        line_spacing = 8
+
+        for line in lines:
+            t = self.font_command.render(line, True, (255, 250, 235))
+            tb = self.font_command.render(line, True, (25, 20, 15))
+            rendered_lines.append((t, tb))
+            max_w = max(max_w, t.get_width())
+            total_h += t.get_height()
+
+        total_h += line_spacing * (len(lines) - 1)
+
+        banner_w = int(max_w * scale) + 120
+        banner_h = int(total_h * scale) + 50
         banner_surf = pygame.Surface((banner_w, banner_h), pygame.SRCALPHA)
-        pygame.draw.rect(banner_surf, (20, 25, 40, 220), (0, 0, banner_w, banner_h), border_radius=20)
-        pygame.draw.rect(banner_surf, (255, 215, 80), (0, 0, banner_w, banner_h), width=4, border_radius=20)
+        bg_alpha = int(220 * alpha_ratio)
+        border_alpha = int(255 * alpha_ratio)
+        pygame.draw.rect(banner_surf, (20, 25, 40, bg_alpha), (0, 0, banner_w, banner_h), border_radius=20)
+        pygame.draw.rect(banner_surf, (255, 215, 80, border_alpha), (0, 0, banner_w, banner_h), width=4, border_radius=20)
 
-        for ox, oy in [(-3, 0), (3, 0), (0, -3), (0, 3)]:
-            banner_surf.blit(txt_border, txt_border.get_rect(center=(banner_w // 2 + ox, banner_h // 2 + oy)))
-        banner_surf.blit(txt, txt.get_rect(center=(banner_w // 2, banner_h // 2)))
+        # Renderizar cada línea centrada
+        cur_y = (banner_h - total_h) // 2
+        for t, tb in rendered_lines:
+            line_cx = banner_w // 2
+            line_cy = cur_y + t.get_height() // 2
+            for ox, oy in [(-3, 0), (3, 0), (0, -3), (0, 3)]:
+                banner_surf.blit(tb, tb.get_rect(center=(line_cx + ox, line_cy + oy)))
+            banner_surf.blit(t, t.get_rect(center=(line_cx, line_cy)))
+            cur_y += t.get_height() + line_spacing
+
+        if alpha_int < 250:
+            banner_surf.fill((255, 255, 255, alpha_int), special_flags=pygame.BLEND_RGBA_MULT)
 
         surface.blit(banner_surf, banner_surf.get_rect(center=(self.screen_w // 2, self.screen_h // 2)))
 
     def _render_outro_banner(self, surface: pygame.Surface) -> None:
-        """Cartel de Victoria / Derrota al concluir el microjuego."""
+        """
+        Texto de Victoria / Derrota al concluir el microjuego sin recuadro contenedor,
+        utilizando un shader volumétrico de resplandor (bloom multicapa), barrido cromático
+        y contorno profundo para máxima legibilidad sobre cualquier fondo.
+        """
         msg = "¡LO LOGRASTE!" if self.is_won else "¡FALLASTE!"
-        color = (100, 240, 130) if self.is_won else (255, 90, 85)
-        border_col = (255, 255, 255) if self.is_won else (180, 40, 40)
 
-        txt = self.font_outro.render(msg, True, color)
-        txt_bg = self.font_outro.render(msg, True, (20, 20, 25))
+        # Entrada elástica y pulso de escala suave
+        t = min(1.0, self.outro_timer / 0.28)
+        bounce_y = int((1.0 - math.sin(t * math.pi * 0.5)) * -90)
+        pulse = math.sin(self.outro_timer * 7.5) * 0.5 + 0.5
+        scale = 1.0 + math.sin(t * math.pi) * 0.14 + pulse * 0.03
 
-        banner_w = txt.get_width() + 140
-        banner_h = txt.get_height() + 50
-        banner_surf = pygame.Surface((banner_w, banner_h), pygame.SRCALPHA)
-        pygame.draw.rect(banner_surf, (15, 20, 35, 235), (0, 0, banner_w, banner_h), border_radius=24)
-        pygame.draw.rect(banner_surf, border_col, (0, 0, banner_w, banner_h), width=4, border_radius=24)
+        if self.is_won:
+            # Gradiente dinámico / tinte cálido esmeralda-dorado en victoria
+            main_col = (
+                int(115 + 75 * pulse),
+                255,
+                int(145 + 65 * (1.0 - pulse))
+            )
+            glow_outer_col = (40, 225, 130)
+            glow_inner_col = (255, 240, 120)
+            outline_col = (14, 38, 26)
+        else:
+            main_col = (
+                255,
+                int(85 + 45 * pulse),
+                int(85 + 35 * pulse)
+            )
+            glow_outer_col = (235, 35, 55)
+            glow_inner_col = (255, 175, 95)
+            outline_col = (42, 12, 18)
 
-        for ox, oy in [(-4, 0), (4, 0), (0, -4), (0, 4)]:
-            banner_surf.blit(txt_bg, txt_bg.get_rect(center=(banner_w // 2 + ox, banner_h // 2 + oy)))
-        banner_surf.blit(txt, txt.get_rect(center=(banner_w // 2, banner_h // 2)))
+        txt_main = self.font_outro.render(msg, True, main_col)
+        txt_outline = self.font_outro.render(msg, True, outline_col)
+        txt_glow_outer = self.font_outro.render(msg, True, glow_outer_col)
+        txt_glow_inner = self.font_outro.render(msg, True, glow_inner_col)
+        txt_highlight = self.font_outro.render(msg, True, (255, 255, 245))
 
-        # Entrada con rebote
-        t = min(1.0, self.outro_timer / 0.3)
-        bounce_y = int((1.0 - math.sin(t * math.pi * 0.5)) * -120)
-        surface.blit(banner_surf, banner_surf.get_rect(center=(self.screen_w // 2, self.screen_h // 2 + bounce_y)))
+        cache_key = (msg, round(pulse, 1))
+        shader_surf = self._outro_shader_cache.get(cache_key)
+        if shader_surf is None:
+            tw, th = txt_main.get_size()
+            pad = 64
+            canvas_w = tw + pad * 2
+            canvas_h = th + pad * 2
+            shader_surf = pygame.Surface((canvas_w, canvas_h), pygame.SRCALPHA)
+            cx, cy = canvas_w // 2, canvas_h // 2
+
+            # 1. Halo / Bloom exterior difuso (shader de aura sin recuadro)
+            txt_glow_outer.set_alpha(int(38 + 26 * pulse))
+            for radius in (18, 13, 9):
+                for angle_deg in range(0, 360, 45):
+                    rad = math.radians(angle_deg)
+                    ox = int(math.cos(rad) * radius)
+                    oy = int(math.sin(rad) * radius)
+                    shader_surf.blit(txt_glow_outer, txt_glow_outer.get_rect(center=(cx + ox, cy + oy)))
+
+            # 2. Resplandor interior cálido
+            txt_glow_inner.set_alpha(int(75 + 40 * pulse))
+            for ox, oy in [(-6, 0), (6, 0), (0, -6), (0, 6), (-4, -4), (4, -4), (-4, 4), (4, 4)]:
+                shader_surf.blit(txt_glow_inner, txt_glow_inner.get_rect(center=(cx + ox, cy + oy)))
+
+            # 3. Sombra proyectada direccional suave
+            txt_shadow = self.font_outro.render(msg, True, (8, 10, 18))
+            txt_shadow.set_alpha(175)
+            shader_surf.blit(txt_shadow, txt_shadow.get_rect(center=(cx + 4, cy + 7)))
+
+            # 4. Contorno nítido de alto contraste
+            for ox in (-4, -2, 0, 2, 4):
+                for oy in (-4, -2, 0, 2, 4):
+                    if ox == 0 and oy == 0:
+                        continue
+                    shader_surf.blit(txt_outline, txt_outline.get_rect(center=(cx + ox, cy + oy)))
+
+            # 5. Cuerpo principal del texto + brillo especular superior
+            shader_surf.blit(txt_main, txt_main.get_rect(center=(cx, cy)))
+            txt_highlight.set_alpha(int(90 + 55 * pulse))
+            shader_surf.blit(txt_highlight, txt_highlight.get_rect(center=(cx, cy - 2)))
+            self._outro_shader_cache[cache_key] = shader_surf
+
+        canvas_w, canvas_h = shader_surf.get_size()
+
+        if abs(scale - 1.0) > 0.01:
+            scaled_w = max(10, int(canvas_w * scale))
+            scaled_h = max(10, int(canvas_h * scale))
+            shader_surf = pygame.transform.smoothscale(shader_surf, (scaled_w, scaled_h))
+
+        surface.blit(shader_surf, shader_surf.get_rect(center=(self.screen_w // 2, self.screen_h // 2 + bounce_y)))

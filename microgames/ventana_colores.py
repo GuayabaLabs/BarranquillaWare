@@ -1,6 +1,6 @@
 import math
 import random
-from typing import Optional, Callable, Tuple
+from typing import Optional, Callable
 import pygame
 
 from core.microgame import BaseMicrogame

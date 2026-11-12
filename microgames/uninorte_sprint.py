@@ -1,15 +1,104 @@
 import math
-from typing import Optional, Callable
+import random
+from typing import Optional, Callable, List, Tuple, Dict
 import pygame
+import numpy as np
+from PIL import Image
 
 from core.microgame import BaseMicrogame
+from core.camera_gestures import CameraGestureInput
+
+class CharacterModel:
+    """
+    Modelo de personaje con sus 2 frames de animación de caminata:
+    - frame 0: Piernas cerradas (fila superior del sheet)
+    - frame 1: Piernas abiertas (fila inferior del sheet)
+    - native_direction: 1 para Sheet 1 (caminan a la derecha), -1 para Sheet 2 (caminan a la izquierda).
+      Sin flip artificial.
+    """
+    def __init__(
+        self,
+        frames: List[pygame.Surface],
+        native_direction: int
+    ) -> None:
+        self.frames = frames
+        self.native_direction = native_direction
+
+
+class ZombieNPC:
+    """
+    Estudiante distraído mirando el celular (Obstáculo FOMO).
+    - Usa su spritesheet nativo según la dirección de su carril (cero flip).
+    - Desincronización profunda en fase inicial y cadencia de pasos.
+    """
+    def __init__(
+        self,
+        x: float,
+        world_y: float,
+        speed: float,
+        direction: int,  # 1 = hacia la derecha (Sheet 1), -1 = hacia la izquierda (Sheet 2)
+        model: CharacterModel,
+        icon_sprite: Optional[pygame.Surface],
+        lane_idx: int,
+        phase_offset: float = 0.0
+    ) -> None:
+        self.x = x
+        self.world_y = world_y
+        self.speed = speed
+        self.direction = direction
+        self.lane_idx = lane_idx
+        self.icon_sprite = icon_sprite
+
+        # Desincronización explícita de fase y velocidad de caminata
+        self.anim_timer = phase_offset + random.uniform(0.0, 2.0)
+        self.anim_speed = random.uniform(3.2, 5.8)  # Rango amplio para que nunca vayan al unísono
+        self.current_frame_idx = int(self.anim_timer) % len(model.frames)
+        self.walk_bob = phase_offset * math.pi + random.uniform(0.0, math.pi * 2)
+
+        # Usar los frames puros tal cual vienen en su spritesheet (sin flip)
+        self.frames: List[pygame.Surface] = list(model.frames)
+        self.width = self.frames[0].get_width()
+        self.height = self.frames[0].get_height()
+
+    def update(self, dt: float, screen_w: int) -> None:
+        # Movimiento continuo sin pausas que rompan la cadencia
+        self.x += self.speed * self.direction * dt
+        self.walk_bob += dt * 8.0
+
+        # Animación de pasos alternados
+        self.anim_timer += dt * self.anim_speed
+        self.current_frame_idx = int(self.anim_timer) % len(self.frames)
+
+        # Recirculación infinita y homogénea por los márgenes
+        margin = 220
+        span = screen_w + margin * 2
+        if self.direction > 0 and self.x > screen_w + margin:
+            self.x -= span
+        elif self.direction < 0 and self.x < -margin:
+            self.x += span
+
+    def get_current_sprite(self) -> pygame.Surface:
+        return self.frames[self.current_frame_idx]
+
+    def get_hitbox(self) -> pygame.Rect:
+        # Hitbox centrada en los pies/cadera para evitar castigos injustos en la cabeza
+        hw = int(self.width * 0.44)
+        hh = int(self.height * 0.46)
+        return pygame.Rect(
+            int(self.x + (self.width - hw) / 2),
+            int(self.world_y + (self.height - hh) - 6),
+            hw,
+            hh
+        )
+
 
 class UninorteSprintMicrogame(BaseMicrogame):
     """
-    Microjuego 1: 'Carrera a la clase de 6:30' (Campus Uninorte).
-    - Consigna: ¡LLEGA AL SALÓN!
-    - Mecánica: Pulsa repetidamente ESPACIO o haz click veloz para correr por el pasillo
-      antes de que el profesor cierre la puerta a las 6:30 AM.
+    Microjuego 1: 'Carrera al Salón A-203' (Campus Uninorte).
+    - Duración: 10 Segundos exactos.
+    - Mecánica: Solo salto HACIA ADELANTE (Timing puro) con scroll vertical de cámara hacia el salón.
+    - Controles: ESPACIO, FLECHA ARRIBA, W o Click izquierdo.
+    - Game Feel: Screenshake no lineal cuadrático, hit-stop, partículas elásticas de pisada y animación natural.
     """
     def __init__(
         self,
@@ -18,145 +107,701 @@ class UninorteSprintMicrogame(BaseMicrogame):
     ) -> None:
         self.character_id = character_id
         super().__init__(
-            command_text="¡LLEGA AL SALÓN!",
-            time_limit=4.0,
+            command_text="¡ESQUIVA LOS CELULARES!",
+            time_limit=20.0,
             on_complete_callback=on_complete_callback
         )
 
     def setup_game(self) -> None:
-        self.player_x = 180.0
-        self.player_target_x = 1520.0
-        self.player_y = 680.0
-        self.step_power = 65.0
-        self.step_bob = 0.0
+        self.camera_input = CameraGestureInput.get_instance()
+        if not self.camera_input.enabled:
+            self.camera_input.start()
+        # 1. Configuración de Carriles y Mundo Vertical (2 Tramos de 1920x1080 = 2160 px totales)
+        # Carril 0: Inicio en la parte baja del Tramo 1 (Entrada Campus Uninorte)
+        # Carriles 1 a 12: 12 carriles de tráfico peatonal rítmico
+        # Carril 13: Meta frente al Salón A-203 en la parte superior del Tramo 2
+        self.lane_height = 135
+        self.total_lanes = 13
+        self.player_lane = 0
+        self.max_lane = self.total_lanes
 
-        # Puerta del salón
-        self.door_x = 1580
-        self.door_closed = False
-        self.door_close_anim = 0.0
+        # Altura exacta equivalente a 2 pantallas apiladas verticalmente
+        self.world_height = self.screen_h * 2
+        self.player_x = self.screen_w // 2
 
-        # Cargar sprite del personaje activo si está disponible
-        sprite_filename = f"{self.character_id}_seleccion_personaje.png"
+        self.player_world_y = self._lane_to_world_y(self.player_lane)
+        self.player_target_world_y = self.player_world_y
+        self.player_visual_world_y = self.player_world_y
+
+        # Dinámica de salto del jugador (Con bloqueo en el aire y recuperación de aterrizaje)
+        self.is_jumping = False
+        self.jump_progress = 0.0
+        self.jump_duration = 0.24   # Duración real del salto en el aire (impide teletransportarse)
+        self.jump_cooldown = 0.0    # Pausa de asentamiento al tocar el suelo antes del siguiente salto
+        self.jump_recovery = 0.14   # 0.24s salto + 0.14s apoyo = mínimo 0.38s por paso (~5.0s mínimo sin parar)
+        self.jump_height = 34.0
+        self.jump_start_world_y = self.player_world_y
+
+        # Cámara vertical suave (Lerp)
+        self.camera_y = float(self.world_height - self.screen_h)
+        self.camera_target_y = self.camera_y
+
+        # Sistema de Game Feel (Juice)
+        self.trauma = 0.0          # Decrece cuadráticamente para screenshake orgánico
+        self.freeze_frames = 0     # Hit-stop frames al colisionar
+        self.stun_timer = 0.0      # Aturdimiento del jugador
+        self.step_particles: List[dict] = []
+
+        # 2. Cargar Fondos Modulares si existen (o usar Placeholder estructural)
+        self.bg_full, self.bg_tramo_1, self.bg_tramo_2 = self._load_background_chunks()
+
+        # 3. Cargar Spritesheets de NPCs con Modelos de 2 Frames
+        self.character_models = self._extract_character_models()
+        self.icon_sprites = self._extract_icon_sprites()
+        self.player_sprite = self._load_player_chibi()
+
+        # 4. Población Equilibrada de Zombies en los 12 Carriles
+        self.zombies: List[ZombieNPC] = []
+        self._spawn_equilibrated_zombies()
+
+        # 5. Elementos de UI y Fuentes
+        self.spr_counter = self._load_optional_ui("contador_microjuegos.png", target_h=96)
+        self.spr_paloma = self._load_optional_ui("paloma_dialog.png", target_h=190)
+        self.spr_bubble = self._load_optional_ui("text_dialog.png", target_h=110)
+
+        # 6. Voces y Efectos de Choque en el Pasillo (Game Feel / Identidad Caribeña)
+        self.hit_sounds: List[pygame.mixer.Sound] = []
+        self._load_pasillo_sounds()
+
+        self.font_door = pygame.font.SysFont("Arial Black, Impact, sans-serif", 22)
+        self.font_timer = pygame.font.SysFont("Arial Black, Impact, sans-serif", 32)
+        self.font_dialog = pygame.font.SysFont("Arial, sans-serif", 17, bold=True)
+        self.font_badge = pygame.font.SysFont("Consolas, monospace", 15, bold=True)
+        self.font_prompt = pygame.font.SysFont("Arial Black, Impact, sans-serif", 26)
+
+        # Puerta del Salón
+        self.door_progress = 0.0
+
+    def _load_pasillo_sounds(self) -> None:
+        """Carga el pool de audios reactivos de choque en el pasillo."""
+        filenames = [
+            "aja_estas_ciego_audio_pasillo_microjuego.ogg",
+            "erda_audio_pasillo_microjuego.ogg",
+            "que_pasa_valemia_audio_pasillo_microjuego.ogg"
+        ]
+        sfx_vol = getattr(self.audio, "sfx_volume", 0.85)
+        for fname in filenames:
+            path = f"assets/{fname}"
+            try:
+                snd = pygame.mixer.Sound(path)
+                snd.set_volume(sfx_vol)
+                self.hit_sounds.append(snd)
+            except Exception as e:
+                print(f"[UninorteSprint] Aviso al cargar sonido {fname}: {e}")
+
+    def _play_random_pasillo_voice(self) -> None:
+        """Reproduce aleatoriamente una de las frases caribeñas al chocar."""
+        if not self.hit_sounds:
+            return
+        if hasattr(self.audio, "sound_enabled") and not self.audio.sound_enabled:
+            return
+        snd = random.choice(self.hit_sounds)
+        snd.play()
+
+    def _lane_to_world_y(self, lane: int) -> float:
+        # Carril 0 en Y=1980 (abajo del tramo 1), Carril 13 en Y=225 (frente al salón en tramo 2)
+        return 1980.0 - (lane * self.lane_height)
+
+    def _load_background_chunks(self) -> Tuple[Optional[pygame.Surface], Optional[pygame.Surface], Optional[pygame.Surface]]:
+        """
+        Carga el fondo real si existe en assets/:
+        1. 'fondo_minijuego_crossy.png' (fondo principal ilustrado por el usuario).
+        2. 'fondo_uninorte_completo.png'
+        3. 'fondo_uninorte_tramo_1.png' y 'fondo_uninorte_tramo_2.png'
+        """
+        bg_full = None
+        bg_t1 = None
+        bg_t2 = None
+
+        # Prioridad 1: fondo_minijuego_crossy.png
         try:
-            raw_sprite = self.assets.load_surface(sprite_filename, has_alpha=True)
-            # Recortar tight
-            mask = pygame.mask.from_surface(raw_sprite)
-            rects = mask.get_bounding_rects()
-            if rects:
-                cropped = raw_sprite.subsurface(rects[0])
-            else:
-                cropped = raw_sprite
-            target_h = 240
-            target_w = int(cropped.get_width() * (target_h / float(cropped.get_height())))
-            self.player_sprite = pygame.transform.smoothscale(cropped, (target_w, target_h))
+            raw_crossy = self.assets.load_surface("fondo_minijuego_crossy.png", has_alpha=False)
+            bg_full = pygame.transform.smoothscale(raw_crossy, (self.screen_w, self.world_height))
+            return bg_full, None, None
         except Exception:
-            self.player_sprite = None
+            pass
 
-        # Tipografía de la puerta del salón
-        self.font_door = pygame.font.SysFont("Arial Black, Impact, sans-serif", 20)
-        self.font_clock = pygame.font.SysFont("Arial Black, Impact, sans-serif", 36)
+        try:
+            raw_full = self.assets.load_surface("fondo_uninorte_completo.png", has_alpha=False)
+            bg_full = pygame.transform.smoothscale(raw_full, (self.screen_w, self.world_height))
+        except Exception:
+            pass
+
+        try:
+            raw_t1 = self.assets.load_surface("fondo_uninorte_tramo_1.png", has_alpha=False)
+            bg_t1 = pygame.transform.smoothscale(raw_t1, (self.screen_w, self.screen_h))
+        except Exception:
+            pass
+
+        try:
+            raw_t2 = self.assets.load_surface("fondo_uninorte_tramo_2.png", has_alpha=False)
+            bg_t2 = pygame.transform.smoothscale(raw_t2, (self.screen_w, self.screen_h))
+        except Exception:
+            pass
+
+        return bg_full, bg_t1, bg_t2
+
+    def _load_optional_ui(self, filename: str, target_h: int) -> Optional[pygame.Surface]:
+        try:
+            surf = self.assets.load_surface(filename, has_alpha=True)
+            scale = target_h / float(surf.get_height())
+            tw = int(surf.get_width() * scale)
+            return pygame.transform.smoothscale(surf, (tw, target_h))
+        except Exception:
+            return None
+
+    def _load_player_chibi(self) -> Optional[pygame.Surface]:
+        chibi_file = f"{self.character_id}_chibi.png"
+        try:
+            raw = self.assets.load_surface(chibi_file, has_alpha=True)
+            mask = pygame.mask.from_surface(raw)
+            rects = mask.get_bounding_rects()
+            cropped = raw.subsurface(rects[0]) if rects else raw
+            target_h = 135
+            target_w = int(cropped.get_width() * (target_h / float(cropped.get_height())))
+            return pygame.transform.smoothscale(cropped, (target_w, target_h))
+        except Exception:
+            try:
+                raw = self.assets.load_surface("westcol_chibi.png", has_alpha=True)
+                target_h = 135
+                target_w = int(raw.get_width() * (target_h / float(raw.get_height())))
+                return pygame.transform.smoothscale(raw, (target_w, target_h))
+            except Exception:
+                return None
+
+    def _extract_character_models(self) -> List[CharacterModel]:
+        """
+        Extrae los 6 personajes únicos con sus 2 frames de caminata sin voltearlos:
+        - Sheet 1 (spritesheet_npc_microjuego_crossy.png): Miran hacia la DERECHA (native_direction = 1).
+        - Sheet 2 (spritesheet_npc_2_microjuego_crossy.png): Miran hacia la IZQUIERDA (native_direction = -1).
+        Fila superior = Piernas cerradas (frame 0)
+        Fila inferior = Piernas abiertas (frame 1)
+        """
+        models: List[CharacterModel] = []
+        target_h = 140
+
+        sheet_specs = [
+            {
+                "file": "spritesheet_npc_microjuego_crossy.png",
+                "native_direction": 1,  # Miran a la derecha -> Caminan exclusivamente a la derecha
+                "chars": [
+                    {"top": (158, 26, 250, 461), "bot": (134, 531, 284, 465)},
+                    {"top": (599, 46, 278, 443), "bot": (595, 548, 306, 450)},
+                    {"top": (1057, 63, 291, 431), "bot": (1059, 577, 341, 428)}
+                ]
+            },
+            {
+                "file": "spritesheet_npc_2_microjuego_crossy.png",
+                "native_direction": -1,  # Miran a la izquierda -> Caminan exclusivamente a la izquierda
+                "chars": [
+                    {"top": (130, 21, 267, 457), "bot": (132, 520, 299, 454)},
+                    {"top": (611, 38, 285, 440), "bot": (611, 521, 292, 453)},
+                    {"top": (1093, 21, 278, 457), "bot": (1086, 512, 287, 468)}
+                ]
+            }
+        ]
+
+        for s_info in sheet_specs:
+            filename = s_info["file"]
+            native_dir = s_info["native_direction"]
+            try:
+                pil_img = Image.open(f"assets/{filename}").convert("RGBA")
+                arr = np.array(pil_img)
+                bg_mask = (arr[:, :, 0] > 238) & (arr[:, :, 1] > 238) & (arr[:, :, 2] > 238)
+                arr[bg_mask, 3] = 0
+
+                for ch in s_info["chars"]:
+                    frames = []
+                    for box in [ch["top"], ch["bot"]]:
+                        bx, by, bw, bh = box
+                        crop = arr[by:by+bh, bx:bx+bw].copy()
+                        crop_img = Image.fromarray(crop)
+                        surf = pygame.image.fromstring(crop_img.tobytes(), crop_img.size, "RGBA").convert_alpha()
+                        tw = int(bw * (target_h / float(bh)))
+                        scaled = pygame.transform.smoothscale(surf, (tw, target_h))
+                        frames.append(scaled)
+
+                    models.append(CharacterModel(frames=frames, native_direction=native_dir))
+            except Exception as e:
+                print(f"[UninorteSprint] Error al extraer modelos de {filename}: {e}")
+
+        return models
+
+    def _extract_icon_sprites(self) -> List[pygame.Surface]:
+        icons = []
+        path = "assets/spritesheet_iconos_redes_sociales.png"
+        icon_boxes = [
+            (551, 27, 155, 155), (885, 27, 152, 160), (1208, 28, 150, 159),
+            (1369, 29, 149, 157), (718, 32, 154, 150), (23, 34, 169, 149),
+            (1051, 36, 145, 148), (376, 37, 160, 146)
+        ]
+        target_size = 50
+        try:
+            full_surf = self.assets.load_surface("spritesheet_iconos_redes_sociales.png", has_alpha=True)
+            for (ix, iy, iw, ih) in icon_boxes:
+                sub = full_surf.subsurface(pygame.Rect(ix, iy, iw, ih))
+                scaled = pygame.transform.smoothscale(sub, (target_size, target_size))
+                icons.append(scaled)
+        except Exception as e:
+            print(f"[UninorteSprint] Error cargando iconos: {e}")
+
+        return icons
+
+    def _spawn_equilibrated_zombies(self) -> None:
+        """
+        Puebla homogéneamente desde el primer segundo todos los carriles (1 a 7).
+        - Carriles hacia la DERECHA (dir = 1) usan exclusivamente Sheet 1 (native_direction = 1).
+        - Carriles hacia la IZQUIERDA (dir = -1) usan exclusivamente Sheet 2 (native_direction = -1).
+        """
+        if not self.character_models:
+            return
+
+        right_models = [m for m in self.character_models if m.native_direction == 1]
+        left_models = [m for m in self.character_models if m.native_direction == -1]
+
+        lane_configs = [
+            {"lane": 1,  "dir": 1,  "speed": 280.0, "count": 3},
+            {"lane": 2,  "dir": -1, "speed": 310.0, "count": 4},
+            {"lane": 3,  "dir": 1,  "speed": 290.0, "count": 3},
+            {"lane": 4,  "dir": -1, "speed": 330.0, "count": 4},
+            {"lane": 5,  "dir": 1,  "speed": 300.0, "count": 3},
+            {"lane": 6,  "dir": -1, "speed": 340.0, "count": 4},
+            {"lane": 7,  "dir": 1,  "speed": 310.0, "count": 3},
+            {"lane": 8,  "dir": -1, "speed": 350.0, "count": 4},
+            {"lane": 9,  "dir": 1,  "speed": 320.0, "count": 3},
+            {"lane": 10, "dir": -1, "speed": 360.0, "count": 4},
+            {"lane": 11, "dir": 1,  "speed": 330.0, "count": 3},
+            {"lane": 12, "dir": -1, "speed": 370.0, "count": 4},
+        ]
+
+        right_idx = 0
+        left_idx = 0
+        icon_idx = 0
+        margin = 200
+        total_span = self.screen_w + margin * 2
+
+        for config in lane_configs:
+            lane = config["lane"]
+            world_y = self._lane_to_world_y(lane) - 60
+            direction = config["dir"]
+            speed = config["speed"]
+            count = config["count"]
+            spacing = total_span / float(count)
+
+            for i in range(count):
+                offset_jitter = random.uniform(-45, 45)
+                x = -margin + (i * spacing) + offset_jitter
+
+                if direction > 0 and right_models:
+                    mod = right_models[right_idx % len(right_models)]
+                    right_idx += 1
+                elif left_models:
+                    mod = left_models[left_idx % len(left_models)]
+                    left_idx += 1
+                else:
+                    mod = self.character_models[0]
+
+                icon = self.icon_sprites[icon_idx % len(self.icon_sprites)] if self.icon_sprites else None
+                icon_idx += 1
+
+                # Desfase explícito de fase por individuo (0.0, 0.35, 0.70, 1.05...)
+                phase_offset = (i * 0.43) + (lane * 0.27)
+
+                zombie = ZombieNPC(
+                    x=x,
+                    world_y=world_y,
+                    speed=speed + random.uniform(-15.0, 15.0),
+                    direction=direction,
+                    model=mod,
+                    icon_sprite=icon,
+                    lane_idx=lane,
+                    phase_offset=phase_offset
+                )
+                self.zombies.append(zombie)
 
     def handle_game_event(self, event: pygame.event.Event) -> None:
-        # Acelerar con ESPACIO o CLICK izquierdo
-        if (event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RIGHT, pygame.K_d)) or \
-           (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1):
-            self.player_x += self.step_power
-            self.step_bob = math.pi
+        # Bloquear spam: no se puede volver a saltar mientras está en el aire o asentando el paso
+        if self.is_finished or self.stun_timer > 0.0 or self.freeze_frames > 0:
+            return
+        if self.is_jumping or self.jump_cooldown > 0.0:
+            return
+
+        is_forward_jump = False
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_SPACE, pygame.K_UP, pygame.K_w):
+                is_forward_jump = True
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            is_forward_jump = True
+
+        if is_forward_jump:
+            self._jump_forward()
+
+    def exit(self) -> None:
+        if hasattr(self, "camera_input"):
+            self.camera_input.stop()
+
+    def _jump_forward(self) -> None:
+        if self.player_lane < self.max_lane:
+            self.jump_start_world_y = self.player_visual_world_y
+            self.player_lane += 1
+            self.player_target_world_y = self._lane_to_world_y(self.player_lane)
+            self.is_jumping = True
+            self.jump_progress = 0.0
+
+            self._spawn_dust(self.player_x, self.player_visual_world_y)
+
             if hasattr(self.audio, "play_hover"):
                 self.audio.play_hover()
 
-            # Condición de Victoria
-            if self.player_x >= self.player_target_x and not self.is_finished:
-                self.finish_game(won=True)
+    def _spawn_dust(self, x: float, world_y: float) -> None:
+        for _ in range(7):
+            self.step_particles.append({
+                "x": x + random.uniform(-25, 25),
+                "world_y": world_y + 35 + random.uniform(-5, 5),
+                "vx": random.uniform(-65, 65),
+                "vy": random.uniform(-40, -10),
+                "life": 0.35,
+                "max_life": 0.35,
+                "radius": random.uniform(5, 11)
+            })
 
     def update_game(self, dt: float) -> None:
-        # Decaimiento del paso elástico
-        if self.step_bob > 0.0:
-            self.step_bob = max(0.0, self.step_bob - dt * 14.0)
+        camera_action = False
+        if getattr(self, "camera_input", None):
+            # Una palma abierta nueva o un cierre nuevo equivalen a una acción.
+            camera_action = self.camera_input.consume_hand_raise() or self.camera_input.consume_fist()
+        if camera_action and not self.is_jumping and self.jump_cooldown <= 0.0:
+            self._jump_forward()
+        # Hit-Stop / Freeze frame al impactar
+        if self.freeze_frames > 0:
+            self.freeze_frames -= 1
+            return
 
-        # Animación de la puerta cerrándose en el último segundo
-        if self.time_left < 1.0 and not self.is_won:
-            self.door_close_anim = min(1.0, self.door_close_anim + dt * 2.5)
+        # Decaimiento del trauma del screenshake (cuadrático natural)
+        if self.trauma > 0.0:
+            self.trauma = max(0.0, self.trauma - dt * 2.2)
+
+        # 1. Actualizar zombies
+        for z in self.zombies:
+            z.update(dt, self.screen_w)
+
+        # 2. Interpolación del salto del jugador (Compromiso real en el aire + pausa al aterrizar)
+        if self.jump_cooldown > 0.0:
+            self.jump_cooldown = max(0.0, self.jump_cooldown - dt)
+
+        if self.is_jumping:
+            self.jump_progress += dt / self.jump_duration
+            if self.jump_progress >= 1.0:
+                self.jump_progress = 1.0
+                self.is_jumping = False
+                self.player_visual_world_y = self.player_target_world_y
+                self.jump_cooldown = self.jump_recovery
+                self._spawn_dust(self.player_x, self.player_visual_world_y)
+
+                # Condición de Victoria se evalúa únicamente al aterrizar en el aula
+                if self.player_lane >= self.max_lane and not self.is_finished:
+                    self.finish_game(won=True)
+            else:
+                # Interpolación suave con curva ease-out entre origen y destino del salto
+                ease_t = 1.0 - ((1.0 - self.jump_progress) ** 2)
+                self.player_visual_world_y = (
+                    self.jump_start_world_y
+                    + (self.player_target_world_y - self.jump_start_world_y) * ease_t
+                )
+
+        # 3. Cámara vertical suave (Lerp)
+        self.camera_target_y = self.player_visual_world_y - 720.0
+        min_cam = 0.0
+        max_cam = self.world_height - self.screen_h
+        self.camera_target_y = max(min_cam, min(max_cam, self.camera_target_y))
+        self.camera_y += (self.camera_target_y - self.camera_y) * min(1.0, dt * 10.0)
+
+        # 4. Timer de aturdimiento
+        if self.stun_timer > 0.0:
+            self.stun_timer = max(0.0, self.stun_timer - dt)
+
+        # 5. Detección de colisiones
+        player_hitbox = self._get_player_hitbox()
+        for z in self.zombies:
+            if abs(self.player_visual_world_y - (z.world_y + z.height * 0.5)) < 65:
+                if player_hitbox.colliderect(z.get_hitbox()):
+                    self._on_player_hit()
+                    break
+
+        # 6. Cierre de puerta en el último segundo
+        if self.time_left < 1.8 and not self.is_won:
+            self.door_progress = min(1.0, self.door_progress + dt * 1.5)
+
+        # 7. Partículas
+        for p in self.step_particles[:]:
+            p["x"] += p["vx"] * dt
+            p["world_y"] += p["vy"] * dt
+            p["life"] -= dt
+            if p["life"] <= 0:
+                self.step_particles.remove(p)
+
+    def _get_player_hitbox() -> pygame.Rect:
+        return pygame.Rect(0, 0, 10, 10)
+
+    def _get_player_hitbox(self) -> pygame.Rect:
+        hw, hh = 56, 56
+        return pygame.Rect(
+            int(self.player_x - hw / 2),
+            int(self.player_visual_world_y - hh / 2 + 10),
+            hw,
+            hh
+        )
+
+    def _on_player_hit(self) -> None:
+        """Penalización con Juice: hit-stop de 4 frames, trauma de screenshake, voz de pasillo y rebote."""
+        if self.stun_timer > 0.0:
+            return
+
+        self.stun_timer = 0.40
+        self.freeze_frames = 4       # Hit-stop táctil
+        self.trauma = 0.65           # Screen shake perceptible
+
+        # Impacto sonoro físico + Voz reactiva del estudiante ("¡Ajá estás ciego!", "¡Erda!", "¡Qué pasa valemía!")
+        if hasattr(self.audio, "play_click"):
+            self.audio.play_click()
+        self._play_random_pasillo_voice()
+
+        self.jump_start_world_y = self.player_visual_world_y
+        self.player_lane = max(0, self.player_lane - 1)
+        self.player_target_world_y = self._lane_to_world_y(self.player_lane)
+        self.is_jumping = True
+        self.jump_progress = 0.0
+        self.jump_cooldown = 0.20
+        self._spawn_dust(self.player_x, self.player_visual_world_y)
 
     def render_game(self, surface: pygame.Surface) -> None:
-        # 1. Fondo: Pasillo de Uninorte
-        # Cielo / Jardín a través de las ventanas superiores
-        surface.fill((135, 205, 245))
+        # Calcular Screenshake no lineal
+        shake_offset_x = 0
+        shake_offset_y = 0
+        if self.trauma > 0.0:
+            shake_mag = (self.trauma ** 2) * 16.0
+            shake_offset_x = int(random.uniform(-shake_mag, shake_mag))
+            shake_offset_y = int(random.uniform(-shake_mag, shake_mag))
 
-        # Suelo del pasillo (baldosas de terracota cálida de Uninorte)
-        floor_y = 620
-        pygame.draw.rect(surface, (215, 125, 75), (0, floor_y, self.screen_w, self.screen_h - floor_y))
-        pygame.draw.line(surface, (140, 65, 30), (0, floor_y), (self.screen_w, floor_y), 4)
+        cam_offset = int(self.camera_y) + shake_offset_y
 
-        # Pared del fondo con ventanas
-        wall_y = 220
-        pygame.draw.rect(surface, (245, 240, 225), (0, wall_y, self.screen_w, floor_y - wall_y))
-        pygame.draw.line(surface, (190, 180, 165), (0, wall_y), (self.screen_w, wall_y), 3)
-
-        # Ventanales al jardín caribeño
-        for vx in range(120, 1400, 320):
-            pygame.draw.rect(surface, (110, 190, 235), (vx, 260, 220, 280), border_radius=12)
-            pygame.draw.rect(surface, (255, 255, 255), (vx, 260, 220, 280), width=6, border_radius=12)
-            # Palmeras visibles afuera
-            pygame.draw.circle(surface, (65, 175, 80), (vx + 110, 360), 65)
-            pygame.draw.circle(surface, (45, 145, 60), (vx + 70, 380), 45)
-
-        # 2. Reloj de pared del pasillo ("06:29 AM" -> "06:30 AM")
-        clock_rect = pygame.Rect(780, 80, 240, 70)
-        pygame.draw.rect(surface, (20, 25, 40), clock_rect, border_radius=14)
-        pygame.draw.rect(surface, (240, 195, 90), clock_rect, width=3, border_radius=14)
-        clock_str = "06:29 AM" if self.time_left > 0.8 else "06:30 AM!"
-        clock_col = (255, 240, 120) if self.time_left > 0.8 else (255, 80, 80)
-        txt_c = self.font_clock.render(clock_str, True, clock_col)
-        surface.blit(txt_c, txt_c.get_rect(center=clock_rect.center))
-
-        # 3. Puerta del Salón (Bloque K / Ingeniería)
-        door_w, door_h = 160, 360
-        door_x = self.door_x
-        door_y = floor_y - door_h + 20
-
-        # Marco de la puerta
-        pygame.draw.rect(surface, (70, 50, 40), (door_x - 10, door_y - 10, door_w + 20, door_h + 10), border_radius=6)
-        # Interior iluminado del salón
-        pygame.draw.rect(surface, (255, 250, 190), (door_x, door_y, door_w, door_h))
-
-        # Hoja de la puerta cerrándose
-        cur_door_w = int(door_w * (1.0 if not self.is_won and self.is_finished else self.door_close_anim))
-        if cur_door_w > 0:
-            pygame.draw.rect(surface, (140, 85, 55), (door_x, door_y, cur_door_w, door_h))
-            pygame.draw.circle(surface, (240, 210, 90), (door_x + cur_door_w - 18, door_y + door_h // 2), 7)
-
-        # Letrero sobre la puerta
-        badge_rect = pygame.Rect(door_x - 15, door_y - 48, door_w + 30, 36)
-        pygame.draw.rect(surface, (255, 255, 255), badge_rect, border_radius=8)
-        pygame.draw.rect(surface, (40, 50, 70), badge_rect, width=2, border_radius=8)
-        txt_d = self.font_door.render("AULA 204 • ING", True, (35, 45, 65))
-        surface.blit(txt_d, txt_d.get_rect(center=badge_rect.center))
-
-        # 4. Render del Jugador corriendo con bounce elástico
-        bob = math.sin(self.step_bob) * 16.0
-        px = int(self.player_x)
-        py = int(self.player_y - bob)
-
-        # Sombra en el suelo
-        shadow_w = 110 + int(bob * 0.5)
-        shadow_h = 24
-        shadow_surf = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surf, (30, 20, 15, 80), (0, 0, shadow_w, shadow_h))
-        surface.blit(shadow_surf, shadow_surf.get_rect(center=(px + 45, floor_y + 10)))
-
-        # Sprite del personaje
-        if self.player_sprite:
-            surface.blit(self.player_sprite, (px, py - self.player_sprite.get_height()))
+        # 1. Renderizar Fondo (Real si existe en assets/, sino Placeholder estructural)
+        using_placeholder = True
+        if self.bg_full is not None:
+            surface.blit(self.bg_full, (shake_offset_x, -cam_offset))
+            using_placeholder = False
+        elif self.bg_tramo_1 is not None or self.bg_tramo_2 is not None:
+            surface.fill((238, 222, 198))
+            if self.bg_tramo_2 is not None:
+                # Tramo 2 va en la mitad superior del mundo
+                surface.blit(self.bg_tramo_2, (shake_offset_x, 0 - cam_offset))
+            if self.bg_tramo_1 is not None:
+                # Tramo 1 va en la mitad inferior del mundo
+                surface.blit(self.bg_tramo_1, (shake_offset_x, self.screen_h - cam_offset))
+            using_placeholder = not (self.bg_tramo_1 is not None and self.bg_tramo_2 is not None)
         else:
-            # Fallback geométrico limpio
-            pygame.draw.rect(surface, (60, 130, 220), (px, py - 180, 90, 180), border_radius=16)
+            # Fondo de Adoquines (Placeholder)
+            surface.fill((238, 222, 198))
+            for lane in range(self.total_lanes + 2):
+                lane_wy = self._lane_to_world_y(lane) + int(self.lane_height * 0.48)
+                screen_ly = lane_wy - cam_offset
+                if -50 <= screen_ly <= self.screen_h + 50:
+                    pygame.draw.line(surface, (216, 196, 170), (0, screen_ly), (self.screen_w, screen_ly), 3)
 
-        # 5. Indicador en pantalla: '¡PULSA ESPACIO / CLICK RÁPIDO!'
-        if self.phase == self.PHASE_PLAY:
-            tip_rect = pygame.Rect(self.screen_w // 2 - 280, 860, 560, 48)
-            pygame.draw.rect(surface, (20, 25, 40, 210), tip_rect, border_radius=24)
-            pygame.draw.rect(surface, (245, 205, 95), tip_rect, width=2, border_radius=24)
-            font_tip = pygame.font.SysFont("Arial, sans-serif", 18, bold=True)
-            txt_tip = font_tip.render("⌨️ ¡PULSA ESPACIO O HAZ CLICK VELOZMENTE!", True, (255, 255, 255))
-            surface.blit(txt_tip, txt_tip.get_rect(center=tip_rect.center))
+            self._render_world_scenery(surface, cam_offset, shake_offset_x)
+            self._render_classroom_door(surface, cam_offset, shake_offset_x)
+
+        # 3. Y-Sorting para Zombies y Jugador
+        render_list = []
+        for z in self.zombies:
+            sy = z.world_y + z.height - cam_offset
+            if -200 <= sy <= self.screen_h + 200:
+                render_list.append(("zombie", z.world_y + z.height, z))
+
+        render_list.append(("player", self.player_visual_world_y + 40, None))
+        render_list.sort(key=lambda item: item[1])
+
+        for item_type, _, obj in render_list:
+            if item_type == "zombie":
+                self._draw_zombie(surface, obj, cam_offset, shake_offset_x)
+            else:
+                self._draw_player(surface, cam_offset, shake_offset_x)
+
+        # Partículas de polvo
+        for p in self.step_particles:
+            px = p["x"] + shake_offset_x
+            py = p["world_y"] - cam_offset
+            alpha_ratio = p["life"] / p["max_life"]
+            dust_col = (195, 175, 150)
+            pygame.draw.circle(surface, dust_col, (int(px), int(py)), int(p["radius"] * alpha_ratio))
+
+        # 4. Overlay de UI Fijo
+        self._render_hud_overlay(surface)
+
+        # Badge indicador de Placeholder para el fondo (desaparece cuando cargas el fondo final)
+        if using_placeholder:
+            badge_bg = pygame.Rect(30, self.screen_h - 45, 420, 30)
+            pygame.draw.rect(surface, (20, 20, 25, 210), badge_bg, border_radius=6)
+            lbl_ph = self.font_badge.render("[PLACEHOLDER - FONDO CAMPUS UNINORTE]", True, (245, 215, 90))
+            surface.blit(lbl_ph, lbl_ph.get_rect(center=badge_bg.center))
+
+    def _render_world_scenery(self, surface: pygame.Surface, cam_offset: int, shake_x: int) -> None:
+        bench_lanes = [1, 3, 5, 7, 9, 11]
+        for l in bench_lanes:
+            wy = self._lane_to_world_y(l) - 30
+            sy = wy - cam_offset
+            if -80 <= sy <= self.screen_h + 80:
+                bench_rect = pygame.Rect(40 + shake_x, sy, 180, 48)
+                pygame.draw.rect(surface, (190, 185, 175), bench_rect, border_radius=6)
+                pygame.draw.rect(surface, (135, 130, 120), bench_rect, width=3, border_radius=6)
+
+                pot_rect = pygame.Rect(self.screen_w - 220 + shake_x, sy, 170, 60)
+                pygame.draw.rect(surface, (200, 195, 185), pot_rect, border_radius=8)
+                pygame.draw.rect(surface, (140, 135, 125), pot_rect, width=3, border_radius=8)
+                pygame.draw.circle(surface, (60, 160, 85), (pot_rect.centerx - 28, sy - 8), 32)
+                pygame.draw.circle(surface, (45, 135, 70), (pot_rect.centerx + 28, sy - 10), 34)
+                pygame.draw.circle(surface, (80, 180, 95), (pot_rect.centerx, sy - 18), 36)
+
+    def _render_classroom_door(self, surface: pygame.Surface, cam_offset: int, shake_x: int) -> None:
+        door_center_x = self.screen_w // 2 + shake_x
+        door_world_y = self._lane_to_world_y(self.max_lane) - 60
+        door_sy = door_world_y - cam_offset
+        door_w, door_h = 260, 170
+
+        wall_sy = door_sy - 90
+        pygame.draw.rect(surface, (230, 222, 212), (0, wall_sy, self.screen_w, 260))
+        pygame.draw.line(surface, (175, 165, 150), (0, wall_sy + 260), (self.screen_w, wall_sy + 260), 5)
+
+        pygame.draw.rect(surface, (60, 48, 40), (door_center_x - door_w // 2 - 8, door_sy - 8, door_w + 16, door_h + 8), border_radius=6)
+        pygame.draw.rect(surface, (255, 245, 185), (door_center_x - door_w // 2, door_sy, door_w, door_h))
+
+        close_amount = self.door_progress if not self.is_won else 0.0
+        leaf_w = int((door_w // 2) * close_amount)
+        if leaf_w > 0:
+            pygame.draw.rect(surface, (170, 120, 75), (door_center_x - door_w // 2, door_sy, leaf_w, door_h))
+            pygame.draw.rect(surface, (170, 120, 75), (door_center_x + door_w // 2 - leaf_w, door_sy, leaf_w, door_h))
+
+        badge_w, badge_h = 280, 46
+        badge_rect = pygame.Rect(door_center_x - badge_w // 2, door_sy - 52, badge_w, badge_h)
+        pygame.draw.rect(surface, (255, 255, 255), badge_rect, border_radius=8)
+        pygame.draw.rect(surface, (45, 45, 45), badge_rect, width=3, border_radius=8)
+        lbl_door = self.font_door.render("SALÓN A-203", True, (30, 30, 30))
+        surface.blit(lbl_door, lbl_door.get_rect(center=badge_rect.center))
+
+    def _draw_zombie(self, surface: pygame.Surface, z: ZombieNPC, cam_offset: int, shake_x: int) -> None:
+        sx = z.x + shake_x
+        sy = z.world_y - cam_offset
+
+        # Cálculo de fade-out / esfumado en los bordes del pasillo
+        # Pasillo transitable central: aprox x=360 a x=1560
+        # Fuera de ese rango (al pasar detrás de las bancas / jardineras / paredes), se desvanecen suavemente
+        center_x = sx + z.width / 2.0
+        fade_margin_left = 420.0
+        fade_margin_right = self.screen_w - 420.0
+        fade_distance = 180.0
+
+        if center_x < fade_margin_left:
+            # Esfumándose hacia la izquierda
+            alpha_factor = max(0.0, min(1.0, (center_x - (fade_margin_left - fade_distance)) / fade_distance))
+        elif center_x > fade_margin_right:
+            # Esfumándose hacia la derecha
+            alpha_factor = max(0.0, min(1.0, ((fade_margin_right + fade_distance) - center_x) / fade_distance))
+        else:
+            alpha_factor = 1.0
+
+        # Si ya se esfumó por completo, no renderizar
+        if alpha_factor <= 0.01:
+            return
+
+        alpha_int = int(255 * alpha_factor)
+
+        # 1. Sombra con desvanecimiento
+        sw = int(z.width * 0.70)
+        sh = 20
+        shadow_surf = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        shadow_alpha = int(75 * alpha_factor)
+        pygame.draw.ellipse(shadow_surf, (20, 15, 10, shadow_alpha), (0, 0, sw, sh))
+        surface.blit(shadow_surf, shadow_surf.get_rect(center=(int(center_x), int(sy + z.height - 4))))
+
+        # 2. Sprite de personaje con alfa
+        bob_y = math.sin(z.walk_bob) * 3.5
+        current_spr = z.get_current_sprite()
+        draw_y = int(sy + bob_y)
+
+        if alpha_int < 250:
+            spr_faded = current_spr.copy()
+            spr_faded.fill((255, 255, 255, alpha_int), special_flags=pygame.BLEND_RGBA_MULT)
+            surface.blit(spr_faded, (int(sx), draw_y))
+        else:
+            surface.blit(current_spr, (int(sx), draw_y))
+
+        # 3. Icono FOMO con alfa
+        if z.icon_sprite:
+            icon_bob = math.cos(z.walk_bob * 1.2) * 5.0
+            ix = int(sx + (z.width - z.icon_sprite.get_width()) / 2)
+            iy = int(sy - z.icon_sprite.get_height() + 8 + icon_bob)
+            if alpha_int < 250:
+                icon_faded = z.icon_sprite.copy()
+                icon_faded.fill((255, 255, 255, alpha_int), special_flags=pygame.BLEND_RGBA_MULT)
+                surface.blit(icon_faded, (ix, iy))
+            else:
+                surface.blit(z.icon_sprite, (ix, iy))
+
+    def _draw_player(self, surface: pygame.Surface, cam_offset: int, shake_x: int) -> None:
+        jump_arc = 0.0
+        if self.is_jumping:
+            jump_arc = math.sin(self.jump_progress * math.pi) * self.jump_height
+
+        px = int(self.player_x + shake_x)
+        py = int(self.player_visual_world_y - cam_offset - jump_arc)
+
+        shadow_scale = 1.0 - (jump_arc / self.jump_height) * 0.45
+        sw = int(72 * shadow_scale)
+        sh = int(22 * shadow_scale)
+        if sw > 0 and sh > 0:
+            shadow_surf = pygame.Surface((sw, sh), pygame.SRCALPHA)
+            pygame.draw.ellipse(shadow_surf, (25, 20, 15, 85), (0, 0, sw, sh))
+            surface.blit(shadow_surf, shadow_surf.get_rect(center=(px, int(self.player_visual_world_y - cam_offset + 35))))
+
+        if self.player_sprite:
+            pw = self.player_sprite.get_width()
+            ph = self.player_sprite.get_height()
+            draw_pos = (px - pw // 2, py - ph + 38)
+            if self.stun_timer > 0.0 and int(self.stun_timer * 20) % 2 == 0:
+                tinted = self.player_sprite.copy()
+                tinted.fill((255, 100, 100, 160), special_flags=pygame.BLEND_RGBA_MULT)
+                surface.blit(tinted, draw_pos)
+            else:
+                surface.blit(self.player_sprite, draw_pos)
+        else:
+            ph_rect = pygame.Rect(px - 30, py - 70, 60, 90)
+            pygame.draw.rect(surface, (50, 120, 210), ph_rect, border_radius=12)
+            pygame.draw.rect(surface, (255, 255, 255), ph_rect, width=3, border_radius=12)
+
+    def _render_hud_overlay(self, surface: pygame.Surface) -> None:
+        # ==============================================================
+        # 1. CONTADOR GRÁFICO (RELOJ + DÍGITOS DENTRO DEL RECUADRO)
+        # ==============================================================
+        counter_x = self.screen_w - 310
+        counter_y = 20
+        if self.spr_counter:
+            surface.blit(self.spr_counter, (counter_x, counter_y))
+            # Ajuste: 10px a la izquierda (x + 77) y 3px abajo (y + 18)
+            display_rect = pygame.Rect(counter_x + 77, counter_y + 18, 138, 70)
+            time_display = f"0:{int(math.ceil(self.time_left)):02d}"
+            col = (45, 45, 45) if self.time_left > 4.0 else (225, 40, 40)
+            txt_t = self.font_timer.render(time_display, True, col)
+            surface.blit(txt_t, txt_t.get_rect(center=display_rect.center))
+        else:
+            txt_t = self.font_timer.render(f"TIEMPO: {self.time_left:.1f}s", True, (40, 40, 40))
+            surface.blit(txt_t, (self.screen_w - 240, 40))

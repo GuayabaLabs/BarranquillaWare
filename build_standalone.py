@@ -6,7 +6,6 @@ Uso:
 
 import os
 import sys
-import shutil
 import subprocess
 
 def check_or_install_pyinstaller():

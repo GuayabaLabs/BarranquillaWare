@@ -7,7 +7,6 @@ pygame.init()
 pygame.display.set_mode((1920, 1080))
 
 from scenes.story_map import StoryMapScene
-from tools.map_dev_tool import MapDevTool
 
 def test_devtool_scale_and_rotation_suite():
     print("Iniciando suite de verificación de DevTool (Escala universal + Rotación)...")

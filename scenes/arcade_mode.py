@@ -89,6 +89,14 @@ class ArcadeModeScene(BaseState):
         self.font_title = pygame.font.SysFont("Arial Black, Impact, sans-serif", 46)
         self.font_sub = pygame.font.SysFont("Arial Black, Impact, sans-serif", 28)
         self.font_btn = pygame.font.SysFont("Arial Black, Impact, sans-serif", 24)
+        self.font_rec = pygame.font.SysFont("Arial Black, Impact", 20)
+
+        # Caché de superficies de fondo y efectos (evita asignaciones 1920x1080 por frame)
+        self._bg_normal = self._build_gradient_bg((30, 20, 45), (15, 10, 25))
+        self._bg_danger = self._build_gradient_bg((55, 15, 20), (30, 8, 12))
+        self._frame_surf = pygame.Surface((self.screen_w, self.screen_h))
+        self._ray_surf = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+        self._confetti_cache: dict = {}
 
         # Superficie de vida (Máscara de Marimonda estilizada)
         self.mask_life_surf = self._create_marimonda_mask_surf(is_broken=False)
@@ -306,28 +314,21 @@ class ArcadeModeScene(BaseState):
             ox = int(random.uniform(-self.screenshake_amp, self.screenshake_amp))
             oy = int(random.uniform(-self.screenshake_amp, self.screenshake_amp))
 
-        # 1. Fondo dinámico de fiesta caribeña
-        bg_surf = pygame.Surface((self.screen_w, self.screen_h))
-        top_col = (30, 20, 45) if self.lives > 1 else (55, 15, 20)
-        bot_col = (15, 10, 25) if self.lives > 1 else (30, 8, 12)
-        for y in range(self.screen_h):
-            t = y / float(self.screen_h)
-            r = int(top_col[0] * (1 - t) + bot_col[0] * t)
-            g = int(top_col[1] * (1 - t) + bot_col[1] * t)
-            b = int(top_col[2] * (1 - t) + bot_col[2] * t)
-            bg_surf.fill((r, g, b), (0, y, self.screen_w, 1))
+        # 1. Fondo dinámico de fiesta caribeña (pre-renderizado)
+        bg_surf = self._frame_surf
+        bg_surf.blit(self._bg_normal if self.lives > 1 else self._bg_danger, (0, 0))
 
-        # Rayos de luz radiales rotatorios
+        # Rayos de luz radiales rotatorios en una única superficie reutilizable
         rot_ang = self.phase_timer * 1.2
         cx, cy = self.screen_w // 2, self.screen_h // 2
+        self._ray_surf.fill((0, 0, 0, 0))
         for i in range(12):
             ang = rot_ang + i * (math.pi / 6)
             p1 = (cx, cy)
             p2 = (cx + int(math.cos(ang - 0.12) * 1400), cy + int(math.sin(ang - 0.12) * 1400))
             p3 = (cx + int(math.cos(ang + 0.12) * 1400), cy + int(math.sin(ang + 0.12) * 1400))
-            poly_surf = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
-            pygame.draw.polygon(poly_surf, (255, 215, 80, 15), [p1, p2, p3])
-            bg_surf.blit(poly_surf, (0, 0))
+            pygame.draw.polygon(self._ray_surf, (255, 215, 80, 15), [p1, p2, p3])
+        bg_surf.blit(self._ray_surf, (0, 0))
 
         # 2. Renderizar contenido de fase
         if self.phase == self.STATE_INTERSTITIAL:
@@ -340,15 +341,30 @@ class ArcadeModeScene(BaseState):
         # 3. HUD Superior permanente (Vidas y Récord)
         self._render_hud(bg_surf)
 
-        # 4. Confeti
+        # 4. Confeti (con caché de sprites por color y tamaño)
         for cf in self.confetti_particles:
             if cf["life"] > 0.0:
                 alpha = int(255 * max(0.0, cf["life"]))
-                c_surf = pygame.Surface((18, 18), pygame.SRCALPHA)
-                pygame.draw.circle(c_surf, (*cf["color"], alpha), (9, 9), int(cf["size"]))
+                key = (tuple(cf["color"]), int(cf["size"]))
+                c_surf = self._confetti_cache.get(key)
+                if c_surf is None:
+                    c_surf = pygame.Surface((18, 18), pygame.SRCALPHA)
+                    pygame.draw.circle(c_surf, (*key[0], 255), (9, 9), key[1])
+                    self._confetti_cache[key] = c_surf
+                c_surf.set_alpha(alpha)
                 bg_surf.blit(c_surf, (int(cf["x"]), int(cf["y"])))
 
         surface.blit(bg_surf, (ox, oy))
+
+    def _build_gradient_bg(self, top_col: tuple, bot_col: tuple) -> pygame.Surface:
+        surf = pygame.Surface((self.screen_w, self.screen_h))
+        for y in range(self.screen_h):
+            t = y / float(self.screen_h)
+            r = int(top_col[0] * (1 - t) + bot_col[0] * t)
+            g = int(top_col[1] * (1 - t) + bot_col[1] * t)
+            b = int(top_col[2] * (1 - t) + bot_col[2] * t)
+            surf.fill((r, g, b), (0, y, self.screen_w, 1))
+        return surf
 
     def _render_hud(self, surface: pygame.Surface) -> None:
         # A) Vidas en la esquina superior derecha
@@ -441,8 +457,7 @@ class ArcadeModeScene(BaseState):
         if self.is_new_record:
             badge_surf = pygame.Surface((360, 46), pygame.SRCALPHA)
             pygame.draw.rect(badge_surf, (255, 215, 60), (0, 0, 360, 46), border_radius=14)
-            font_rec = pygame.font.SysFont("Arial Black, Impact", 20)
-            txt_rec = font_rec.render("★ ¡NUEVO RÉCORD HISTÓRICO! ★", True, (35, 25, 15))
+            txt_rec = self.font_rec.render("★ ¡NUEVO RÉCORD HISTÓRICO! ★", True, (35, 25, 15))
             badge_surf.blit(txt_rec, txt_rec.get_rect(center=(180, 23)))
             p_surf.blit(badge_surf, badge_surf.get_rect(center=(pw // 2, 305)))
 

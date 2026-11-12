@@ -5,56 +5,88 @@
       "x": 203,
       "y": 155,
       "width": 127,
-      "angle": 0.0
+      "angle": 0.0,
+      "level_id": "mallorquin",
+      "microgame_id": "",
+      "kind": "extra",
+      "control_mode": "keyboard_gamepad"
     },
     "uninorte": {
       "name": "Campus Uninorte",
-      "x": 145,
-      "y": 505,
-      "width": 390,
-      "angle": 0.0
+      "x": 169,
+      "y": 517,
+      "width": 360,
+      "angle": 0.0,
+      "level_id": "uninorte",
+      "microgame_id": "uninorte_sprint",
+      "kind": "level",
+      "control_mode": "keyboard_gamepad"
     },
     "buenavista": {
       "name": "C.C. Buenavista",
       "x": 856,
       "y": 501,
       "width": 585,
-      "angle": 0.0
+      "angle": 0.0,
+      "level_id": "buenavista",
+      "microgame_id": "buenavista_trend",
+      "kind": "level",
+      "control_mode": "hybrid"
     },
     "ventana": {
       "name": "Ventana al Mundo",
       "x": 1830,
       "y": 236,
       "width": 125,
-      "angle": 0.0
+      "angle": 0.0,
+      "level_id": "ventana",
+      "microgame_id": "",
+      "kind": "extra",
+      "control_mode": "keyboard_gamepad"
     },
     "malecon": {
       "name": "Gran Malecón",
       "x": 2689,
       "y": 503,
       "width": 270,
-      "angle": 0.0
+      "angle": 0.0,
+      "level_id": "malecon",
+      "microgame_id": "coaster",
+      "kind": "secret",
+      "control_mode": "camera_marker"
     },
     "aleta": {
       "name": "Aleta del Tiburón",
       "x": 2740,
       "y": 806,
       "width": 135,
-      "angle": 0.0
+      "angle": 0.0,
+      "level_id": "aleta",
+      "microgame_id": "",
+      "kind": "extra",
+      "control_mode": "keyboard_gamepad"
     },
     "metropolitano": {
       "name": "Estadio Metropolitano",
       "x": 1778,
       "y": 1242,
       "width": 365,
-      "angle": 0.0
+      "angle": 0.0,
+      "level_id": "metropolitano",
+      "microgame_id": "metropolitano_moderacion",
+      "kind": "level",
+      "control_mode": "keyboard_gamepad"
     },
     "aeropuerto": {
       "name": "Aeropuerto Ernesto Cortissoz",
       "x": 2625,
       "y": 1221,
       "width": 540,
-      "angle": 0.0
+      "angle": 0.0,
+      "level_id": "aeropuerto",
+      "microgame_id": "punch_alert",
+      "kind": "level",
+      "control_mode": "keyboard_gamepad"
     }
   },
   "street_shader": {

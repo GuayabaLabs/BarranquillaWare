@@ -164,14 +164,14 @@ class MapDevTool:
         """Carga el layout desde config/map_poi_layout.json o retorna defaults."""
         default_layout: Dict[str, Any] = {
             "pois": {
-                "mallorquin": {"name": "Parque Mallorquín", "x": 203, "y": 155, "width": 127, "angle": 0.0},
-                "uninorte": {"name": "Campus Uninorte", "x": 145, "y": 505, "width": 390, "angle": 0.0},
-                "buenavista": {"name": "C.C. Buenavista", "x": 856, "y": 501, "width": 585, "angle": 0.0},
-                "ventana": {"name": "Ventana al Mundo", "x": 1830, "y": 236, "width": 125, "angle": 0.0},
-                "malecon": {"name": "Gran Malecón", "x": 2689, "y": 503, "width": 270, "angle": 0.0},
-                "aleta": {"name": "Aleta del Tiburón", "x": 2740, "y": 806, "width": 135, "angle": 0.0},
-                "metropolitano": {"name": "Estadio Metropolitano", "x": 1778, "y": 1242, "width": 365, "angle": 0.0},
-                "aeropuerto": {"name": "Aeropuerto Ernesto Cortissoz", "x": 2625, "y": 1221, "width": 540, "angle": 0.0}
+                "mallorquin": {"name": "Parque Mallorquín", "x": 203, "y": 155, "width": 127, "angle": 0.0, "level_id": "mallorquin", "microgame_id": "mallorquin_photo", "kind": "extra", "control_mode": "keyboard_gamepad"},
+                "uninorte": {"name": "Campus Uninorte", "x": 145, "y": 505, "width": 390, "angle": 0.0, "level_id": "uninorte", "microgame_id": "uninorte_sprint", "kind": "level", "control_mode": "keyboard_gamepad"},
+                "buenavista": {"name": "C.C. Buenavista", "x": 856, "y": 501, "width": 585, "angle": 0.0, "level_id": "buenavista", "microgame_id": "buenavista_trend", "kind": "level", "control_mode": "hybrid"},
+                "ventana": {"name": "Ventana al Mundo", "x": 1830, "y": 236, "width": 125, "angle": 0.0, "level_id": "ventana", "microgame_id": "ventana_colores", "kind": "extra", "control_mode": "keyboard_gamepad"},
+                "malecon": {"name": "Gran Malecón", "x": 2689, "y": 503, "width": 270, "angle": 0.0, "level_id": "malecon", "microgame_id": "coaster", "kind": "secret", "control_mode": "camera_marker"},
+                "aleta": {"name": "Aleta del Tiburón", "x": 2740, "y": 806, "width": 135, "angle": 0.0, "level_id": "aleta", "microgame_id": "punch_alert", "kind": "extra", "control_mode": "keyboard_gamepad"},
+                "metropolitano": {"name": "Estadio Metropolitano", "x": 1778, "y": 1242, "width": 365, "angle": 0.0, "level_id": "metropolitano", "microgame_id": "metropolitano_moderacion", "kind": "level", "control_mode": "keyboard_gamepad"},
+                "aeropuerto": {"name": "Aeropuerto Ernesto Cortissoz", "x": 2625, "y": 1221, "width": 540, "angle": 0.0, "level_id": "aeropuerto", "microgame_id": "punch_alert", "kind": "level", "control_mode": "keyboard_gamepad"}
             },
             "street_shader": {
                 "color": [245, 185, 55],
@@ -194,6 +194,10 @@ class MapDevTool:
                             for k, v in loaded["pois"].items():
                                 if isinstance(v, dict):
                                     v.setdefault("angle", 0.0)
+                                    v.setdefault("level_id", k)
+                                    v.setdefault("microgame_id", "")
+                                    v.setdefault("kind", "extra")
+                                    v.setdefault("control_mode", "keyboard_gamepad")
                                     default_layout["pois"][k] = v
                         if "street_shader" in loaded and isinstance(loaded["street_shader"], dict):
                             default_layout["street_shader"].update(loaded["street_shader"])
@@ -542,6 +546,19 @@ class MapDevTool:
                         self.active_poi_key = poi_keys[idx]
                         self.toast_msg = f"Seleccionado: {self.layout_data['pois'][self.active_poi_key].get('name', self.active_poi_key)}"
                         self.toast_timer = 1.2
+                        return True
+
+                # M: elegir la fuente de control del contenido del POI.
+                if event.key == pygame.K_m:
+                    poi_cfg = self.layout_data["pois"].get(self.active_poi_key)
+                    if poi_cfg is not None:
+                        modes = ["keyboard_gamepad", "hybrid", "camera_marker"]
+                        current = poi_cfg.get("control_mode", modes[0])
+                        next_mode = modes[(modes.index(current) + 1) % len(modes)] if current in modes else modes[0]
+                        poi_cfg["control_mode"] = next_mode
+                        self.toast_msg = f"Control: {next_mode}"
+                        self.toast_timer = 1.5
+                        self._notify_change()
                         return True
 
                 poi_cfg = self.layout_data["pois"].get(self.active_poi_key)
@@ -974,7 +991,7 @@ class MapDevTool:
                 pygame.draw.line(surface, (255, 80, 80), (cx, cy), (ex, ey), 3)
                 pygame.draw.circle(surface, (255, 80, 80), (ex, ey), 4)
 
-            tag_str = f"{tag_name} ({p_cfg.get('x', rect.x)}, {p_cfg.get('y', rect.y)}) W:{rect.width} ∠{cur_angle}°"
+            tag_str = f"{tag_name} [{p_cfg.get('level_id', p_key)} · {p_cfg.get('microgame_id', 'sin juego')}]"
             tag_txt = self.font_small.render(tag_str, True, (255, 255, 255))
             tag_bg = pygame.Rect(screen_r.x, screen_r.y - 20, tag_txt.get_width() + 10, 18)
             pygame.draw.rect(surface, (20, 25, 40, 220), tag_bg, border_radius=4)
@@ -1014,6 +1031,17 @@ class MapDevTool:
             poi_info = self.layout_data["pois"].get(self.active_poi_key, {})
             txt_poi = self.font_body.render(f"Activo: {poi_info.get('name', self.active_poi_key)}", True, (255, 255, 255))
             surface.blit(txt_poi, (self.panel_x + 16, self.panel_y + 116))
+
+            txt_meta = self.font_small.render(
+                f"Nivel: {poi_info.get('level_id', self.active_poi_key)} | Juego: {poi_info.get('microgame_id', 'sin asignar')} | {poi_info.get('kind', 'extra').upper()}",
+                True, (255, 220, 120)
+            )
+            surface.blit(txt_meta, (self.panel_x + 16, self.panel_y + 202))
+            txt_ctrl = self.font_small.render(
+                f"Control: {poi_info.get('control_mode', 'keyboard_gamepad')} (M cambia modo)",
+                True, (150, 230, 255)
+            )
+            surface.blit(txt_ctrl, (self.panel_x + 16, self.panel_y + 218))
 
             txt_coords = self.font_small.render(f"Posición: X = {poi_info.get('x', 0)}, Y = {poi_info.get('y', 0)}", True, (210, 220, 235))
             surface.blit(txt_coords, (self.panel_x + 16, self.panel_y + 136))

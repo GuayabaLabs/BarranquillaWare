@@ -7,7 +7,6 @@ from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
 from core.settings import SettingsManager
 from ui.button import UIButton
-from scenes.slide_transition import SlideTransitionState
 
 # Microjuegos
 from microgames.mallorquin_photo import MallorquinPhotoMicrogame

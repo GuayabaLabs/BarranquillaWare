@@ -5,7 +5,6 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame.init()
 pygame.display.set_mode((1920, 1080))
 
-from core.settings import SettingsManager
 from scenes.free_play import FreePlayScene
 
 def test_free_play_flow():

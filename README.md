@@ -24,8 +24,8 @@
   - Pantalla de Game Over con persistencia de récord histórico en `settings.json`.
 
 ### 3. Modo Libre (`FreePlayScene`)
-- **Catálogo Interactivo 3x2:**
-  - Práctica individual e ilimitada de los 6 microgames con tarjetas animadas, badges de completitud ("★ COMPLETADO") y botón de lanzamiento directo.
+- **Catálogo Interactivo 3x3:**
+  - Práctica individual e ilimitada de los 8 microgames con tarjetas animadas, badges de completitud ("★ COMPLETADO") y botón de lanzamiento directo.
   - **Acceso Directo a la Etapa Jefe:** Tarjeta dorada inferior para desafiar la Batalla de Flores en cualquier momento.
 
 ---

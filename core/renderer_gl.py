@@ -17,10 +17,31 @@ void main() {
 SCREEN_FS = """
 #version 330 core
 uniform sampler2D u_texture;
+uniform float u_brightness;
+uniform mat3 u_color_matrix;
+uniform float u_color_intensity;
+
 in vec2 v_uv;
 out vec4 fragColor;
+
 void main() {
-    fragColor = texture(u_texture, v_uv);
+    vec4 tex = texture(u_texture, v_uv);
+    vec3 col = tex.rgb;
+
+    // Daltonismo (Brettel / Machado)
+    if (u_color_intensity > 0.0) {
+        vec3 simulated = u_color_matrix * col;
+        col = mix(col, simulated, u_color_intensity);
+    }
+
+    // Brillo en GLSL
+    if (u_brightness < 1.0) {
+        col *= u_brightness;
+    } else if (u_brightness > 1.0) {
+        col = mix(col, vec3(1.0), (u_brightness - 1.0) * 0.5);
+    }
+
+    fragColor = vec4(col, tex.a);
 }
 """
 
@@ -176,9 +197,12 @@ class GLRenderer:
         particle_count: int,
         time_seconds: float,
         win_w: int,
-        win_h: int
+        win_h: int,
+        brightness: float = 1.0,
+        color_matrix: Optional[np.ndarray] = None,
+        color_intensity: float = 0.0
     ) -> None:
-        """Renderiza la escena completa a través de ModernGL a 1080p con Letterbox."""
+        """Renderiza la escena completa a través de ModernGL a 1080p con Letterbox y post-procesado GLSL."""
         vx, vy, vw, vh = self.compute_viewport(win_w, win_h)
         self.ctx.viewport = (0, 0, win_w, win_h)
         self.ctx.clear(0.04, 0.04, 0.06, 1.0)
@@ -190,6 +214,16 @@ class GLRenderer:
         self.screen_texture.write(raw_bytes)
         self.screen_texture.use(location=0)
         self.screen_prog['u_texture'].value = 0
+
+        # Uniforms de post-procesado visual en GPU (0% overhead CPU)
+        if 'u_brightness' in self.screen_prog:
+            self.screen_prog['u_brightness'].value = float(brightness)
+        if 'u_color_intensity' in self.screen_prog:
+            self.screen_prog['u_color_intensity'].value = float(color_intensity)
+        if 'u_color_matrix' in self.screen_prog and color_matrix is not None:
+            # GLSL espera matriz en orden column-major como tupla plana
+            self.screen_prog['u_color_matrix'].value = tuple(color_matrix.T.flatten())
+
         self.screen_vao.render(moderngl.TRIANGLE_STRIP)
 
         if particle_count > 0:

@@ -1,0 +1,212 @@
+"""Puente seguro hacia la versión original del juego Coaster con lapicero.
+
+El Coaster antiguo conserva su lógica y calibración, pero se ejecuta sobre una
+superficie embebida en el estado del motor principal.
+"""
+from __future__ import annotations
+
+import importlib.util
+import os
+import sys
+from typing import Callable, Optional
+import pygame
+
+from core.state_machine import BaseState
+
+
+class CoasterLauncherState(BaseState):
+    def __init__(self, on_complete_callback: Optional[Callable[[bool], None]] = None, calibration_only: bool = False) -> None:
+        super().__init__()
+        self.on_complete_callback = on_complete_callback
+        self.calibration_only = calibration_only
+        self.game = None
+        self.legacy_surface: Optional[pygame.Surface] = None
+        self.legacy_level_count = 0
+        self.error = ""
+        self.font = pygame.font.SysFont("Arial Black, Impact, sans-serif", 34)
+        self.font_sub = pygame.font.SysFont("Arial, sans-serif", 20)
+
+    def enter(self, params: Optional[dict] = None) -> None:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        coaster_dir = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
+        coaster_file = os.path.join(coaster_dir, "Coaster.py")
+        if not os.path.exists(coaster_file):
+            self.error = "No se encontró la versión original de Coaster"
+            return
+        try:
+            if coaster_dir not in sys.path:
+                sys.path.insert(0, coaster_dir)
+            spec = importlib.util.spec_from_file_location("legacy_coaster", coaster_file)
+            module = importlib.util.module_from_spec(spec)
+            assert spec and spec.loader
+            spec.loader.exec_module(module)
+            self.legacy_level_count = len(module.niveles)
+            self.legacy_surface = pygame.Surface((module.ancho, module.alto))
+            self.game = module.Juego(usarCamara=True, pantalla=self.legacy_surface, auto_flip=False)
+        except Exception as exc:
+            self.error = f"No se pudo abrir Coaster: {exc}"
+
+    def exit(self) -> None:
+        if self.game and getattr(self.game, "camara", None):
+            self.game.camara.detener()
+        self.game = None
+        self.legacy_surface = None
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if not self.game:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self._finish(False)
+            return
+        forwarded = event
+        if hasattr(event, "pos"):
+            sx = 1100 / 1920
+            sy = 700 / 1080
+            data = dict(event.__dict__)
+            data["pos"] = (int(event.pos[0] * sx), int(event.pos[1] * sy))
+            forwarded = pygame.event.Event(event.type, data)
+        previous_state = self.game.estado
+        previous_level = self.game.numNivel
+        previous_won = bool((self.game.resultado or {}).get("gano", False))
+        handled = self.game.manejar(forwarded)
+        # El juego legacy usa False para salir solo en QUIT o Q. No convertir
+        # una transición de nivel en una salida accidental del estado embebido.
+        if not handled and (event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q)):
+            self._finish(False)
+            return
+
+        # En la versión original, el botón final reciclaba el nivel 1. En la
+        # campaña embebida, completar el último nivel devuelve al mapa.
+        if (
+            previous_state == "resultado"
+            and previous_won
+            and self.legacy_level_count > 0
+            and previous_level == self.legacy_level_count - 1
+            and self.game.estado == "dibujar"
+        ):
+            self._finish(True)
+
+    def update(self, dt: float) -> None:
+        if self.error:
+            return
+        if self.game:
+            previous_state = self.game.estado
+            self.game.actualizar(min(dt, 0.05))
+            if self.calibration_only and previous_state == "calibrar" and self.game.estado != "calibrar":
+                self._finish(True)
+
+    def _finish(self, won: bool) -> None:
+        if self.game and getattr(self.game, "camara", None):
+            self.game.camara.detener()
+        self.game = None
+        if self.on_complete_callback:
+            self.on_complete_callback(won)
+
+    def render(self, surface: pygame.Surface) -> None:
+        if self.game and self.legacy_surface:
+            self.game.dibujar()
+            scaled = pygame.transform.smoothscale(self.legacy_surface, surface.get_size())
+            surface.blit(scaled, (0, 0))
+            return
+        surface.fill((18, 24, 40))
+        title = "COASTER · LUNA DEL RÍO"
+        subtitle = self.error or "La versión original se está ejecutando en su propia ventana."
+        hint = "Calibra el lapicero en Coaster · ESC para volver"
+        surface.blit(self.font.render(title, True, (255, 220, 80)), (surface.get_width() // 2 - 330, 420))
+        surface.blit(self.font_sub.render(subtitle, True, (235, 240, 250)), (surface.get_width() // 2 - 410, 490))
+        surface.blit(self.font_sub.render(hint, True, (130, 220, 180)), (surface.get_width() // 2 - 300, 540))
+
+
+class CoasterCalibrationState(BaseState):
+    """Calibrador independiente: no muestra el menú ni el botón Jugar."""
+    def __init__(self, on_complete_callback: Optional[Callable[[bool], None]] = None) -> None:
+        super().__init__()
+        self.on_complete_callback = on_complete_callback
+        self.camera = None
+        self.module = None
+        self.requested = False
+        self.saved = False
+        self.error = ""
+        self.font = pygame.font.SysFont("Arial Black, Impact, sans-serif", 38)
+        self.small = pygame.font.SysFont("Arial, sans-serif", 20, bold=True)
+
+    def enter(self, params: Optional[dict] = None) -> None:
+        try:
+            root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            folder = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
+            path = os.path.join(folder, "Coaster.py")
+            if folder not in sys.path:
+                sys.path.insert(0, folder)
+            spec = importlib.util.spec_from_file_location("legacy_coaster_calibration", path)
+            self.module = importlib.util.module_from_spec(spec)
+            assert spec and spec.loader
+            spec.loader.exec_module(self.module)
+            self.camera = self.module.Camara(0)
+            if not self.camera.abrir():
+                self.error = "No se pudo abrir la cámara"
+            else:
+                self.camera.iniciar()
+        except Exception as exc:
+            self.error = str(exc)
+
+    def exit(self) -> None:
+        if self.camera:
+            self.camera.detener()
+        self.camera = None
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self._finish(False)
+            elif event.key == pygame.K_SPACE and self.camera:
+                self.camera.pedido = (0.5, 0.5)
+                self.requested = True
+            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and self.saved:
+                self._finish(True)
+
+    def update(self, dt: float) -> None:
+        if self.camera and self.requested and self.camera.rangos:
+            self.saved = True
+
+    def _finish(self, ok: bool) -> None:
+        if self.on_complete_callback:
+            self.on_complete_callback(ok)
+
+    def render(self, surface: pygame.Surface) -> None:
+        surface.fill((18, 24, 40))
+        title = self.font.render("CALIBRAR LAPICERO", True, (255, 220, 80))
+        surface.blit(title, title.get_rect(center=(surface.get_width() // 2, 120)))
+        preview = None
+        if self.camera:
+            _, data = self.camera.obtenerVista()
+            if data and self.module:
+                try:
+                    preview = pygame.image.frombuffer(data, self.module.tamVista, "RGB").copy()
+                except Exception:
+                    preview = None
+        # Layout adaptable: la mira debe quedar exactamente sobre el centro
+        # de la imagen de cámara, no sobre el centro del panel completo.
+        sw, sh = surface.get_size()
+        panel_w = min(1500, sw - 120)
+        panel_h = min(720, sh - 250)
+        box = pygame.Rect(0, 0, panel_w, panel_h)
+        box.center = (sw // 2, sh // 2 + 35)
+        pygame.draw.rect(surface, (35, 45, 62), box, border_radius=18)
+        preview_rect = pygame.Rect(box.x + 55, box.y + 68, int(box.w * 0.62), box.h - 135)
+        if preview:
+            # Mantener proporción 4:3 y centrarla dentro de su columna.
+            target_w = preview_rect.w
+            target_h = int(target_w * 3 / 4)
+            if target_h > preview_rect.h:
+                target_h = preview_rect.h
+                target_w = int(target_h * 4 / 3)
+            preview = pygame.transform.smoothscale(preview, (target_w, target_h))
+            preview_rect = preview.get_rect(center=preview_rect.center)
+            surface.blit(preview, preview_rect)
+        pygame.draw.rect(surface, (95, 120, 145), preview_rect, 2, border_radius=8)
+        pygame.draw.circle(surface, (255, 235, 120), preview_rect.center, min(52, preview_rect.h // 8), 4)
+        pygame.draw.circle(surface, (255, 245, 170), preview_rect.center, 5)
+        msg = "Coloca el lapicero en el círculo y pulsa ESPACIO" if not self.saved else "Calibración guardada · pulsa ENTER para volver"
+        if self.error:
+            msg = self.error
+        surface.blit(self.small.render(msg, True, (235, 240, 250)), (box.x + 55, box.bottom - 48))
+        surface.blit(self.small.render("ESC: cancelar", True, (150, 190, 220)), (box.right - 210, box.bottom - 48))

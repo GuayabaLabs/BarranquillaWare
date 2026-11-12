@@ -6,7 +6,6 @@ pygame.init()
 pygame.display.set_mode((1920, 1080))
 
 from scenes.story_map import StoryMapScene
-from tools.map_dev_tool import MapDevTool
 
 def test_branching_and_midpoints_suite():
     print("Iniciando suite de verificación: Ramificaciones de red vial, Nodos Medios y Circuitos...")
