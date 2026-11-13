@@ -153,6 +153,14 @@ class AssetManager:
 
         # Mapeo de nombres comunes a fuentes locales empaquetadas
         font_map = {
+            "arial rounded": "arialrounded.ttf",
+            "arialrounded": "arialrounded.ttf",
+            "trebuchet": "trebucbd.ttf" if bold else "trebuc.ttf",
+            "trebuchet ms": "trebucbd.ttf" if bold else "trebuc.ttf",
+            "inkfree": "Inkfree.ttf",
+            "ink free": "Inkfree.ttf",
+            "segoeprint": "segoeprb.ttf" if bold else "segoepr.ttf",
+            "segoe print": "segoeprb.ttf" if bold else "segoepr.ttf",
             "impact": "Impact.ttf",
             "arial black": "Impact.ttf",
             "arial": "ArialBold.ttf" if bold else "ArialBold.ttf",

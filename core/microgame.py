@@ -43,6 +43,17 @@ class BaseMicrogame(BaseState):
 
         self.is_won: bool = False
         self.is_finished: bool = False
+        self.show_outro_banner: bool = True
+        self.outro_message: Optional[str] = None
+        self.pause_return_callback: Optional[Callable[[], None]] = None
+        self.pause_restart_callback: Optional[Callable[[], None]] = None
+
+        # Sacudida de pantalla (Screenshake)
+        self.shake_intensity: float = 0.0
+        self.shake_duration: float = 0.0
+        self.shake_timer: float = 0.0
+        self.shake_offset_x: int = 0
+        self.shake_offset_y: int = 0
 
         # Tipografías oficiales de Microjuego con fallback empaquetado
         self.font_command = self.assets.get_font("Arial Black, Impact, sans-serif", 72)
@@ -55,6 +66,16 @@ class BaseMicrogame(BaseState):
     def setup_game(self) -> None:
         """Inicializa variables específicas del microjuego individual."""
         pass
+
+    def trigger_screenshake(self, intensity: float = 10.0, duration: float = 0.2) -> None:
+        """Activa sacudida de pantalla."""
+        self.shake_intensity = intensity
+        self.shake_duration = duration
+        self.shake_timer = duration
+
+    def evaluate(self, won: bool, delay: float = 0.8, message: str = "") -> None:
+        """Declara el resultado y pasa a la fase de outro."""
+        self.finish_game(won=won)
 
     def finish_game(self, won: bool) -> None:
         """Declara el resultado del microjuego y activa la fase de salida."""
@@ -81,6 +102,17 @@ class BaseMicrogame(BaseState):
         pass
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self.phase == self.PHASE_PLAY and getattr(self, "state_machine", None):
+                from core.microgame_pause import MicrogamePauseState
+                self.state_machine.push_state(
+                    MicrogamePauseState(
+                        previous=self,
+                        return_callback=self.pause_return_callback,
+                        restart_callback=self.pause_restart_callback
+                    )
+                )
+                return
         if self.phase == self.PHASE_PLAY:
             self.handle_game_event(event)
 
@@ -110,7 +142,8 @@ class BaseMicrogame(BaseState):
 
     def render_game(self, surface: pygame.Surface) -> None:
         """Dibujo del escenario y entidades del microjuego."""
-        pass
+        if hasattr(self, "draw_game"):
+            self.draw_game(surface)
 
     def render(self, surface: pygame.Surface) -> None:
         # 1. Render específico del juego
@@ -226,7 +259,13 @@ class BaseMicrogame(BaseState):
         utilizando un shader volumétrico de resplandor (bloom multicapa), barrido cromático
         y contorno profundo para máxima legibilidad sobre cualquier fondo.
         """
-        msg = "¡LO LOGRASTE!" if self.is_won else "¡FALLASTE!"
+        if not getattr(self, "show_outro_banner", True):
+            return
+
+        if getattr(self, "outro_message", None):
+            msg = self.outro_message
+        else:
+            msg = "¡LO LOGRASTE!" if self.is_won else "¡FALLASTE!"
 
         # Entrada elástica y pulso de escala suave
         t = min(1.0, self.outro_timer / 0.28)

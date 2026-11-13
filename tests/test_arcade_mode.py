@@ -75,7 +75,7 @@ def test_arcade_mode_flow():
     scene._enter_game_over()
     test_screen = pygame.Surface((1920, 1080))
     scene.render(test_screen)
-    art_path = r"C:/Users/danie/.gemini/antigravity/brain/b41976be-0b61-4f7e-ae55-10b881bf2028/render_arcade_game_over.png"
+    art_path = "render_arcade_game_over.png"
     pygame.image.save(test_screen, art_path)
     print(f"[OK] Snapshot de Game Over guardado en: {art_path}")
 
