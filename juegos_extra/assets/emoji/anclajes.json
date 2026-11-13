@@ -1,0 +1,296 @@
+{
+  "titulo": {
+    "anchor": [
+      163,
+      18
+    ],
+    "box": [
+      55,
+      20,
+      340,
+      40
+    ],
+    "components_in_box": 18,
+    "groups": false
+  },
+  "tiempo": {
+    "anchor": [
+      90,
+      20
+    ],
+    "box": [
+      460,
+      20,
+      190,
+      40
+    ],
+    "components_in_box": 15,
+    "groups": false
+  },
+  "tarjeta_mano_izq": {
+    "anchor": [
+      38,
+      45
+    ],
+    "box": [
+      808,
+      20,
+      80,
+      92
+    ],
+    "components_in_box": 2,
+    "groups": false
+  },
+  "tarjeta_mano_der": {
+    "anchor": [
+      40,
+      45
+    ],
+    "box": [
+      920,
+      20,
+      84,
+      92
+    ],
+    "components_in_box": 3,
+    "groups": false
+  },
+  "barra_negatividad": {
+    "anchor": [
+      38,
+      109
+    ],
+    "box": [
+      17,
+      94,
+      76,
+      218
+    ],
+    "components_in_box": 1,
+    "groups": false
+  },
+  "barra_positividad": {
+    "anchor": [
+      38,
+      109
+    ],
+    "box": [
+      390,
+      94,
+      76,
+      218
+    ],
+    "components_in_box": 5,
+    "groups": false
+  },
+  "mano_azul_izq": {
+    "anchor": [
+      63,
+      151
+    ],
+    "box": [
+      247,
+      157,
+      132,
+      169
+    ],
+    "components_in_box": 27,
+    "groups": false
+  },
+  "mano_morada": {
+    "anchor": [
+      62,
+      154
+    ],
+    "box": [
+      540,
+      157,
+      125,
+      169
+    ],
+    "components_in_box": 14,
+    "groups": false
+  },
+  "mano_azul_der": {
+    "anchor": [
+      61,
+      154
+    ],
+    "box": [
+      773,
+      157,
+      126,
+      169
+    ],
+    "components_in_box": 13,
+    "groups": false
+  },
+  "emoji_enojado_naranja": {
+    "anchor": [
+      49,
+      46
+    ],
+    "box": [
+      32,
+      350,
+      100,
+      92
+    ],
+    "components_in_box": 5,
+    "groups": false
+  },
+  "emoji_enojado_rojo": {
+    "anchor": [
+      47,
+      46
+    ],
+    "box": [
+      201,
+      350,
+      100,
+      92
+    ],
+    "components_in_box": 1,
+    "groups": false
+  },
+  "emoji_triste": {
+    "anchor": [
+      47,
+      46
+    ],
+    "box": [
+      371,
+      349,
+      99,
+      95
+    ],
+    "components_in_box": 2,
+    "groups": false
+  },
+  "emoji_vomito_1": {
+    "anchor": [
+      46,
+      47
+    ],
+    "box": [
+      536,
+      349,
+      96,
+      96
+    ],
+    "components_in_box": 2,
+    "groups": false
+  },
+  "emoji_vomito_2": {
+    "anchor": [
+      43,
+      48
+    ],
+    "box": [
+      696,
+      349,
+      87,
+      96
+    ],
+    "components_in_box": 1,
+    "groups": false
+  },
+  "emoji_bolsa_dinero": {
+    "anchor": [
+      42,
+      45
+    ],
+    "box": [
+      895,
+      349,
+      89,
+      96
+    ],
+    "components_in_box": 2,
+    "groups": false
+  },
+  "emoji_corazon_roto": {
+    "anchor": [
+      48,
+      42
+    ],
+    "box": [
+      31,
+      471,
+      103,
+      89
+    ],
+    "components_in_box": 2,
+    "groups": false
+  },
+  "emoji_pulgar_abajo": {
+    "anchor": [
+      43,
+      40
+    ],
+    "box": [
+      205,
+      470,
+      94,
+      91
+    ],
+    "components_in_box": 4,
+    "groups": false
+  },
+  "emoji_sonriente": {
+    "anchor": [
+      47,
+      44
+    ],
+    "box": [
+      372,
+      470,
+      97,
+      90
+    ],
+    "components_in_box": 3,
+    "groups": false
+  },
+  "emoji_cara_azul": {
+    "anchor": [
+      48,
+      44
+    ],
+    "box": [
+      538,
+      470,
+      96,
+      91
+    ],
+    "components_in_box": 1,
+    "groups": false
+  },
+  "emoji_corazon": {
+    "anchor": [
+      47,
+      42
+    ],
+    "box": [
+      706,
+      469,
+      101,
+      91
+    ],
+    "components_in_box": 1,
+    "groups": false
+  },
+  "emoji_pulgar_arriba": {
+    "anchor": [
+      44,
+      43
+    ],
+    "box": [
+      895,
+      468,
+      92,
+      93
+    ],
+    "components_in_box": 3,
+    "groups": false
+  }
+}

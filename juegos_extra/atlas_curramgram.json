@@ -1,0 +1,558 @@
+{
+  "source": "assets/hojas/hoja_curramgram.png",
+  "tile": 17,
+  "items": {
+    "titulo": {
+      "box": [
+        30,
+        20,
+        298,
+        70
+      ],
+      "anchor": [
+        149,
+        35
+      ]
+    },
+    "barranquilla": {
+      "box": [
+        329,
+        36,
+        138,
+        53
+      ],
+      "anchor": [
+        69,
+        26
+      ]
+    },
+    "aeropuerto": {
+      "box": [
+        496,
+        34,
+        230,
+        56
+      ],
+      "anchor": [
+        115,
+        28
+      ]
+    },
+    "gates_1_10": {
+      "box": [
+        732,
+        43,
+        140,
+        42
+      ],
+      "anchor": [
+        70,
+        21
+      ]
+    },
+    "hud_pildora": {
+      "box": [
+        348,
+        98,
+        337,
+        35
+      ],
+      "anchor": [
+        168,
+        17
+      ]
+    },
+    "zona_1": {
+      "box": [
+        36,
+        132,
+        146,
+        36
+      ],
+      "anchor": [
+        73,
+        18
+      ]
+    },
+    "zona_2": {
+      "box": [
+        314,
+        131,
+        204,
+        39
+      ],
+      "anchor": [
+        102,
+        19
+      ]
+    },
+    "zona_3": {
+      "box": [
+        661,
+        132,
+        242,
+        38
+      ],
+      "anchor": [
+        121,
+        19
+      ]
+    },
+    "puerta_embarque": {
+      "box": [
+        941,
+        92,
+        77,
+        99
+      ],
+      "anchor": [
+        38,
+        49
+      ]
+    },
+    "icono_camara": {
+      "box": [
+        208,
+        101,
+        72,
+        44
+      ],
+      "anchor": [
+        36,
+        22
+      ]
+    },
+    "reloj_grande": {
+      "box": [
+        184,
+        136,
+        123,
+        59
+      ],
+      "anchor": [
+        61,
+        29
+      ]
+    },
+    "policia": {
+      "box": [
+        39,
+        245,
+        60,
+        120
+      ],
+      "anchor": [
+        30,
+        119
+      ],
+      "component_policy": "dominant"
+    },
+    "bailarina_comparsa": {
+      "box": [
+        103,
+        216,
+        105,
+        148
+      ],
+      "anchor": [
+        52,
+        147
+      ],
+      "component_policy": "dominant"
+    },
+    "trabajador_carrito": {
+      "box": [
+        209,
+        237,
+        132,
+        126
+      ],
+      "anchor": [
+        66,
+        125
+      ],
+      "component_policy": "dominant"
+    },
+    "letrero_butifarras": {
+      "box": [
+        263,
+        380,
+        82,
+        47
+      ],
+      "anchor": [
+        41,
+        23
+      ]
+    },
+    "cami": {
+      "box": [
+        476,
+        260,
+        73,
+        151
+      ],
+      "anchor": [
+        36,
+        150
+      ],
+      "component_policy": "dominant"
+    },
+    "tamborero": {
+      "box": [
+        547,
+        270,
+        75,
+        98
+      ],
+      "anchor": [
+        37,
+        97
+      ],
+      "component_policy": "dominant"
+    },
+    "hombre_gorra": {
+      "box": [
+        623,
+        239,
+        57,
+        129
+      ],
+      "anchor": [
+        28,
+        128
+      ],
+      "component_policy": "dominant"
+    },
+    "turista_pasaporte": {
+      "box": [
+        679,
+        250,
+        56,
+        124
+      ],
+      "anchor": [
+        28,
+        123
+      ],
+      "component_policy": "dominant"
+    },
+    "pasajero_sentado_1": {
+      "box": [
+        735,
+        273,
+        47,
+        92
+      ],
+      "anchor": [
+        23,
+        91
+      ],
+      "component_policy": "dominant"
+    },
+    "joven_llorando": {
+      "box": [
+        800,
+        276,
+        38,
+        95
+      ],
+      "anchor": [
+        19,
+        94
+      ],
+      "component_policy": "dominant"
+    },
+    "senor_sentado": {
+      "box": [
+        845,
+        274,
+        38,
+        94
+      ],
+      "anchor": [
+        19,
+        93
+      ],
+      "component_policy": "dominant"
+    },
+    "senora_cava": {
+      "box": [
+        900,
+        259,
+        73,
+        123
+      ],
+      "anchor": [
+        36,
+        122
+      ],
+      "component_policy": "dominant"
+    },
+    "globito_clickbait": {
+      "box": [
+        430,
+        168,
+        170,
+        71
+      ],
+      "anchor": [
+        85,
+        70
+      ]
+    },
+    "dialogo_toma_foto": {
+      "box": [
+        107,
+        378,
+        83,
+        49
+      ],
+      "anchor": [
+        41,
+        48
+      ]
+    },
+    "dialogo_salto": {
+      "box": [
+        190,
+        380,
+        76,
+        67
+      ],
+      "anchor": [
+        38,
+        67
+      ]
+    },
+    "dialogo_confirma": {
+      "box": [
+        350,
+        380,
+        131,
+        50
+      ],
+      "anchor": [
+        65,
+        49
+      ]
+    },
+    "dialogo_privacidad": {
+      "box": [
+        550,
+        390,
+        121,
+        52
+      ],
+      "anchor": [
+        60,
+        51
+      ]
+    },
+    "dialogo_respeto": {
+      "box": [
+        674,
+        382,
+        94,
+        61
+      ],
+      "anchor": [
+        47,
+        60
+      ]
+    },
+    "dialogo_pelea": {
+      "box": [
+        772,
+        382,
+        96,
+        65
+      ],
+      "anchor": [
+        48,
+        64
+      ]
+    },
+    "dialogo_hielo": {
+      "box": [
+        874,
+        382,
+        94,
+        55
+      ],
+      "anchor": [
+        47,
+        54
+      ]
+    },
+    "cartel_policia": {
+      "box": [
+        31,
+        380,
+        78,
+        48
+      ],
+      "anchor": [
+        39,
+        24
+      ]
+    },
+    "cartel_comparsa": {
+      "box": [
+        30,
+        429,
+        93,
+        44
+      ],
+      "anchor": [
+        46,
+        22
+      ]
+    },
+    "alerta": {
+      "box": [
+        182,
+        472,
+        108,
+        27
+      ],
+      "anchor": [
+        54,
+        13
+      ]
+    },
+    "tecla_s_sigilo": {
+      "box": [
+        183,
+        499,
+        126,
+        24
+      ],
+      "anchor": [
+        63,
+        12
+      ]
+    },
+    "tecla_flash": {
+      "box": [
+        183,
+        523,
+        126,
+        24
+      ],
+      "anchor": [
+        63,
+        12
+      ]
+    },
+    "tecla_a": {
+      "box": [
+        354,
+        485,
+        27,
+        39
+      ],
+      "anchor": [
+        13,
+        19
+      ]
+    },
+    "tecla_d": {
+      "box": [
+        432,
+        485,
+        32,
+        39
+      ],
+      "anchor": [
+        16,
+        19
+      ]
+    },
+    "tecla_s": {
+      "box": [
+        512,
+        485,
+        33,
+        39
+      ],
+      "anchor": [
+        16,
+        19
+      ]
+    },
+    "tecla_space": {
+      "box": [
+        572,
+        485,
+        57,
+        39
+      ],
+      "anchor": [
+        28,
+        19
+      ]
+    },
+    "tecla_e": {
+      "box": [
+        649,
+        485,
+        33,
+        39
+      ],
+      "anchor": [
+        16,
+        19
+      ]
+    },
+    "tecla_camara": {
+      "box": [
+        721,
+        485,
+        49,
+        40
+      ],
+      "anchor": [
+        24,
+        20
+      ]
+    },
+    "tecla_p": {
+      "box": [
+        879,
+        485,
+        34,
+        39
+      ],
+      "anchor": [
+        17,
+        19
+      ]
+    },
+    "gate_7": {
+      "box": [
+        940,
+        465,
+        60,
+        85
+      ],
+      "anchor": [
+        30,
+        84
+      ]
+    },
+    "grupo_vendedor_letrero": {
+      "box": [
+        339,
+        238,
+        130,
+        125
+      ],
+      "anchor": [
+        65,
+        124
+      ],
+      "component_policy": "dominant"
+    }
+  }
+}

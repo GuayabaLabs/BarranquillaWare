@@ -30,3 +30,10 @@ El Cortissoz disponible (`aeropuerto_ernesto_cortissoz_mapa.png`) es una ilustra
 Ambos juegos abren a 1920×1080, 60 FPS. La entrada pasa por `leer_entrada()` para facilitar un reemplazo futuro por cámara/mano. Las constantes configurables están al inicio de cada archivo. `comun.py` centraliza carga segura de imágenes/fuentes, paneles, pausa y pantalla final.
 
 Algunas escenas se resuelven de forma breve para no interrumpir el recorrido; los aprendizajes completos aparecen en el reporte final. El personaje jugable de CurramGram usa el chibi existente como retrato fijo porque el repositorio no incluye un sprite con direcciones.
+
+## Reparación de arte con hojas adjuntas
+
+- Las hojas `assets/hojas/hoja_emoji_catch.png` y `assets/hojas/hoja_curramgram.png` llegaron como RGB sin alfa; el tablero de transparencia estaba pintado. `herramientas/recortar_sprites.py` crea variantes RGBA, detecta componentes alfa y usa las cajas manuales de `atlas_emoji.json` y `atlas_curramgram.json` para los grupos cercanos.
+- Se extrajeron 21 recursos de Emoji Catch y 45 de CurramGram, con hojas de contacto revisadas visualmente. Los contactos quedan en `assets/emoji/_contacto_emoji.png` y `assets/curramgram/_contacto_curramgram.png`; los puntos de anclaje están en `anclajes.json`.
+- El flood-fill eliminó aproximadamente 71.5% del tablero de Emoji Catch y 63.1% del de CurramGram como fondo conectado. La limpieza preservó islas de gris/blanco rodeadas por contornos: se revisaron visualmente las tarjetas, el pasabordo y la cava. El vendedor y el letrero que se solapan se exportan como `grupo_vendedor_letrero`; las partes tapadas en la hoja no se pueden reconstruir sin inventar arte.
+- CurramGram se escala con vecino más cercano en múltiplos enteros de 2. Emoji Catch permite suavizado moderado. Los archivos fuente de las hojas se conservan sin modificar.
