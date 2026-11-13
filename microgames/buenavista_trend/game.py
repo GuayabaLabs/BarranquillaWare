@@ -79,7 +79,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.floating_feedbacks: List[Dict[str, Any]] = []
         self.celebration_particles: List[Dict[str, Any]] = []
         self.lane_press_timers: List[float] = [0.0, 0.0, 0.0, 0.0]
-        self.camera_input = CameraGestureInput()
+        self.camera_input = CameraGestureInput.get_instance()
         self.camera_input.start()
 
         # Tipografías
@@ -399,8 +399,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         self.cleanup()
-        if hasattr(self, "camera_input"):
-            self.camera_input.stop()
+        # La cámara pertenece al motor y se comparte con el resto de escenas.
 
     def finish_game(self, won: bool) -> None:
         """Detiene la aparición de notas, atenúa la música, lanza celebración/fallo y comunica resultado."""

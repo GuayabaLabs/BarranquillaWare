@@ -121,6 +121,7 @@ class MainMenuScene(BaseState):
         self.iguana_hovered: bool = False
         self.iguana_jump_y: float = 0.0
         self.iguana_jump_vel: float = 0.0
+        self.iguana_bounce_count: int = 0
         self.iguana_squash_offset: float = 0.0
         self.iguana_squash_vel: float = 0.0
         self.iguana_curiosity: float = 0.0
@@ -229,6 +230,7 @@ class MainMenuScene(BaseState):
 
     def _trigger_iguana_reaction(self) -> None:
         self.iguana_jump_vel = -330.0
+        self.iguana_bounce_count = 0
         self.audio.play_iguana()
         head_pos = (self.iguana_base_x + 195, self.iguana_base_y - 110 + self.iguana_jump_y)
         self.juice_particles.emit_sparks(head_pos, count=7)
@@ -280,9 +282,17 @@ class MainMenuScene(BaseState):
             self.iguana_jump_y += self.iguana_jump_vel * dt
             self.iguana_jump_vel += 1380.0 * dt  # Gravedad escalada a 1080p
             if self.iguana_jump_y >= 0.0:
+                impact_velocity = self.iguana_jump_vel
                 self.iguana_jump_y = 0.0
-                self.iguana_jump_vel = 0.0
-                self.iguana_squash_offset = -0.15
+                if impact_velocity > 55.0 and self.iguana_bounce_count < 2:
+                    # Pequeños rebotes con pérdida de energía para suavizar el aterrizaje.
+                    self.iguana_jump_vel = -impact_velocity * 0.42
+                    self.iguana_bounce_count += 1
+                    self.iguana_squash_offset = -min(0.22, impact_velocity / 1900.0)
+                else:
+                    self.iguana_jump_vel = 0.0
+                    self.iguana_bounce_count = 0
+                    self.iguana_squash_offset = -0.15
                 self.iguana_squash_vel = 0.0
 
         spring_k = 340.0

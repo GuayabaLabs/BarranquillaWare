@@ -244,7 +244,7 @@
         "id": 53,
         "x": 1636,
         "y": 1349,
-        "is_stop": true,
+        "is_stop": false,
         "name": "Nodo 54"
       },
       {
@@ -258,7 +258,7 @@
         "id": 55,
         "x": 1687,
         "y": 1277,
-        "is_stop": false,
+        "is_stop": true,
         "name": "Nodo 56"
       },
       {
@@ -865,7 +865,7 @@
     {
       "x": 1636,
       "y": 1349,
-      "is_stop": true,
+      "is_stop": false,
       "name": "Nodo 54"
     },
     {
@@ -877,7 +877,7 @@
     {
       "x": 1687,
       "y": 1277,
-      "is_stop": false,
+      "is_stop": true,
       "name": "Nodo 56"
     },
     {

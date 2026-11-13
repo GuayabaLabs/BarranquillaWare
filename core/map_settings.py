@@ -82,6 +82,9 @@ class MapSettingsState(BaseState):
         pass
 
     def render(self, surface: pygame.Surface) -> None:
+        # Panel con la tarjeta y la letra del juego de la montaña rusa
+        if self.dibujarAjustes(surface):
+            return
         shade = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
         shade.fill((5, 10, 20, 170))
         surface.blit(shade, (0, 0))
@@ -121,3 +124,94 @@ class MapSettingsState(BaseState):
                 fill = pygame.Rect(bar.x, bar.y, int(bar.w * max(0.0, min(1.0, value))), bar.h)
                 pygame.draw.rect(surface, (245, 195, 75), fill, border_radius=2)
         surface.blit(self.small.render("↑↓ seleccionar · ←→ intensidad · ENTER modo · ESC cerrar", True, (180, 195, 220)), (panel.x + 55, panel.bottom - 42))
+
+    def dibujarAjustes(self, surface: pygame.Surface) -> bool:
+        """Dibuja los ajustes sobre la tarjeta del juego de la montaña rusa. Devuelve False si no está."""
+        from core.asset_manager import AssetManager
+        assets = AssetManager.get_instance()
+        coaster = assets.cargarCoaster()
+        if coaster is None:
+            return False
+
+        cafeOscuro = (72, 52, 46)
+        cafe = (126, 90, 62)
+        dorado = (234, 186, 78)
+        coral = (224, 128, 108)
+
+        # Oscurece lo de atrás multiplicando sus colores
+        surface.fill((120, 112, 130), special_flags=pygame.BLEND_RGB_MULT)
+
+        tarjeta = pygame.Rect(410, 90, 1100, 900)
+        coaster.tarjetaPintada(surface, tarjeta)
+
+        fuenteTitulo = assets.cargarFuenteCuento(64)
+        fuenteNombre = assets.cargarFuenteCuento(38)
+        fuenteValor = assets.cargarFuenteCuento(30)
+        fuenteAyuda = assets.cargarFuenteCuento(24)
+
+        titulo = fuenteTitulo.render("Ajustes", True, cafeOscuro)
+        surface.blit(titulo, titulo.get_rect(center=(tarjeta.centerx, tarjeta.top + 112)))
+
+        nombresModos = {"off": "Apagado", "protanopia": "Protanopia", "deuteranopia": "Deuteranopia", "tritanopia": "Tritanopia"}
+        modo = nombresModos.get(str(self.settings.get("colorblind_mode", "off")), "Apagado")
+        nombres = {
+            "sound": "Sonido", "music": "Música", "brightness": "Brillo", "colorblind": "Daltonismo",
+            "controller": "Mando", "calibrate": "Calibrar lápiz", "back": "Cerrar",
+        }
+        valores = {
+            "sound": f"{'Activado' if self.audio.sound_enabled else 'Silenciado'}  {int(self.audio.sfx_volume * 100)}%",
+            "music": f"{'Activada' if self.audio.music_enabled else 'Silenciada'}  {int(self.audio.music_volume * 100)}%",
+            "brightness": f"{int(float(self.settings.get('brightness', 1.0)) * 100)}%",
+            "colorblind": f"{modo}  {int(float(self.settings.get('colorblind_intensity', 0.0)) * 100)}%",
+            "controller": "Automático",
+            "calibrate": "Abrir",
+            "back": "Volver",
+        }
+        barras = {
+            "sound": self.audio.sfx_volume,
+            "music": self.audio.music_volume,
+            "brightness": (float(self.settings.get("brightness", 1.0)) - 0.5) / 1.0,
+            "colorblind": float(self.settings.get("colorblind_intensity", 0.0)),
+        }
+
+        for i, item in enumerate(self.items):
+            y = tarjeta.top + 172 + i * 82
+            fila = pygame.Rect(tarjeta.x + 110, y, tarjeta.w - 220, 70)
+
+            # La fila elegida se marca con una mancha suave de color y un puntico coral
+            if i == self.index:
+                mancha = pygame.Surface(fila.size, pygame.SRCALPHA)
+                pygame.draw.rect(mancha, (255, 226, 160, 120), mancha.get_rect(), border_radius=22)
+                surface.blit(mancha, fila.topleft)
+                pygame.draw.circle(surface, coral, (fila.x + 22, fila.centery), 8)
+                pygame.draw.circle(surface, cafeOscuro, (fila.x + 22, fila.centery), 8, 2)
+
+            nombre = fuenteNombre.render(nombres[item], True, cafeOscuro)
+            surface.blit(nombre, nombre.get_rect(midleft=(fila.x + 44, fila.centery)))
+            valor = fuenteValor.render(valores[item], True, cafe)
+            surface.blit(valor, valor.get_rect(midright=(fila.right - 20, fila.centery)))
+
+            if item in barras:
+                self.dibujarBarra(surface, pygame.Rect(fila.x + 290, fila.centery - 9, 300, 18), barras[item], dorado, cafeOscuro)
+
+        ayuda = fuenteAyuda.render("Flechas para elegir y ajustar  ·  Enter para cambiar  ·  Esc para cerrar", True, cafe)
+        surface.blit(ayuda, ayuda.get_rect(center=(tarjeta.centerx, tarjeta.bottom - 138)))
+        return True
+
+    def dibujarBarra(self, surface: pygame.Surface, caja: pygame.Rect, valor: float, color, tinta) -> None:
+        """Barra con riel de papel, relleno de color y una bolita en la punta, con contorno de tinta."""
+        valor = max(0.0, min(1.0, valor))
+        radio = caja.h // 2
+        pygame.draw.rect(surface, (236, 222, 196), caja, border_radius=radio)
+        lleno = pygame.Rect(caja.x, caja.y, max(caja.h, int(caja.w * valor)), caja.h)
+        if valor > 0.0:
+            pygame.draw.rect(surface, color, lleno, border_radius=radio)
+            # Brillito de arriba para que se vea pintada
+            brillo = pygame.Rect(lleno.x + 6, lleno.y + 3, max(0, lleno.w - 12), 4)
+            if brillo.w > 0:
+                pygame.draw.rect(surface, (255, 236, 180), brillo, border_radius=2)
+        pygame.draw.rect(surface, tinta, caja, 2, border_radius=radio)
+        punta = (caja.x + int(caja.w * valor), caja.centery)
+        pygame.draw.circle(surface, (250, 240, 216), punta, radio + 5)
+        pygame.draw.circle(surface, tinta, punta, radio + 5, 2)
+        pygame.draw.circle(surface, color, punta, radio - 2)

@@ -630,6 +630,10 @@ class ModeSelectScene(BaseState):
         levels_done = int(progress.get("achievements", len(completed_list) // 2))
         metrics = compute_social_metrics(char_id, high_score, levels_done)
 
+        # Los logros cuentan los trofeos escondidos del mapa
+        from scenes.story_map_data import trofeosMapa
+        trofeosGanados = len(self.settings.get("trofeosObtenidos", []))
+
         card_r = pygame.Rect(48, 122, mw - 102, 136)
         pygame.draw.rect(panel, (245, 234, 208), card_r, border_radius=20)
         pygame.draw.rect(panel, (206, 182, 146), card_r, width=2, border_radius=20)
@@ -638,7 +642,7 @@ class ModeSelectScene(BaseState):
         stat_line_2 = (
             f"Seguidores: {metrics['followers_text']}   •   "
             f"Likes: {metrics['likes_text']}   •   "
-            f"Logros: {metrics['achievements_text']}"
+            f"Logros: {trofeosGanados}/{len(trofeosMapa)}"
         )
         st1_surf = self.font_modal_stat.render(stat_line_1, True, (76, 52, 98))
         st2_surf = self.font_modal_stat.render(stat_line_2, True, (168, 92, 42))

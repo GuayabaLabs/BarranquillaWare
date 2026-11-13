@@ -277,7 +277,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         snd.play()
 
     def setup_game(self) -> None:
-        self.camera_input = CameraGestureInput()
+        self.camera_input = CameraGestureInput.get_instance()
         self.camera_input.start()
         """Carga recursos oficiales, configura el reloj HUD, voces del personaje y la oleada."""
         self.assets = AssetManager.get_instance()
@@ -503,8 +503,8 @@ class PunchAlertMicrogame(BaseMicrogame):
                 self.trigger_punch()
 
     def exit(self) -> None:
-        if hasattr(self, "camera_input"):
-            self.camera_input.stop()
+        # La cámara pertenece al motor y se comparte con el resto de escenas.
+        pass
 
     def add_trauma(self, amount: float) -> None:
         """Agrega trauma con clamp en 1.0."""

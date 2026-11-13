@@ -43,6 +43,11 @@ class UIButton:
 
         self.audio = AudioManager.get_instance()
 
+    def set_center(self, center_pos: Tuple[int, int]) -> None:
+        """Actualiza la posición central del botón y su rectángulo de colisión."""
+        self.center_x, self.center_y = center_pos
+        self.rect.center = (self.center_x, self.center_y)
+
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame.MOUSEMOTION:
             was_hovered = self.is_hovered

@@ -465,8 +465,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             self.screen_trauma = max(0.0, self.screen_trauma - dt * 1.8)
 
     def exit(self) -> None:
-        if hasattr(self, "camera_input"):
-            self.camera_input.stop()
+        # La cámara pertenece al motor y se comparte con el resto de escenas.
+        pass
 
     def render_game(self, surface: pygame.Surface) -> None:
         # Screenshake no lineal (cuadrático)

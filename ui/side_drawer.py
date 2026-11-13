@@ -82,6 +82,22 @@ class SideNavDrawer:
         self.tab_hovered: bool = False
         self.tab_pressed: bool = False
 
+        # Sección de trofeos que se muestra al tocar Logros
+        from core.asset_manager import AssetManager
+        assets = AssetManager.get_instance()
+        self.seccionActual: str = "botones"
+        self.trofeos: List[dict] = []
+        self.trofeosObtenidos: List[str] = []
+        self.hoverBotonCerrar: bool = False
+        self.botonCerrar = assets.cargarSinFondo(os.path.join("Interfaz", "botonX.jpg"), 74)
+        self.trofeoColor = assets.cargarTrofeo(120)
+        self.trofeoGris = assets.cargarTrofeo(120, enGris=True)
+        self.fuenteTitulo = assets.cargarFuenteCuento(62)
+        self.fuenteNombre = assets.cargarFuenteCuento(34)
+        self.fuenteDetalle = assets.cargarFuenteCuento(25)
+        # Reloj del destello que pasa por los trofeos ganados
+        self.tiempoBrillo: float = 0.0
+
     def _init_buttons(self) -> None:
         """Carga y optimiza los sprites oficiales de cada botón y sus variantes hover."""
         for item in self.nav_items:
@@ -132,6 +148,11 @@ class SideNavDrawer:
         tab_rect = self._get_tab_rect()
         panel_x = self._get_panel_x()
         panel_rect = pygame.Rect(panel_x, self.panel_top_y, self.panel_w, self.panel_h)
+
+        # En la sección de trofeos los botones no responden; el botón X vuelve a ellos
+        if self.seccionActual == "trofeos" and self.is_open:
+            if self.manejarSeccionTrofeos(event, panel_rect, tab_rect):
+                return True
 
         if event.type == pygame.MOUSEMOTION:
             was_tab_hover = self.tab_hovered
@@ -209,6 +230,11 @@ class SideNavDrawer:
         if abs(self.anim_t - target_t) < 0.001:
             self.anim_t = target_t
 
+        # Al esconder el panel vuelve a mostrar los botones
+        if self.anim_t == 0.0:
+            self.seccionActual = "botones"
+        self.tiempoBrillo += dt
+
         # Actualizar animaciones de shader y retroalimentación táctil de botones
         for item in self.nav_items:
             item_id = item["id"]
@@ -233,6 +259,11 @@ class SideNavDrawer:
         # 1. Renderizar fondo oficial del recuadro desplegado (recuadro_ui_desplegable_desplegado_mapa.png)
         if self.panel_expanded:
             surface.blit(self.panel_expanded, (panel_x, self.panel_top_y))
+
+        # Sección de trofeos en lugar de los botones
+        if self.seccionActual == "trofeos":
+            self.dibujarSeccionTrofeos(surface, panel_x)
+            return
 
         # 2. Renderizar los 5 botones oficiales con shaders interactivos
         for item in self.nav_items:
@@ -287,3 +318,123 @@ class SideNavDrawer:
             badge_x = panel_x + 328
             badge_y = self.panel_top_y + 206
             surface.blit(self.badge_sprite, (badge_x, badge_y))
+
+    def ponerTrofeos(self, trofeos: List[dict], obtenidos: List[str]) -> None:
+        """Guarda la lista de trofeos y cuáles ya se ganaron."""
+        self.trofeos = trofeos
+        self.trofeosObtenidos = list(obtenidos)
+
+    def mostrarTrofeos(self) -> None:
+        self.seccionActual = "trofeos"
+
+    def centroPestana(self) -> Tuple[int, int]:
+        """Centro de la pestañita del panel, a donde vuela el trofeo ganado."""
+        return self._get_tab_rect().center
+
+    def rectBotonCerrar(self, panelX: int) -> pygame.Rect:
+        rect = self.botonCerrar.get_rect()
+        rect.center = (panelX + 345, self.panel_top_y + 78)
+        return rect
+
+    def manejarSeccionTrofeos(self, event: pygame.event.Event, cajaPanel: pygame.Rect, cajaPestana: pygame.Rect) -> bool:
+        # La pestaña sigue funcionando para esconder el panel
+        if hasattr(event, "pos") and cajaPestana.collidepoint(event.pos):
+            return False
+
+        rectCerrar = self.rectBotonCerrar(self._get_panel_x())
+        if event.type == pygame.MOUSEMOTION:
+            estaba = self.hoverBotonCerrar
+            self.hoverBotonCerrar = rectCerrar.collidepoint(event.pos)
+            if self.hoverBotonCerrar and not estaba:
+                self.audio.play_hover()
+            return cajaPanel.collidepoint(event.pos)
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if rectCerrar.collidepoint(event.pos):
+                self.seccionActual = "botones"
+                self.hoverBotonCerrar = False
+                self.audio.play_click()
+                return True
+            return cajaPanel.collidepoint(event.pos)
+
+        return False
+
+    def partirTexto(self, texto: str, fuente: pygame.font.Font, anchoMax: int) -> List[str]:
+        # Reparte las palabras en renglones que quepan en el ancho
+        renglones = []
+        actual = ""
+        for palabra in texto.split():
+            prueba = palabra if not actual else actual + " " + palabra
+            if fuente.size(prueba)[0] <= anchoMax or not actual:
+                actual = prueba
+            else:
+                renglones.append(actual)
+                actual = palabra
+        if actual:
+            renglones.append(actual)
+        return renglones
+
+    def conDestello(self, imagen: pygame.Surface, progreso: float) -> pygame.Surface:
+        """Franja de luz que cruza la imagen en diagonal, como en los botones del menú principal."""
+        if progreso >= 1.15:
+            return imagen
+        w, h = imagen.get_size()
+        conLuz = imagen.copy()
+        luz = pygame.Surface((w, h), pygame.SRCALPHA)
+        barrido = int(-0.4 * w + progreso * 1.8 * w)
+        franja = max(16, int(w * 0.22))
+        inclinacion = int(h * 0.45)
+        puntos = [
+            (barrido, 0),
+            (barrido + franja, 0),
+            (barrido + franja - inclinacion, h),
+            (barrido - inclinacion, h)
+        ]
+        alfa = int(130 * math.sin(min(1.0, progreso / 1.15) * math.pi))
+        pygame.draw.polygon(luz, (255, 255, 255, alfa), puntos)
+        # La luz solo cae sobre los píxeles del trofeo
+        luz.blit(imagen, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        conLuz.blit(luz, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        return conLuz
+
+    def dibujarSeccionTrofeos(self, surface: pygame.Surface, panelX: int) -> None:
+        """Dibuja los trofeos: en gris los que faltan y a color los ganados."""
+        cafeOscuro = (92, 56, 34)
+        cafe = (118, 76, 44)
+        cafeApagado = (160, 138, 118)
+        top = self.panel_top_y
+
+        titulo = self.fuenteTitulo.render("Logros", True, cafeOscuro)
+        surface.blit(titulo, titulo.get_rect(center=(panelX + 200, top + 80)))
+
+        cerrar = self.botonCerrar
+        if self.hoverBotonCerrar:
+            cerrar = pygame.transform.smoothscale_by(cerrar, 1.1)
+        surface.blit(cerrar, cerrar.get_rect(center=self.rectBotonCerrar(panelX).center))
+
+        for i, trofeo in enumerate(self.trofeos):
+            fila = top + 160 + i * 205
+            obtenido = trofeo["id"] in self.trofeosObtenidos
+            imagen = self.trofeoColor if obtenido else self.trofeoGris
+            if obtenido:
+                # Cada trofeo ganado se ilumina cada tres segundos, uno después del otro
+                progreso = ((self.tiempoBrillo + i * 0.9) % 3.0) * 1.35
+                imagen = self.conDestello(imagen, progreso)
+            surface.blit(imagen, (panelX + 42, fila))
+
+            nombre = trofeo["nombre"] if obtenido else "Trofeo escondido"
+            detalle = trofeo["descripcion"] if obtenido else "Sigue explorando el mapa"
+            y = fila + 6
+            for renglon in self.partirTexto(nombre, self.fuenteNombre, 205):
+                texto = self.fuenteNombre.render(renglon, True, cafe if obtenido else cafeApagado)
+                surface.blit(texto, (panelX + 178, y))
+                y += 38
+            y += 10
+            for renglon in self.partirTexto(detalle, self.fuenteDetalle, 205):
+                texto = self.fuenteDetalle.render(renglon, True, cafeApagado)
+                surface.blit(texto, (panelX + 178, y))
+                y += 28
+
+        cuantos = len([t for t in self.trofeos if t["id"] in self.trofeosObtenidos])
+        cuenta = self.fuenteNombre.render(f"{cuantos} de {len(self.trofeos)} trofeos", True, cafe)
+        surface.blit(cuenta, cuenta.get_rect(center=(panelX + 200, top + 705)))

@@ -259,6 +259,8 @@ class Engine:
                         self.state_machine.handle_event(virt_evt)
 
             # 1.5. Inyección de eventos ópticos del Puntero Lapicero MediaPipe (Hover & Clic)
+            if os.environ.get("SDL_VIDEODRIVER") != "dummy":
+                self.camera_input.keep_alive()
             self._update_camera_cursor_interaction(dt)
 
             # 2. Lógica

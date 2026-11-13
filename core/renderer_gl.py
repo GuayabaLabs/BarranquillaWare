@@ -1,7 +1,7 @@
 import numpy as np
 import moderngl
 import pygame
-from typing import Tuple
+from typing import Optional, Tuple
 
 SCREEN_VS = """
 #version 330 core

@@ -7,6 +7,11 @@ import math
 from typing import Optional, List
 import pygame
 from ui.button import UIButton
+import os
+from typing import Tuple
+from core.asset_manager import AssetManager
+from core.audio_manager import AudioManager
+from effects.juice_particles import JuiceParticleManager, FuegosArtificiales, pegarBrillo, brillo
 
 
 class StoryMapUI:
@@ -209,3 +214,207 @@ class StoryMapUI:
         txt_prompt = font_d_sub.render("▶ PULSA ESPACIO O HAZ CLICK PARA EMPEZAR A EXPLORAR", True, (120, 235, 160))
         d_surf.blit(txt_prompt, (210, 160))
         surface.blit(d_surf, (dx, dy))
+
+
+class AvisoTrofeo:
+    """Ventana de ¡Qué nota! que sale al ganar un trofeo escondido del mapa."""
+
+    def __init__(self, screen_w: int = 1920, screen_h: int = 1080) -> None:
+        self.screen_w = screen_w
+        self.screen_h = screen_h
+        assets = AssetManager.get_instance()
+        self.audio = AudioManager.get_instance()
+
+        self.ventana = assets.cargarSinFondo(os.path.join("Interfaz", "VentanaAviso.jpg"), 1000)
+        self.trofeo = assets.cargarTrofeo(210)
+        self.botonCerrar = self.ponerBorde(assets.cargarSinFondo(os.path.join("Interfaz", "botonX.jpg"), 92))
+        self.fuenteFelicidades = assets.cargarFuenteCuento(42)
+        self.fuenteNombre = assets.cargarFuenteCuento(58)
+
+        self.cajaVentana = self.ventana.get_rect(center=(screen_w // 2, screen_h // 2))
+        # La X va por fuera de la ventana, sobre la esquina de arriba a la derecha
+        self.cajaCerrar = self.botonCerrar.get_rect(center=(self.cajaVentana.right - 4, self.cajaVentana.top + 36))
+        # El trofeo flota más abajo para no tocar el letrero de ¡Qué nota!
+        self.centroTrofeo = (self.cajaVentana.centerx, self.cajaVentana.top + 292)
+
+        self.fuegos = FuegosArtificiales()
+        self.chispas = JuiceParticleManager()
+
+        # Se preparan de una vez los resplandores para que la ventana no se trabe al aparecer
+        brillo((255, 220, 130), 150)
+        brillo((255, 214, 110), 70)
+        self.fuegos.prepararBrillos()
+
+        self.abierto: bool = False
+        self.entrada: float = 0.0          # 0 escondida, 1 del todo visible
+        self.tiempo: float = 0.0
+        self.tarjeta: Optional[pygame.Surface] = None
+        self.hoverCerrar: bool = False
+        self.vuelo: float = -1.0           # segundos que lleva volando el trofeo; -1 si no vuela
+        self.duracionVuelo: float = 1.1
+        self.destinoVuelo: Tuple[int, int] = (24, 584)
+        self.brilloLlegada: float = 0.0
+
+    def abrir(self, nombreTrofeo: str, destino: Tuple[int, int]) -> None:
+        """Muestra la ventana con el nombre del trofeo y prende los fuegos."""
+        self.destinoVuelo = destino
+        self.abierto = True
+        self.entrada = 0.0
+        self.tiempo = 0.0
+        self.vuelo = -1.0
+        self.hoverCerrar = False
+
+        # Se escribe el texto una sola vez sobre una copia de la ventana
+        cafe = (110, 68, 38)
+        cafeOscuro = (86, 50, 28)
+        self.tarjeta = self.ventana.copy()
+        # Un poco a la izquierda del centro para no tocar las flores de abajo
+        centroTexto = self.tarjeta.get_width() // 2 - 35
+        felicidades = self.fuenteFelicidades.render("¡Felicidades! Obtuviste el trofeo:", True, cafe)
+        self.tarjeta.blit(felicidades, felicidades.get_rect(center=(centroTexto, 446)))
+        nombre = self.fuenteNombre.render(nombreTrofeo, True, cafeOscuro)
+        self.tarjeta.blit(nombre, nombre.get_rect(center=(centroTexto, 506)))
+
+        self.fuegos.lanzarAlrededor(self.cajaVentana)
+        self.audio.play_win()
+
+    def ponerBorde(self, imagen: pygame.Surface) -> pygame.Surface:
+        """Le pone a la imagen un borde blanco de calcomanía con una línea fina de tinta café por fuera."""
+        grosorBlanco = 6
+        grosorTinta = 3
+        margen = grosorBlanco + grosorTinta
+        ancho, alto = imagen.get_size()
+        conBorde = pygame.Surface((ancho + margen * 2, alto + margen * 2), pygame.SRCALPHA)
+
+        silueta = pygame.mask.from_surface(imagen, 100)
+        tinta = silueta.to_surface(setcolor=(86, 50, 28, 255), unsetcolor=(0, 0, 0, 0))
+        blanco = silueta.to_surface(setcolor=(255, 252, 244, 255), unsetcolor=(0, 0, 0, 0))
+
+        # Se pega la silueta corrida en círculo para que el borde salga parejo
+        for capa, radio in ((tinta, margen), (blanco, grosorBlanco)):
+            for grados in range(0, 360, 15):
+                dx = round(math.cos(math.radians(grados)) * radio)
+                dy = round(math.sin(math.radians(grados)) * radio)
+                conBorde.blit(capa, (margen + dx, margen + dy))
+        conBorde.blit(imagen, (margen, margen))
+        return conBorde
+
+    def cerrar(self) -> None:
+        """Cierra la ventana y manda el trofeo volando hasta el panel de logros."""
+        if not self.abierto:
+            return
+        self.abierto = False
+        self.hoverCerrar = False
+        self.fuegos.apagar()
+        self.vuelo = 0.0
+        self.audio.play_click()
+
+    def estaOcupado(self) -> bool:
+        return self.abierto or self.vuelo >= 0.0
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if not self.abierto:
+            return
+        if event.type == pygame.MOUSEMOTION:
+            estaba = self.hoverCerrar
+            self.hoverCerrar = self.cajaCerrar.collidepoint(event.pos)
+            if self.hoverCerrar and not estaba:
+                self.audio.play_hover()
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.cajaCerrar.collidepoint(event.pos):
+                self.cerrar()
+        elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
+            self.cerrar()
+
+    def posicionVuelo(self) -> Tuple[float, float, float]:
+        """Dónde va el trofeo en su viaje: hace una curva hacia arriba y baja hasta la pestaña."""
+        t = max(0.0, min(1.0, self.vuelo / self.duracionVuelo))
+        suave = t * t * (3.0 - 2.0 * t)
+        x0, y0 = self.centroTrofeo
+        x1, y1 = x0 - 160, y0 - 360
+        x2, y2 = self.destinoVuelo
+        x = (1 - suave) ** 2 * x0 + 2 * (1 - suave) * suave * x1 + suave ** 2 * x2
+        y = (1 - suave) ** 2 * y0 + 2 * (1 - suave) * suave * y1 + suave ** 2 * y2
+        escala = 1.0 - 0.86 * suave
+        return x, y, escala
+
+    def update(self, dt: float) -> None:
+        self.tiempo += dt
+        self.fuegos.update(dt)
+        self.chispas.update(dt)
+
+        if self.abierto:
+            self.entrada = min(1.0, self.entrada + dt / 0.35)
+        else:
+            self.entrada = max(0.0, self.entrada - dt / 0.25)
+
+        if self.vuelo >= 0.0:
+            self.vuelo += dt
+            x, y, _ = self.posicionVuelo()
+            self.chispas.emit_sparks((x, y), count=1)
+            if self.vuelo >= self.duracionVuelo:
+                # Llegó al panel: destello y chispas en la pestaña
+                self.vuelo = -1.0
+                self.brilloLlegada = 1.0
+                self.chispas.emit_sparks(self.destinoVuelo, count=14)
+                self.audio.play_hover()
+
+        self.brilloLlegada = max(0.0, self.brilloLlegada - dt * 1.3)
+
+    def render(self, surface: pygame.Surface) -> None:
+        if self.entrada > 0.0:
+            # Oscurece el mapa con un tono morado multiplicando sus colores (más rápido que una capa transparente)
+            tono = [int(255 - (255 - c) * self.entrada) for c in (128, 120, 142)]
+            surface.fill(tono, special_flags=pygame.BLEND_RGB_MULT)
+
+        # Los fuegos van detrás de la ventana para que la rodeen
+        self.fuegos.render(surface)
+
+        if self.entrada > 0.0 and self.tarjeta is not None:
+            self.dibujarVentana(surface)
+
+        if self.vuelo >= 0.0:
+            x, y, escala = self.posicionVuelo()
+            giro = math.sin(min(1.0, self.vuelo / self.duracionVuelo) * math.pi) * 18.0
+            volando = pygame.transform.rotozoom(self.trofeo, giro, escala)
+            surface.blit(volando, volando.get_rect(center=(int(x), int(y))))
+
+        self.chispas.render(surface)
+
+        if self.brilloLlegada > 0.0:
+            pegarBrillo(surface, self.destinoVuelo, (255, 214, 110), 70, self.brilloLlegada)
+
+    def dibujarVentana(self, surface: pygame.Surface) -> None:
+        # Entra creciendo con un rebotico y sale encogiéndose
+        t = self.entrada
+        escala = 0.8 + 0.2 * (1 - (1 - t) ** 3) + 0.04 * math.sin(t * math.pi)
+        centro = self.cajaVentana.center
+
+        if abs(escala - 1.0) > 0.005 or t < 1.0:
+            tarjeta = pygame.transform.smoothscale_by(self.tarjeta, escala)
+            tarjeta.set_alpha(int(255 * t))
+        else:
+            tarjeta = self.tarjeta
+        surface.blit(tarjeta, tarjeta.get_rect(center=centro))
+
+        # El trofeo flota sobre la ventana con un resplandor dorado detrás
+        if self.vuelo < 0.0:
+            dx = (self.centroTrofeo[0] - centro[0]) * escala
+            dy = (self.centroTrofeo[1] - centro[1]) * escala + math.sin(self.tiempo * 2.4) * 6.0
+            posTrofeo = (int(centro[0] + dx), int(centro[1] + dy))
+            pegarBrillo(surface, posTrofeo, (255, 220, 130), 150, (0.45 + 0.15 * math.sin(self.tiempo * 3.0)) * t)
+            trofeo = self.trofeo
+            if abs(escala - 1.0) > 0.005 or t < 1.0:
+                trofeo = pygame.transform.smoothscale_by(self.trofeo, escala)
+                trofeo.set_alpha(int(255 * t))
+            surface.blit(trofeo, trofeo.get_rect(center=posTrofeo))
+
+        # Botón X en la esquina de arriba a la derecha
+        if self.abierto:
+            dx = (self.cajaCerrar.centerx - centro[0]) * escala
+            dy = (self.cajaCerrar.centery - centro[1]) * escala
+            boton = self.botonCerrar
+            crecer = escala * (1.1 if self.hoverCerrar else 1.0)
+            if abs(crecer - 1.0) > 0.005:
+                boton = pygame.transform.smoothscale_by(self.botonCerrar, crecer)
+            surface.blit(boton, boton.get_rect(center=(int(centro[0] + dx), int(centro[1] + dy))))
