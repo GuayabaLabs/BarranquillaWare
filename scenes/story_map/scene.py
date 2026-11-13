@@ -159,8 +159,8 @@ class StoryMapScene(BaseState):
         self.camera.set_pos(self.intro_target_pos[0], self.intro_target_pos[1])
 
         # 12. Barra de Navegación Lateral Izquierda y HUD Social Superior
-        self.social_hud = SocialHUD(self.screen_w, self.screen_h)
         self.side_drawer = SideNavDrawer(self.screen_w, self.screen_h, on_nav_selected=self._on_side_nav_selected)
+        self.social_hud = SocialHUD(self.screen_w, self.screen_h, on_logros_click=self._abrir_logros_drawer)
         self._sync_social_hud()
 
         # 13. Trofeos escondidos en las glorietas de la Ventana al Mundo y la Aleta del Tiburón
@@ -259,6 +259,21 @@ class StoryMapScene(BaseState):
         self.side_drawer.ponerTrofeos(trofeosMapa, obtenidos)
         self._sync_social_hud()
         self.avisoTrofeo.abrir(trofeo["nombre"], self.side_drawer.centroPestana())
+
+    def desbloquearTrofeoPorId(self, id_trofeo: str) -> None:
+        """Busca el trofeo por ID en trofeosMapa y lo otorga si no ha sido obtenido."""
+        for trofeo in trofeosMapa:
+            if trofeo.get("id") == id_trofeo:
+                self.ganarTrofeo(trofeo)
+                break
+
+    def _abrir_logros_drawer(self) -> None:
+        """Abre el panel lateral directamente en la sección de trofeos y logros."""
+        if hasattr(self, "side_drawer"):
+            self.side_drawer.is_open = True
+            self.side_drawer.mostrarTrofeos()
+            if hasattr(self.audio, "play_click"):
+                self.audio.play_click()
 
     def _build_world_map(self) -> None:
         """Carga y une los 4 cuadrantes, reutilizando la superficie cacheada si ya fue ensamblada."""
@@ -1066,6 +1081,7 @@ class StoryMapScene(BaseState):
             self._trigger_dialog_voice(self.paloma_dialog_page_idx)
         else:
             self.paloma_dialog_open = False
+            self.desbloquearTrofeoPorId("charlaPaloma")
             cb = self.paloma_dialog_on_finish
             self.paloma_dialog_on_finish = None
             if cb:
@@ -1136,15 +1152,15 @@ class StoryMapScene(BaseState):
         """Inicializa la tarjeta modal de misión / microjuego con assets 100% ilustrados (cero formas de código)."""
         self.quest_card_open: bool = False
         self.quest_card_anim_t: float = 0.0
-        self.quest_card_w: int = 760
-        self.quest_card_h: int = 960
+        self.quest_card_w: int = 880
+        self.quest_card_h: int = 1030
         self.tex_quest_card = self.assets.load_surface("recuadro_mision_nivel.png")
 
         # Tipografía redondeada caribeña de alta legibilidad
-        self.font_quest_title = self.assets.get_font("arial rounded", 30, bold=True)
-        self.font_quest_sub = self.assets.get_font("arial rounded", 16, bold=True)
-        self.font_quest_body = self.assets.get_font("trebuchet ms", 18, bold=True)
-        self.font_quest_btn = self.assets.get_font("arial rounded", 22, bold=True)
+        self.font_quest_title = self.assets.get_font("arial rounded", 34, bold=True)
+        self.font_quest_sub = self.assets.get_font("arial rounded", 18, bold=True)
+        self.font_quest_body = self.assets.get_font("arial rounded", 21, bold=True)
+        self.font_quest_btn = self.assets.get_font("arial rounded", 24, bold=True)
 
         # Texturas ilustradas de apoyo (cartucho de pergamino, separador y sellos de cera)
         self.tex_quest_cartridge = self.assets.load_surface("cinta_distrito_modal.png")
@@ -1155,31 +1171,31 @@ class StoryMapScene(BaseState):
 
         # Botón '¡A JUGAR!' ilustrado en acuarela caribeña pura (cero florecitas en las esquinas)
         raw_play_surf = self.assets.load_surface("boton_jugar_modal.png")
-        btn_play_w = 340
+        btn_play_w = 380
         if raw_play_surf:
             aspect = raw_play_surf.get_height() / max(1, raw_play_surf.get_width())
             btn_play_h = int(btn_play_w * aspect)
             play_surf = pygame.transform.smoothscale(raw_play_surf, (btn_play_w, btn_play_h))
         else:
-            play_surf = pygame.Surface((btn_play_w, 85), pygame.SRCALPHA)
+            play_surf = pygame.Surface((btn_play_w, 95), pygame.SRCALPHA)
 
-        play_cy = self.screen_h // 2 - self.quest_card_h // 2 + int(self.quest_card_h * 0.835)
+        play_cy = self.screen_h // 2 - self.quest_card_h // 2 + int(self.quest_card_h * 0.825)
         self.btn_quest_play = UIButton(
             center_pos=(self.screen_w // 2, play_cy),
             normal_sprite=play_surf,
             on_click=self._launch_microgame
         )
 
-        # Botón de cierre 'X' ilustrado: medallón circular de cera encajado en el sello superior derecho
+        # Botón de cierre 'X' ilustrado: medallón acuarela encajado concéntricamente en el sello de cera superior derecho
         raw_close_surf = self.assets.load_surface("boton_cerrar_modal.png")
-        close_size = 68
+        close_size = 90
         if raw_close_surf:
             close_surf = pygame.transform.smoothscale(raw_close_surf, (close_size, close_size))
         else:
             close_surf = pygame.Surface((close_size, close_size), pygame.SRCALPHA)
 
-        close_cx = self.screen_w // 2 - self.quest_card_w // 2 + int(self.quest_card_w * 0.840)
-        close_cy = self.screen_h // 2 - self.quest_card_h // 2 + int(self.quest_card_h * 0.109)
+        close_cx = self.screen_w // 2 - self.quest_card_w // 2 + int(self.quest_card_w * 0.887)
+        close_cy = self.screen_h // 2 - self.quest_card_h // 2 + int(self.quest_card_h * 0.117)
 
         self.btn_quest_close = UIButton(
             center_pos=(close_cx, close_cy),
@@ -1355,6 +1371,9 @@ class StoryMapScene(BaseState):
 
             if hasattr(self, "state_machine") and self.state_machine:
                 self.state_machine.change_state(self)
+
+            if self.active_poi == "uninorte":
+                self.desbloquearTrofeoPorId("despejarUninorte")
 
             # Toast celebratorio oficial de nivel completado
             self.toast_msg = f"🎉 ¡{poi_info.get('title', 'NIVEL')} DESPEJADO CON ÉXITO!"
@@ -1999,6 +2018,15 @@ class StoryMapScene(BaseState):
         if hasattr(self, "side_drawer") and self.side_drawer.handle_event(event):
             return
 
+        # Interacción con SocialHUD superior (clic en la píldora de Logros)
+        if hasattr(self, "social_hud") and self.social_hud.handle_event(event):
+            return
+
+        # Tecla rápida 'L' para abrir pestaña de logros
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_l:
+            self._abrir_logros_drawer()
+            return
+
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_m):
             if self.quest_card_open:
                 self._close_quest_card()
@@ -2024,9 +2052,9 @@ class StoryMapScene(BaseState):
                 if not card_rect.collidepoint(event.pos):
                     self._close_quest_card()
                 else:
-                    tr_x = card_rect.left + int(self.quest_card_w * 0.86)
-                    tr_y = card_rect.top + int(self.quest_card_h * 0.11)
-                    if (event.pos[0] - tr_x) ** 2 + (event.pos[1] - tr_y) ** 2 < 34 ** 2:
+                    tr_x = card_rect.left + int(self.quest_card_w * 0.887)
+                    tr_y = card_rect.top + int(self.quest_card_h * 0.117)
+                    if (event.pos[0] - tr_x) ** 2 + (event.pos[1] - tr_y) ** 2 < 48 ** 2:
                         self._close_quest_card()
             return
 
@@ -2635,48 +2663,47 @@ class StoryMapScene(BaseState):
 
         # Encabezado: Título de la Locación con tamaño auto-adaptable y posición desahogada
         title_text = poi_info["title"]
-        title_size = 30
+        title_size = 32
         f_title = self.assets.get_font("arial rounded", title_size, bold=True)
         txt_title = f_title.render(title_text, True, (42, 26, 16))
-        max_title_w = int(cw * 0.70)
-        while txt_title.get_width() > max_title_w and title_size > 20:
+        max_title_w = int(cw * 0.65)
+        while txt_title.get_width() > max_title_w and title_size > 22:
             title_size -= 2
             f_title = self.assets.get_font("arial rounded", title_size, bold=True)
             txt_title = f_title.render(title_text, True, (42, 26, 16))
-        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2, int(ch * 0.165))))
+        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2 + 14, int(ch * 0.165))))
 
         # Subtítulo de Distrito sobre cinta de pergamino limpia
-        cart_w = int(cw * 0.52)
+        cart_w = int(cw * 0.55)
         if hasattr(self, "tex_quest_cartridge") and self.tex_quest_cartridge:
             cart_h = int(cart_w * (self.tex_quest_cartridge.get_height() / max(1, self.tex_quest_cartridge.get_width())))
             cart_scaled = pygame.transform.smoothscale(self.tex_quest_cartridge, (cart_w, cart_h))
-            cart_rect = cart_scaled.get_rect(center=(cw // 2, int(ch * 0.245)))
+            cart_rect = cart_scaled.get_rect(center=(cw // 2, int(ch * 0.235)))
             card_surf.blit(cart_scaled, cart_rect)
             txt_dist = self.font_quest_sub.render(poi_info["district"], True, (135, 80, 25))
             card_surf.blit(txt_dist, txt_dist.get_rect(center=cart_rect.center))
         else:
             txt_dist = self.font_quest_sub.render(poi_info["district"], True, (80, 55, 35))
-            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cw // 2, int(ch * 0.245))))
+            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cw // 2, int(ch * 0.235))))
 
         # Separador decorativo ilustrado de pincelada floral
         if hasattr(self, "tex_quest_sep") and self.tex_quest_sep:
-            sep_w = int(cw * 0.56)
+            sep_w = int(cw * 0.58)
             sep_h = int(sep_w * (self.tex_quest_sep.get_height() / max(1, self.tex_quest_sep.get_width())))
             sep_scaled = pygame.transform.smoothscale(self.tex_quest_sep, (sep_w, max(12, sep_h)))
-            card_surf.blit(sep_scaled, sep_scaled.get_rect(center=(cw // 2, int(ch * 0.315))))
+            card_surf.blit(sep_scaled, sep_scaled.get_rect(center=(cw // 2, int(ch * 0.298))))
 
         # Título del Microjuego / Rondas en terracota caribeño cálido
         txt_m_title = self.font_quest_btn.render(poi_info["microgame_title"], True, (215, 75, 35))
-        card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.370))))
+        card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.355))))
 
-        # Descripción de la misión con viñetas elegantes y tipografía cálida de alta legibilidad
+        # Descripción de la misión con tipografía cálida, redondeada y sin caracteres rotos
         desc_lines = poi_info["desc"]
-        curr_y = int(ch * 0.435)
+        curr_y = int(ch * 0.428)
         for line in desc_lines:
-            display_line = line if line.startswith("✦") else f"✦ {line}"
-            txt_line = self.font_quest_body.render(display_line, True, (48, 38, 28))
+            txt_line = self.font_quest_body.render(line, True, (55, 38, 26))
             card_surf.blit(txt_line, txt_line.get_rect(center=(cw // 2, curr_y)))
-            curr_y += 38
+            curr_y += 44
 
         # Tarjeta de estado con sello de cera ilustrado sin colisión de texto
         progress = self.settings.get_story_progress()
@@ -2686,12 +2713,12 @@ class StoryMapScene(BaseState):
         sello_tex = self.tex_sello_despejado if is_done else self.tex_sello_pendiente
 
         # Cápsula ilustrada de estado utilizando cinta de pergamino elegante
-        stat_w = int(cw * 0.65)
+        stat_w = int(cw * 0.68)
         ribbon_tex = getattr(self, "tex_quest_status_ribbon", None) or getattr(self, "tex_quest_cartridge", None)
         if ribbon_tex:
             stat_h = int(stat_w * (ribbon_tex.get_height() / max(1, ribbon_tex.get_width())))
             stat_scaled = pygame.transform.smoothscale(ribbon_tex, (stat_w, max(42, stat_h)))
-            stat_rect = stat_scaled.get_rect(center=(cw // 2, int(ch * 0.615)))
+            stat_rect = stat_scaled.get_rect(center=(cw // 2, int(ch * 0.605)))
             card_surf.blit(stat_scaled, stat_rect)
 
             # Sello de cera en el lado izquierdo del cartucho
@@ -2707,7 +2734,7 @@ class StoryMapScene(BaseState):
             card_surf.blit(txt_st, txt_st.get_rect(center=((text_area_left + text_area_right) // 2, stat_rect.centery)))
         else:
             txt_st = self.font_quest_sub.render(status_text, True, status_col)
-            card_surf.blit(txt_st, txt_st.get_rect(center=(cw // 2, int(ch * 0.615))))
+            card_surf.blit(txt_st, txt_st.get_rect(center=(cw // 2, int(ch * 0.605))))
 
         # Renderizar en la pantalla centrado
         card_rect = card_surf.get_rect(center=(self.screen_w // 2, self.screen_h // 2))
@@ -2715,9 +2742,9 @@ class StoryMapScene(BaseState):
 
         # Sincronizar posición de botones con la tarjeta animada
         # Botón Play centrado en la parte inferior
-        self.btn_quest_play.set_center((self.screen_w // 2, card_rect.top + int(ch * 0.835)))
-        # Botón Cerrar 'X' ilustrado en el sello circular superior derecho
-        self.btn_quest_close.set_center((card_rect.left + int(cw * 0.840), card_rect.top + int(ch * 0.109)))
+        self.btn_quest_play.set_center((self.screen_w // 2, card_rect.top + int(ch * 0.825)))
+        # Botón Cerrar 'X' ilustrado concéntricamente en el sello circular superior derecho
+        self.btn_quest_close.set_center((card_rect.left + int(cw * 0.887), card_rect.top + int(ch * 0.117)))
 
         # Botones de la tarjeta
         self.btn_quest_play.render(surface)

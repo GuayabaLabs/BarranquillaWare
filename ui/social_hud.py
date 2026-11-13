@@ -1,6 +1,6 @@
 import math
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 import pygame
 
 class SocialPill:
@@ -100,9 +100,15 @@ class SocialHUD:
     Contenedor del conjunto de cápsulas oficiales de red social en la barra superior.
     Ubicación calibrada según el mockup de referencia de BarranquillaWare (resolución 1920x1080).
     """
-    def __init__(self, screen_w: int = 1920, screen_h: int = 1080) -> None:
+    def __init__(
+        self,
+        screen_w: int = 1920,
+        screen_h: int = 1080,
+        on_logros_click: Optional[Callable[[], None]] = None
+    ) -> None:
         self.screen_w = screen_w
         self.screen_h = screen_h
+        self.on_logros_click = on_logros_click
 
         pill_w = 258
         pill_h = 86
@@ -146,6 +152,18 @@ class SocialHUD:
         self.set_metric("likes", metrics["likes_text"])
         self.set_metric("logros", metrics["achievements_text"])
         return metrics
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        """Permite interactuar con la píldora de Logros para abrir la sección de trofeos."""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            pill = self.pills.get("logros")
+            if pill:
+                pill_rect = pygame.Rect(pill.x, pill.y, pill.width, pill.height)
+                if pill_rect.collidepoint(event.pos):
+                    if self.on_logros_click:
+                        self.on_logros_click()
+                    return True
+        return False
 
     def update(self, dt: float) -> None:
         for pill in self.pills.values():

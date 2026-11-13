@@ -193,19 +193,31 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
     }
 }
 
-# Trofeos escondidos en el mapa: se ganan dándole la vuelta completa a la glorieta del monumento
+# Trofeos escondidos en el mapa y minijuegos (Tarea 002)
 trofeosMapa: list = [
     {
         "id": "vueltaVentana",
         "nombre": "La vuelta al mundo",
         "monumento": "ventana",
-        "descripcion": "Le diste la vuelta a la Ventana al Mundo",
+        "descripcion": "Le diste la vuelta a la glorieta de la Ventana al Mundo",
     },
     {
         "id": "vueltaAleta",
         "nombre": "Tiburón de glorieta",
         "monumento": "aleta",
-        "descripcion": "Le diste la vuelta a la Aleta del Tiburón",
+        "descripcion": "Le diste la vuelta a la glorieta de la Aleta del Tiburón",
+    },
+    {
+        "id": "charlaPaloma",
+        "nombre": "¡Aja, Curramba!",
+        "monumento": None,
+        "descripcion": "Charlaste con la sabia Paloma mensajera de la ciudad",
+    },
+    {
+        "id": "despejarUninorte",
+        "nombre": "Cerebro Desconectado",
+        "monumento": None,
+        "descripcion": "Superaste el reto de concentración en la biblioteca de Uninorte",
     },
 ]
 

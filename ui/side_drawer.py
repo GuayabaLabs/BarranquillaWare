@@ -92,9 +92,13 @@ class SideNavDrawer:
         self.botonCerrar = assets.cargarSinFondo(os.path.join("Interfaz", "botonX.jpg"), 74)
         self.trofeoColor = assets.cargarTrofeo(120)
         self.trofeoGris = assets.cargarTrofeo(120, enGris=True)
+        self.trofeoColorCompacto = assets.cargarTrofeo(78)
+        self.trofeoGrisCompacto = assets.cargarTrofeo(78, enGris=True)
         self.fuenteTitulo = assets.cargarFuenteCuento(62)
         self.fuenteNombre = assets.cargarFuenteCuento(34)
         self.fuenteDetalle = assets.cargarFuenteCuento(25)
+        self.fuenteNombreCompacto = assets.cargarFuenteCuento(21)
+        self.fuenteDetalleCompacto = assets.cargarFuenteCuento(15)
         # Reloj del destello que pasa por los trofeos ganados
         self.tiempoBrillo: float = 0.0
 
@@ -405,36 +409,50 @@ class SideNavDrawer:
         top = self.panel_top_y
 
         titulo = self.fuenteTitulo.render("Logros", True, cafeOscuro)
-        surface.blit(titulo, titulo.get_rect(center=(panelX + 200, top + 80)))
+        surface.blit(titulo, titulo.get_rect(center=(panelX + 200, top + 75)))
 
         cerrar = self.botonCerrar
         if self.hoverBotonCerrar:
             cerrar = pygame.transform.smoothscale_by(cerrar, 1.1)
         surface.blit(cerrar, cerrar.get_rect(center=self.rectBotonCerrar(panelX).center))
 
+        n_trofeos = len(self.trofeos)
+        compacto = n_trofeos > 2
+        trofeo_color = self.trofeoColorCompacto if compacto else self.trofeoColor
+        trofeo_gris = self.trofeoGrisCompacto if compacto else self.trofeoGris
+        f_nombre = self.fuenteNombreCompacto if compacto else self.fuenteNombre
+        f_detalle = self.fuenteDetalleCompacto if compacto else self.fuenteDetalle
+        paso_fila = 130 if compacto else 205
+        offset_inicio = 135 if compacto else 160
+        text_x = (panelX + 130) if compacto else (panelX + 178)
+        text_w = 215 if compacto else 205
+        trofeo_x = (panelX + 40) if compacto else (panelX + 42)
+
         for i, trofeo in enumerate(self.trofeos):
-            fila = top + 160 + i * 205
+            fila = top + offset_inicio + i * paso_fila
             obtenido = trofeo["id"] in self.trofeosObtenidos
-            imagen = self.trofeoColor if obtenido else self.trofeoGris
+            imagen = trofeo_color if obtenido else trofeo_gris
             if obtenido:
                 # Cada trofeo ganado se ilumina cada tres segundos, uno después del otro
                 progreso = ((self.tiempoBrillo + i * 0.9) % 3.0) * 1.35
                 imagen = self.conDestello(imagen, progreso)
-            surface.blit(imagen, (panelX + 42, fila))
+            surface.blit(imagen, (trofeo_x, fila + (4 if compacto else 0)))
 
             nombre = trofeo["nombre"] if obtenido else "Trofeo escondido"
             detalle = trofeo["descripcion"] if obtenido else "Sigue explorando el mapa"
-            y = fila + 6
-            for renglon in self.partirTexto(nombre, self.fuenteNombre, 205):
-                texto = self.fuenteNombre.render(renglon, True, cafe if obtenido else cafeApagado)
-                surface.blit(texto, (panelX + 178, y))
-                y += 38
-            y += 10
-            for renglon in self.partirTexto(detalle, self.fuenteDetalle, 205):
-                texto = self.fuenteDetalle.render(renglon, True, cafeApagado)
-                surface.blit(texto, (panelX + 178, y))
-                y += 28
+            y = fila + 4
+            salto_nombre = 24 if compacto else 38
+            salto_detalle = 18 if compacto else 28
+            for renglon in self.partirTexto(nombre, f_nombre, text_w):
+                texto = f_nombre.render(renglon, True, cafe if obtenido else cafeApagado)
+                surface.blit(texto, (text_x, y))
+                y += salto_nombre
+            y += (4 if compacto else 10)
+            for renglon in self.partirTexto(detalle, f_detalle, text_w):
+                texto = f_detalle.render(renglon, True, cafeApagado)
+                surface.blit(texto, (text_x, y))
+                y += salto_detalle
 
         cuantos = len([t for t in self.trofeos if t["id"] in self.trofeosObtenidos])
-        cuenta = self.fuenteNombre.render(f"{cuantos} de {len(self.trofeos)} trofeos", True, cafe)
-        surface.blit(cuenta, cuenta.get_rect(center=(panelX + 200, top + 705)))
+        cuenta = f_nombre.render(f"{cuantos} de {len(self.trofeos)} trofeos", True, cafe)
+        surface.blit(cuenta, cuenta.get_rect(center=(panelX + 200, top + (695 if compacto else 705))))
