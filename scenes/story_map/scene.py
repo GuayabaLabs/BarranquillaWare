@@ -24,6 +24,8 @@ from scenes.story_map_data import (
     PALOMA_STORY_DIALOGS,
 )
 from scenes.story_map.ui_dialogs import StoryMapUI
+from scenes.story_map.ui_dialogs import AvisoTrofeo
+from scenes.story_map_data import trofeosMapa, radioGlorieta
 
 from microgames.mallorquin_photo import MallorquinPhotoMicrogame
 from microgames.uninorte_sprint import UninorteSprintMicrogame
@@ -161,6 +163,9 @@ class StoryMapScene(BaseState):
         self.side_drawer = SideNavDrawer(self.screen_w, self.screen_h, on_nav_selected=self._on_side_nav_selected)
         self._sync_social_hud()
 
+        # 13. Trofeos escondidos en las glorietas de la Ventana al Mundo y la Aleta del Tiburón
+        self.iniciarTrofeos()
+
     def _count_completed_campaign_levels(self, completed_microgames: Optional[list] = None) -> int:
         """Cuenta cuántos de los 4 niveles principales de la Historia han sido completados."""
         if completed_microgames is None:
@@ -180,7 +185,10 @@ class StoryMapScene(BaseState):
         high_score = int(progress.get("high_score", 0))
         levels_done = self._count_completed_campaign_levels(completed_list)
         if hasattr(self, "social_hud"):
-            return self.social_hud.sync_from_story_progress(self.character_id, high_score, levels_done)
+            metricas = self.social_hud.sync_from_story_progress(self.character_id, high_score, levels_done)
+            # El contador de logros muestra los trofeos escondidos del mapa
+            self.social_hud.set_metric("logros", f"{len(self.leerTrofeosObtenidos())}/{len(trofeosMapa)}")
+            return metricas
         return {}
 
     def _on_side_nav_selected(self, nav_id: str) -> None:
@@ -189,8 +197,68 @@ class StoryMapScene(BaseState):
             # Si se selecciona mapa, enfocar la cámara suavemente en el jugador
             self.camera.target_x = max(0.0, min(float(self.camera.max_x), self.player_pos[0] - self.screen_w / 2.0))
             self.camera.target_y = max(0.0, min(float(self.camera.max_y), self.player_pos[1] - self.screen_h / 2.0))
+        elif nav_id == "logros":
+            # Muestra la sección de trofeos dentro del panel lateral
+            self.side_drawer.mostrarTrofeos()
         else:
             print(f"[StoryMap] Pestaña de navegación seleccionada: {nav_id}")
+
+    def iniciarTrofeos(self) -> None:
+        """Prepara los trofeos escondidos del mapa y la ventana que avisa al ganarlos."""
+        self.avisoTrofeo = AvisoTrofeo(self.screen_w, self.screen_h)
+        # Nodos seguidos que el personaje ha pisado junto a cada monumento
+        self.rachaGlorieta = {trofeo["id"]: [] for trofeo in trofeosMapa}
+        self.side_drawer.ponerTrofeos(trofeosMapa, self.leerTrofeosObtenidos())
+        # El nodo donde arranca también cuenta como inicio de la vuelta
+        self.revisarVueltaGlorieta(self.player_node_id)
+
+    def leerTrofeosObtenidos(self) -> list:
+        return list(self.settings.get("trofeosObtenidos", []))
+
+    def revisarVueltaGlorieta(self, idNodo: int) -> None:
+        """Cuenta los nodos seguidos junto a cada monumento y entrega el trofeo al cerrar la vuelta."""
+        nodos, aristas, mapaNodos, vecinos, mapaAristas = self._get_street_graph()
+        nodo = mapaNodos.get(idNodo)
+        if nodo is None:
+            return
+
+        obtenidos = self.leerTrofeosObtenidos()
+        for trofeo in trofeosMapa:
+            monumento = self.poi_registry.get(trofeo["monumento"])
+            if not monumento:
+                continue
+            centro = monumento["rect"].center
+            racha = self.rachaGlorieta[trofeo["id"]]
+
+            # Si se aleja del monumento, la cuenta vuelve a empezar
+            if math.hypot(nodo["x"] - centro[0], nodo["y"] - centro[1]) > radioGlorieta:
+                racha.clear()
+                continue
+
+            racha.append(idNodo)
+            if len(racha) > 12:
+                racha.pop(0)
+            if trofeo["id"] in obtenidos:
+                continue
+
+            # La vuelta se cierra al volver a un nodo ya pisado después de pasar por otros tres
+            for i in range(len(racha) - 2, -1, -1):
+                if racha[i] == idNodo:
+                    vuelta = racha[i:-1]
+                    if len(set(vuelta)) >= 4:
+                        self.ganarTrofeo(trofeo)
+                    break
+
+    def ganarTrofeo(self, trofeo: dict) -> None:
+        """Guarda el trofeo ganado y abre la ventana de ¡Qué nota!"""
+        obtenidos = self.leerTrofeosObtenidos()
+        if trofeo["id"] in obtenidos:
+            return
+        obtenidos.append(trofeo["id"])
+        self.settings.set("trofeosObtenidos", obtenidos)
+        self.side_drawer.ponerTrofeos(trofeosMapa, obtenidos)
+        self._sync_social_hud()
+        self.avisoTrofeo.abrir(trofeo["nombre"], self.side_drawer.centroPestana())
 
     def _build_world_map(self) -> None:
         """Carga y une los 4 cuadrantes, reutilizando la superficie cacheada si ya fue ensamblada."""
@@ -573,7 +641,7 @@ class StoryMapScene(BaseState):
                 "title": "GRAN MALECÓN DEL RÍO",
                 "district": "DISTRITO TURÍSTICO",
                 "microgame_id": "coaster",
-                "microgame_title": "COASTER · CALIBRA EL LAPICERO",
+                "microgame_title": "COASTER · CALIBRA EL LÁPIZ",
                 "desc": [
                     "Atardecer dorado frente al río Magdalena.",
                     "Camina tranquilo sintiendo la brisa del río."
@@ -824,7 +892,7 @@ class StoryMapScene(BaseState):
 
         self.btn_calibrate_pointer = UIButton(
             center_pos=(220, 520),
-            normal_sprite=make_drawer_btn("CALIBRAR LAPICERO", (65, 55, 105), (160, 140, 235)),
+            normal_sprite=make_drawer_btn("CALIBRAR LÁPIZ", (65, 55, 105), (160, 140, 235)),
             on_click=self._on_calibrate_pointer
         )
 
@@ -1817,6 +1885,11 @@ class StoryMapScene(BaseState):
             if self.dev_tool.handle_event(event, (self.camera.x, self.camera.y), poi_rects=p_rects):
                 return
 
+        # Mientras se muestra el aviso de trofeo, el mapa no recibe eventos
+        if hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado():
+            self.avisoTrofeo.handle_event(event)
+            return
+
         # Interacción con el diálogo acuarela de la Paloma
         if getattr(self, "paloma_dialog_open", False):
             if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_e):
@@ -2014,6 +2087,8 @@ class StoryMapScene(BaseState):
             self.social_hud.update(dt)
         if hasattr(self, "side_drawer"):
             self.side_drawer.update(dt)
+        if hasattr(self, "avisoTrofeo"):
+            self.avisoTrofeo.update(dt)
 
         # Actualizar confeti del Carnaval
         for cf in self.carnaval_confetti:
@@ -2032,6 +2107,10 @@ class StoryMapScene(BaseState):
             return
 
         if self.show_intro_dialog:
+            return
+
+        # El personaje espera quieto mientras se muestra el aviso de trofeo
+        if hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado():
             return
 
         # Si el menú, la tarjeta de misión o el drawer lateral están activos, pausar arrastre del mapa
@@ -2058,6 +2137,7 @@ class StoryMapScene(BaseState):
                 self.player_pos = (float(pts[-1][0]), float(pts[-1][1]))
                 self.player_node_id = curr_edge["to"]
                 self.settings.update_story_progress(current_node_id=self.player_node_id)
+                self.revisarVueltaGlorieta(self.player_node_id)
 
                 self.player_edge_idx += 1
                 if self.player_edge_idx >= len(self.player_path_edges):
@@ -2255,6 +2335,10 @@ class StoryMapScene(BaseState):
         # 10. Renderizar Celebración de Victoria del Carnaval
         if self.show_victory_modal:
             self._render_victory_modal(surface)
+
+        # 10C. Aviso de trofeo ganado con sus fuegos artificiales y el vuelo al panel
+        if hasattr(self, "avisoTrofeo"):
+            self.avisoTrofeo.render(surface)
 
         # 11. Renderizar Herramienta de Desarrollo Visual (DevTool F1)
         if hasattr(self, "dev_tool"):

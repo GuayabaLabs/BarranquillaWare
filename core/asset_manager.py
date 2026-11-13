@@ -3,6 +3,72 @@ import numpy as np
 import pygame
 from typing import Dict, Optional, List
 
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+# Fuente de cuento que usa el juego de la montaña rusa
+rutaFuenteCuento = os.path.join("coaster_game", "fuenteLetra", "IndieFlower-Regular.ttf")
+# Código del juego de la montaña rusa, para reutilizar sus dibujos (tarjeta, marco de cámara, nubes)
+rutaCoaster = os.path.join("coaster_game", "Coaster.py")
+
+# Puntos dentro de las asas y entre las hojas del trofeo donde también hay fondo blanco
+# (en fracción del ancho y del alto de la imagen)
+semillasTrofeo = (
+    (0.2095, 0.3452), (0.7896, 0.3452),
+    (0.2070, 0.7207), (0.7920, 0.7207),
+    (0.2402, 0.7822), (0.7593, 0.7822),
+    (0.2896, 0.8296), (0.7095, 0.8296),
+)
+
+
+def borrarFondo(foto, fondo, borde, semillas=((0, 0),)):
+    # Borra el fondo que está conectado con la orilla de la imagen (o con otro punto de semillas)
+    # y recorta lo que sobra. fondo es una tabla de verdadero/falso que dice qué píxeles parecen fondo
+    marca = fondo.astype(np.uint8).T.copy()
+    h, w = marca.shape
+    for punto in semillas:
+        if marca[punto[1], punto[0]] == 1:
+            cv2.floodFill(marca, np.zeros((h + 2, w + 2), np.uint8), punto, 2)
+    dibujo = (marca != 2).astype(np.uint8) * 255
+    dibujo = cv2.erode(dibujo, np.ones((borde, borde), np.uint8))   # quita el filito claro de la orilla
+    dibujo = cv2.GaussianBlur(dibujo, (borde, borde), 0)
+    alfa = pygame.surfarray.pixels_alpha(foto)
+    alfa[:] = dibujo.T
+    del alfa
+    ys, xs = np.nonzero(dibujo)
+    caja = pygame.Rect(int(xs.min()), int(ys.min()), int(xs.max() - xs.min()) + 1, int(ys.max() - ys.min()) + 1)
+    return foto.subsurface(caja).copy()
+
+
+def achicar(img, lado):
+    # Trabajar con las imágenes en tamaño completo es lento; se achican antes de procesarlas
+    mayor = max(img.get_size())
+    if mayor <= lado:
+        return img
+    esc = lado / mayor
+    return pygame.transform.smoothscale(img, (round(img.get_width() * esc), round(img.get_height() * esc)))
+
+
+def quitarBlanco(foto, semillasExtra=()):
+    # Borra el fondo blanco de una imagen; si ya trae transparencia, solo se recorta.
+    # Se empieza a borrar desde las cuatro esquinas y desde los puntos extra que se le pasen
+    if foto.get_at((0, 0)).a < 250:
+        return foto.subsurface(foto.get_bounding_rect(min_alpha=10)).copy()
+    if cv2 is None:
+        mancha = pygame.mask.from_threshold(foto, (255, 255, 255, 255), (26, 26, 26, 255))
+        mancha.invert()
+        foto = mancha.to_surface(setsurface=foto, unsetcolor=(0, 0, 0, 0))
+        return foto.subsurface(foto.get_bounding_rect(min_alpha=10)).copy()
+    w, h = foto.get_size()
+    semillas = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+    for fx, fy in semillasExtra:
+        semillas.append((int(fx * w), int(fy * h)))
+    rgb = pygame.surfarray.array3d(foto).astype(np.int16)
+    return borrarFondo(foto, ((rgb.max(axis=2) - rgb.min(axis=2)) <= 20) & (rgb.min(axis=2) >= 225), 3, semillas)
+
+
 class AssetManager:
     """
     Gestor centralizado de recursos gráficos y sprites.
@@ -183,3 +249,64 @@ class AssetManager:
 
         self._font_cache[cache_key] = font_obj
         return font_obj
+
+    def cargarSinFondo(self, nombreArchivo: str, ancho: int, semillasExtra: tuple = ()) -> pygame.Surface:
+        """Carga una imagen con fondo blanco, le quita el fondo y la deja del ancho pedido."""
+        clave = f"sinFondo_{nombreArchivo}_{ancho}"
+        if clave in self._cache:
+            return self._cache[clave]
+
+        # El fondo se quita una sola vez por imagen, sin importar cuántos tamaños se pidan
+        claveSinFondo = f"sinFondoOriginal_{nombreArchivo}"
+        if claveSinFondo not in self._cache:
+            original = pygame.image.load(self._resolve_path(nombreArchivo)).convert_alpha()
+            self._cache[claveSinFondo] = quitarBlanco(achicar(original, 1200), semillasExtra)
+        foto = self._cache[claveSinFondo]
+        alto = max(1, int(foto.get_height() * ancho / float(foto.get_width())))
+        imagen = pygame.transform.smoothscale(foto, (ancho, alto))
+        self._cache[clave] = imagen
+        return imagen
+
+    def cargarTrofeo(self, ancho: int, enGris: bool = False) -> pygame.Surface:
+        """Trofeo de los logros; en gris cuando todavía no se ha ganado."""
+        clave = f"trofeo_{ancho}_{enGris}"
+        if clave in self._cache:
+            return self._cache[clave]
+
+        trofeo = self.cargarSinFondo(os.path.join("Interfaz", "Trofeo.jpg"), ancho, semillasTrofeo)
+        if enGris:
+            trofeo = pygame.transform.grayscale(trofeo)
+            trofeo.set_alpha(150)
+        self._cache[clave] = trofeo
+        return trofeo
+
+    def cargarFuenteCuento(self, tam: int) -> pygame.font.Font:
+        """Fuente escrita a mano del juego de la montaña rusa."""
+        clave = f"cuento_{tam}"
+        if clave in self._font_cache:
+            return self._font_cache[clave]
+
+        if os.path.exists(rutaFuenteCuento):
+            fuente = pygame.font.Font(rutaFuenteCuento, tam)
+        else:
+            fuente = pygame.font.SysFont("trebuchetms,verdana,arial", tam, bold=True)
+        self._font_cache[clave] = fuente
+        return fuente
+
+    def cargarCoaster(self):
+        """Carga una sola vez el código del juego de la montaña rusa para usar sus dibujos.
+        Devuelve None si la carpeta coaster_game no está."""
+        if getattr(self, "moduloCoaster", None) is not None:
+            return self.moduloCoaster
+        self.moduloCoaster = None
+        if os.path.exists(rutaCoaster):
+            try:
+                import importlib.util
+                especificacion = importlib.util.spec_from_file_location("coasterDibujos", rutaCoaster)
+                modulo = importlib.util.module_from_spec(especificacion)
+                especificacion.loader.exec_module(modulo)
+                self.moduloCoaster = modulo
+            except Exception as e:
+                print(f"Aviso: no se pudo cargar el juego de la montaña rusa: {e}")
+        return self.moduloCoaster
+

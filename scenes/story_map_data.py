@@ -188,3 +188,22 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         ]
     }
 }
+
+# Trofeos escondidos en el mapa: se ganan dándole la vuelta completa a la glorieta del monumento
+trofeosMapa: list = [
+    {
+        "id": "vueltaVentana",
+        "nombre": "La vuelta al mundo",
+        "monumento": "ventana",
+        "descripcion": "Le diste la vuelta a la Ventana al Mundo",
+    },
+    {
+        "id": "vueltaAleta",
+        "nombre": "Tiburón de glorieta",
+        "monumento": "aleta",
+        "descripcion": "Le diste la vuelta a la Aleta del Tiburón",
+    },
+]
+
+# Distancia máxima entre un nodo y el monumento para contar como parte de su glorieta
+radioGlorieta: int = 200
