@@ -38,6 +38,9 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        self.audio.play_bgm("concentracionMusic.mp3")
+
     def setup_game(self) -> None:
         self.camera_input = CameraGestureInput.get_instance()
         if not self.camera_input.enabled:

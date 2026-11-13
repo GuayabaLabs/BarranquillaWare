@@ -21,11 +21,16 @@ class ModeSelectScene(BaseState):
     - Botón de regreso '← VOLVER' con animación panorámica de cámara inversa.
     - Toggles de audio integrados y música continua de Dodo Airlines.
     """
-    def __init__(self, on_back_callback: Optional[Callable[[], None]] = None) -> None:
+    def __init__(
+        self,
+        on_back_callback: Optional[Callable[[], None]] = None,
+        on_main_menu_callback: Optional[Callable[[BaseState], None]] = None,
+    ) -> None:
         super().__init__()
         self.screen_w = 1920
         self.screen_h = 1080
         self.on_back_callback = on_back_callback
+        self.on_main_menu_callback = on_main_menu_callback
 
         self.assets = AssetManager.get_instance()
         self.audio = AudioManager.get_instance()
@@ -318,7 +323,8 @@ class ModeSelectScene(BaseState):
         from scenes.story_map import StoryMapScene
         story_map = StoryMapScene(
             character_id=character_id,
-            on_back_callback=self._return_from_subscene
+            on_back_callback=self._return_from_subscene,
+            on_main_menu_callback=self.on_main_menu_callback,
         )
         trans = SlideTransitionState(
             from_scene=self.character_select_scene,
@@ -336,7 +342,8 @@ class ModeSelectScene(BaseState):
         from scenes.story_map import StoryMapScene
         story_map = StoryMapScene(
             character_id=character_id,
-            on_back_callback=self._return_to_mode_select_from_story
+            on_back_callback=self._return_to_mode_select_from_story,
+            on_main_menu_callback=self.on_main_menu_callback,
         )
         trans = SlideTransitionState(
             from_scene=self,

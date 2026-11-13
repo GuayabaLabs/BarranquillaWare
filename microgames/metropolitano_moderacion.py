@@ -35,6 +35,9 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
         self.intro_duration = 1.0
         self.outro_duration = 1.8
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        self.audio.play_bgm("JuniorCancion.mp3")
+
     def setup_game(self) -> None:
         """Inicializa estructuras del tablero 3x3, slots y assets."""
         self.bans_count: int = 0

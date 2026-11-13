@@ -12,6 +12,7 @@ from typing import Callable, Optional
 import pygame
 
 from core.state_machine import BaseState
+from core.audio_manager import AudioManager
 
 
 class CoasterLauncherState(BaseState):
@@ -27,6 +28,7 @@ class CoasterLauncherState(BaseState):
         self.font_sub = pygame.font.SysFont("Arial, sans-serif", 20)
 
     def enter(self, params: Optional[dict] = None) -> None:
+        AudioManager.get_instance().play_bgm("tranquilaMusic.mp3")
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # Buscar prioritariamente en la carpeta oficial del juego (coaster_game)
         coaster_dir = os.path.join(root, "coaster_game")
@@ -70,6 +72,7 @@ class CoasterLauncherState(BaseState):
         previous_state = self.game.estado
         previous_level = self.game.numNivel
         previous_won = bool((self.game.resultado or {}).get("gano", False))
+        previous_next_label = getattr(getattr(self.game, "botSiguiente", None), "etiqueta", "")
         handled = self.game.manejar(forwarded)
         # El juego legacy usa False para salir solo en QUIT o Q. No convertir
         # una transición de nivel en una salida accidental del estado embebido.
@@ -85,6 +88,8 @@ class CoasterLauncherState(BaseState):
             and self.legacy_level_count > 0
             and previous_level == self.legacy_level_count - 1
             and self.game.estado == "dibujar"
+            and self.game.numNivel == 0
+            and "volver al mapa" in previous_next_label.casefold()
         ):
             self._finish(True)
 

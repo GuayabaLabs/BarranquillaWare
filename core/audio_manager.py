@@ -49,9 +49,17 @@ class AudioManager:
 
         self._generate_procedural_sounds()
 
-    def play_bgm(self, filename: str, force_restart: bool = False) -> None:
-        """Carga y reproduce una pista BGM en loop si no es la pista que ya suena."""
+    def play_bgm(
+        self,
+        filename: str,
+        force_restart: bool = False,
+        volume_scale: float = 1.0,
+    ) -> None:
+        """Carga y reproduce una pista en loop con un volumen relativo opcional."""
+        volume = max(0.0, min(1.0, self.music_volume * volume_scale))
         if self.current_track == filename and not force_restart:
+            if pygame.mixer.get_init():
+                pygame.mixer.music.set_volume(volume)
             return
 
         self.current_track = filename
@@ -59,7 +67,7 @@ class AudioManager:
         if os.path.exists(track_path):
             try:
                 pygame.mixer.music.load(track_path)
-                pygame.mixer.music.set_volume(self.music_volume)
+                pygame.mixer.music.set_volume(volume)
                 if self.music_enabled:
                     pygame.mixer.music.play(loops=-1, fade_ms=300)
             except Exception as e:

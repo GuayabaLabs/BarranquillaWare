@@ -81,6 +81,9 @@ class PunchAlertMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        self.audio.play_bgm("PunchMusic.mp3", volume_scale=0.35)
+
     def _extract_tight_surface(self, surface: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
         """Extrae un subsurface y lo ajusta a su bounding box de píxeles no transparentes."""
         sub = surface.subsurface(rect)

@@ -26,6 +26,9 @@ class MallorquinPhotoMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        self.audio.play_bgm("tranquilaMusic.mp3")
+
     def setup_game(self) -> None:
         # 1. Variables de juego
         self.photo_taken: bool = False
