@@ -172,10 +172,19 @@ class CurramGramGo:
   if self.perdida>0:panel(s,pygame.Rect(650,740,620,58),(255,226,213));texto(s,f"Carrito: {self.perdida:.0f} s perdidos",(960,768),24,(141,52,50),True)
   if self.pausa:self.rects=menu_pausa(s,["Continuar","Reiniciar","Salir"],self.sel)
   if self.final:
-   lineas=[f"Ciudadanía Digital: {self.puntos} pts · Likes: {self.likes}","Reporte del vuelo · tus decisiones",""]
-   for i,(nombre,exp) in enumerate(CASOS):lineas.append(f"{i+1}. {nombre}: {self.casos[i] or 'Sin resolver'}")
-   lineas += ["Comparte con cuidado, verifica antes de publicar y protege datos personales."]
-   pantalla_final(s,"TU PERFIL DE CURRAMGRAM · REPORTE DEL VUELO",lineas)
+   velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((28,24,42,205));s.blit(velo,(0,0))
+   panel(s,pygame.Rect(120,65,1680,950),(255,247,234),(99,65,75),26,5)
+   texto(s,"TU PERFIL DE CURRAMGRAM · REPORTE DEL VUELO",(960,125),42,(79,53,74),True)
+   texto(s,f"{self.final}   ·   Ciudadanía Digital: {self.puntos} pts   ·   Likes: {self.likes}",(960,188),27,(65,58,67),True)
+   for i,(nombre,_real,exp) in enumerate(CASOS):
+    col=i%2;fila=i//2;x=165+col*810;y=245+fila*190
+    tarjeta=pygame.Rect(x,y,770,164);panel(s,tarjeta,(255,253,246),(164,135,126),16,2)
+    texto(s,f"{i+1}. {nombre}",(x+20,y+18),25,(106,58,50))
+    decision=self.casos[i] or "Sin resolver durante este vuelo."
+    texto(s,decision,(x+20,y+56),19,(52,62,62))
+    texto(s,exp,(x+20,y+92),17,(90,77,74))
+   texto(s,"Verifica antes de publicar · cuida los datos personales · acompaña sin convertir el dolor en contenido.",(960,850),22,(71,63,74),True)
+   texto(s,"R para reiniciar",(960,930),26,(95,75,110),True)
  def run(self):
   pygame.init();s=pygame.display.set_mode((ANCHO,ALTO));pygame.display.set_caption("CurramGram Go! · Cortissoz");clock=pygame.time.Clock();running=True
   while running:
@@ -205,3 +214,4 @@ class CurramGramGo:
   pygame.quit()
 
 if __name__=="__main__":CurramGramGo().run()
+
