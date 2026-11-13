@@ -124,7 +124,7 @@ class CoasterLauncherState(BaseState):
         surface.fill((18, 24, 40))
         title = "COASTER · LUNA DEL RÍO"
         subtitle = self.error or "La versión original se está ejecutando en su propia ventana."
-        hint = "Calibra el lapicero en Coaster · ESC para volver"
+        hint = "Calibra el lápiz en Coaster · ESC para volver"
         surface.blit(self.font.render(title, True, (255, 220, 80)), (surface.get_width() // 2 - 330, 420))
         surface.blit(self.font_sub.render(subtitle, True, (235, 240, 250)), (surface.get_width() // 2 - 410, 490))
         surface.blit(self.font_sub.render(hint, True, (130, 220, 180)), (surface.get_width() // 2 - 300, 540))
@@ -174,6 +174,19 @@ class CoasterCalibrationState(BaseState):
             self._shared_camera.resume()
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Botón verde de volver (como el de jugar del juego de la montaña rusa) y enter para volver
+        botonVolver = getattr(self, "botonVolver", None)
+        if botonVolver is not None:
+            if hasattr(event, "pos"):
+                # El mouse llega en medidas de pantalla completa; el botón está en las del juego de la montaña rusa
+                self.posMouse = (event.pos[0] * self.module.ancho / 1920.0, event.pos[1] * self.module.alto / 1080.0)
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and botonVolver.caja.collidepoint(self.posMouse):
+                    botonVolver.accion()
+                    return
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                botonVolver.accion()
+                return
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self._finish(False)
@@ -192,8 +205,11 @@ class CoasterCalibrationState(BaseState):
             self.on_complete_callback(ok)
 
     def render(self, surface: pygame.Surface) -> None:
+        # Se dibuja igual a la calibración del juego de la montaña rusa
+        if self.dibujarComoCoaster(surface):
+            return
         surface.fill((18, 24, 40))
-        title = self.font.render("CALIBRAR LAPICERO", True, (255, 220, 80))
+        title = self.font.render("CALIBRAR LÁPIZ", True, (255, 220, 80))
         surface.blit(title, title.get_rect(center=(surface.get_width() // 2, 120)))
         preview = None
         if self.camera:
@@ -225,8 +241,98 @@ class CoasterCalibrationState(BaseState):
         pygame.draw.rect(surface, (95, 120, 145), preview_rect, 2, border_radius=8)
         pygame.draw.circle(surface, (255, 235, 120), preview_rect.center, min(52, preview_rect.h // 8), 4)
         pygame.draw.circle(surface, (255, 245, 170), preview_rect.center, 5)
-        msg = "Coloca el lapicero en el círculo y pulsa ESPACIO" if not self.saved else "Calibración guardada · pulsa ENTER para volver"
+        msg = "Coloca el lápiz en el círculo y pulsa ESPACIO" if not self.saved else "Calibración guardada · pulsa ENTER para volver"
         if self.error:
             msg = self.error
         surface.blit(self.small.render(msg, True, (235, 240, 250)), (box.x + 55, box.bottom - 48))
         surface.blit(self.small.render("ESC: cancelar", True, (150, 190, 220)), (box.right - 210, box.bottom - 48))
+
+    def dibujarComoCoaster(self, surface: pygame.Surface) -> bool:
+        """Pantalla de calibrar lápiz hecha con los mismos dibujos del juego de la montaña rusa."""
+        m = self.module
+        if m is None or not hasattr(m, "tarjetaPintada"):
+            return False
+        if getattr(self, "lienzoCoaster", None) is None:
+            self.lienzoCoaster = pygame.Surface((m.ancho, m.alto))
+            self.fondoCoaster = m.crearFondo()
+            self.fuentesCoaster = {n: m.cargarFuente(n) for n in (20, 26, 36)}
+            self.rectVista = pygame.Rect(140, 175, 400, 300)
+            self.vistaCamara = None
+            self.botonVolver = m.Boton((m.ancho // 2 - 110, 520, 220, 70), "Volver", m.cVerde,
+                                       lambda: self._finish(self.saved), "flecha")
+            self.posMouse = (-100, -100)
+            self.ultimoCuadro = pygame.time.get_ticks()
+
+        s = self.lienzoCoaster
+        tiempo = pygame.time.get_ticks() / 1000.0
+
+        def texto(frase, tam, color, punto):
+            sup = self.fuentesCoaster[tam].render(frase, True, color)
+            s.blit(sup, sup.get_rect(topleft=punto))
+
+        s.blit(self.fondoCoaster, (0, 0))
+        m.dibujarNubes(s, tiempo)
+        m.tarjetaPintada(s, pygame.Rect(10, 20, 1080, 660))
+        texto("Calibra tu lápiz", 36, m.cOscuro, (self.rectVista.x, 100))
+
+        # La cámara va dentro del marco de elementos/marcoCamara; si no hay imagen, sobre un papelito
+        hayMarco = m.cargarMarco() is not None
+        if not hayMarco:
+            m.panel(s, self.rectVista.inflate(24, 24), m.cCrema, m.cOscuro, 22, 3)
+        if self.camera:
+            _, datos = self.camera.obtenerVista()
+            if datos:
+                try:
+                    self.vistaCamara = pygame.image.frombuffer(datos, m.tamVista, "RGB").copy()
+                except Exception:
+                    self.vistaCamara = None
+        if self.vistaCamara is not None:
+            vista = pygame.transform.smoothscale(self.vistaCamara, self.rectVista.size)
+            s.blit(vista if hayMarco else m.redondear(vista, 14), self.rectVista)
+        else:
+            m.lavado(s, m.contornoCaja(self.rectVista, 14), m.mezclar(m.cCrema, m.cMadera, 0.3), 255, 0.1)
+        if hayMarco:
+            m.dibujarMarcoCamara(s, self.rectVista, 20)
+        else:
+            m.trazoMano(s, m.contornoCaja(self.rectVista, 14), m.cOscuro, 3, 0.6, 1.0, True)
+
+        centro = self.rectVista.center
+        m.circuloMano(s, centro, 26, m.cCrema, 4, 0.8, 1.0)
+        m.circuloMano(s, centro, 30, m.cOscuro, 2, 0.8, 2.0)
+
+        frase = "Ubica el objeto en el círculo y pulsa espacio en el teclado para calibrar."
+        for i, linea in enumerate(m.partirTexto(frase, self.fuentesCoaster[26], 400)):
+            texto(linea, 26, m.cOscuro, (590, 165 + i * 38))
+
+        if self.error:
+            estado, color = self.error, m.cCoral
+        elif self.camera is None or self.camera.rangos is None:
+            estado, color = "Sin calibrar", m.cCoral
+        elif self.camera.pos is not None:
+            estado, color = "Lápiz detectado", m.cVerde
+        else:
+            estado, color = "Calibrado, no veo el objeto", m.cAmarillo
+        for i, linea in enumerate(m.partirTexto(estado, self.fuentesCoaster[26], 400)):
+            texto(linea, 26, color, (590, 350 + i * 38))
+
+        frase = "Para volver, deja el lápiz sobre el botón volver o pulsa enter en el teclado."
+        for i, linea in enumerate(m.partirTexto(frase, self.fuentesCoaster[20], 400)):
+            texto(linea, 20, m.cMaderaOsc, (590, 410 + i * 30))
+
+        # El botón se llena poco a poco cuando el lápiz o el mouse se quedan encima, como en el juego
+        ahora = pygame.time.get_ticks()
+        delta = min(0.1, (ahora - self.ultimoCuadro) / 1000.0)
+        self.ultimoCuadro = ahora
+        lapiz = self.camera.pos if self.camera is not None else None
+        encima = self.botonVolver.caja.collidepoint(self.posMouse) or (lapiz is not None and self.botonVolver.caja.collidepoint(lapiz))
+        if encima:
+            self.botonVolver.sobre += delta
+        else:
+            self.botonVolver.sobre = max(0.0, self.botonVolver.sobre - delta * 3)
+        self.botonVolver.dibujar(s, self.fuentesCoaster[20])
+        if self.botonVolver.sobre >= m.tBoton:
+            self.botonVolver.sobre = 0.0
+            self.botonVolver.accion()
+
+        surface.blit(pygame.transform.smoothscale(s, surface.get_size()), (0, 0))
+        return True

@@ -86,6 +86,21 @@ class MicrogamePauseState(BaseState):
                 self.button_surfs[it["id"]] = None
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Con la ventana nueva, el mouse busca los botones en su nuevo lugar
+        cajas = self.cajasBotones()
+        if cajas and event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN):
+            for i, caja in enumerate(cajas):
+                if caja.collidepoint(event.pos):
+                    if event.type == pygame.MOUSEMOTION:
+                        if self.selected != i:
+                            self.selected = i
+                            self.audio.play_click()
+                    elif event.button == 1:
+                        self.selected = i
+                        self._choose()
+                    break
+            return
+
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_UP, pygame.K_w):
                 self.selected = (self.selected - 1) % len(self.items)
@@ -178,6 +193,10 @@ class MicrogamePauseState(BaseState):
         pass
 
     def render(self, surface: pygame.Surface) -> None:
+        # Ventana de pausa nueva con botones morados que se ponen rojos al pasar por encima
+        if self.dibujarPausa(surface):
+            return
+
         # Renderiza el estado de fondo congelado
         self.previous.render(surface)
 
@@ -225,3 +244,83 @@ class MicrogamePauseState(BaseState):
 
         hint = self.font_hint.render("↑ ↓ / CLICK ELEGIR  ·  ENTER/A ACEPTAR  ·  ESC REANUDAR", True, (240, 245, 255))
         surface.blit(hint, hint.get_rect(center=(surface.get_width() // 2, box_y + self.box_h - 38)))
+
+    def prepararPausa(self) -> bool:
+        """Carga una sola vez la ventana y los botones nuevos. Devuelve False si falta alguna imagen."""
+        if getattr(self, "pausaLista", None) is not None:
+            return self.pausaLista
+        try:
+            import os
+            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), 860)
+            # Se estira a lo ancho y de arriba a abajo para que los botones y el texto quepan cómodos
+            self.ventanaPausa = pygame.transform.smoothscale(ventana, (860, 1080))
+            # El papel de la ventana va del 18% al 83% del ancho; su centro queda un poco a la derecha
+            self.centroPapel = 960 - 430 + int(860 * 0.508)
+            self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 380)
+            rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 380)
+            # El rojo crece un poquito para que se note cuál está elegido
+            self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
+            self.fuenteTituloPausa = self.assets.cargarFuenteCuento(84)
+            self.fuenteBotonPausa = self.assets.cargarFuenteCuento(44)
+            self.fuenteAyudaPausa = self.assets.cargarFuenteCuento(28)
+            self.pausaLista = True
+        except Exception as e:
+            print(f"Aviso: no se pudo cargar la ventana de pausa: {e}")
+            self.pausaLista = False
+        return self.pausaLista
+
+    def cajasBotones(self) -> list:
+        """Lugar de cada botón dentro de la ventana nueva (lista vacía si no hay ventana nueva)."""
+        if not self.prepararPausa():
+            return []
+        alto = self.botonMorado.get_height()
+        separacion = 12
+        total = len(self.items) * alto + (len(self.items) - 1) * separacion
+        arriba = 564 - total // 2
+        cajas = []
+        for i in range(len(self.items)):
+            caja = self.botonMorado.get_rect(midtop=(self.centroPapel, arriba + i * (alto + separacion)))
+            cajas.append(caja)
+        return cajas
+
+    def textoConContorno(self, fuente, texto: str, color, colorContorno) -> pygame.Surface:
+        # Texto con un contorno parejo alrededor para que se lea sobre el botón
+        cuerpo = fuente.render(texto, True, color)
+        borde = fuente.render(texto, True, colorContorno)
+        lienzo = pygame.Surface((cuerpo.get_width() + 6, cuerpo.get_height() + 6), pygame.SRCALPHA)
+        for dx in (-3, -2, 0, 2, 3):
+            for dy in (-3, -2, 0, 2, 3):
+                if abs(dx) + abs(dy) >= 3:
+                    lienzo.blit(borde, (3 + dx, 3 + dy))
+        lienzo.blit(cuerpo, (3, 3))
+        return lienzo
+
+    def dibujarPausa(self, surface: pygame.Surface) -> bool:
+        if not self.prepararPausa():
+            return False
+
+        self.previous.render(surface)
+        # Oscurece el juego congelado multiplicando sus colores
+        surface.fill((104, 98, 122), special_flags=pygame.BLEND_RGB_MULT)
+
+        ventana = self.ventanaPausa.get_rect(center=(960, 540))
+        surface.blit(self.ventanaPausa, ventana)
+
+        titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (110, 62, 150), (255, 250, 238))
+        surface.blit(titulo, titulo.get_rect(center=(ventana.left + int(ventana.width * 0.56), ventana.top + 215)))
+
+        for i, caja in enumerate(self.cajasBotones()):
+            elegido = i == self.selected
+            boton = self.botonRojo if elegido else self.botonMorado
+            surface.blit(boton, boton.get_rect(center=caja.center))
+            contorno = (120, 26, 34) if elegido else (70, 30, 110)
+            # Solo la primera letra en mayúscula
+            etiqueta = self.items[i]["label"].capitalize()
+            texto = self.textoConContorno(self.fuenteBotonPausa, etiqueta, (255, 248, 236), contorno)
+            surface.blit(texto, texto.get_rect(center=(caja.centerx, caja.centery - 3)))
+
+        # Ayuda corta abajo a la izquierda del papel, donde no hay flores
+        for i, linea in enumerate(("Enter para aceptar", "Esc para seguir")):
+            ayuda = self.fuenteAyudaPausa.render(linea, True, (126, 90, 62))
+            surface.blit(ayuda, (ventana.left + int(ventana.width * 0.21), ventana.top + 872 + i * 32))
+        return True

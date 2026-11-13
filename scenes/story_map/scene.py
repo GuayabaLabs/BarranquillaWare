@@ -24,6 +24,8 @@ from scenes.story_map_data import (
     PALOMA_STORY_DIALOGS,
 )
 from scenes.story_map.ui_dialogs import StoryMapUI
+from scenes.story_map.ui_dialogs import AvisoTrofeo
+from scenes.story_map_data import trofeosMapa, radioGlorieta
 
 from microgames.mallorquin_photo import MallorquinPhotoMicrogame
 from microgames.uninorte_sprint import UninorteSprintMicrogame
@@ -161,6 +163,9 @@ class StoryMapScene(BaseState):
         self.side_drawer = SideNavDrawer(self.screen_w, self.screen_h, on_nav_selected=self._on_side_nav_selected)
         self._sync_social_hud()
 
+        # 13. Trofeos escondidos en las glorietas de la Ventana al Mundo y la Aleta del Tiburón
+        self.iniciarTrofeos()
+
     def _count_completed_campaign_levels(self, completed_microgames: Optional[list] = None) -> int:
         """Cuenta cuántos de los 4 niveles principales de la Historia han sido completados."""
         if completed_microgames is None:
@@ -180,7 +185,10 @@ class StoryMapScene(BaseState):
         high_score = int(progress.get("high_score", 0))
         levels_done = self._count_completed_campaign_levels(completed_list)
         if hasattr(self, "social_hud"):
-            return self.social_hud.sync_from_story_progress(self.character_id, high_score, levels_done)
+            metricas = self.social_hud.sync_from_story_progress(self.character_id, high_score, levels_done)
+            # El contador de logros muestra los trofeos escondidos del mapa
+            self.social_hud.set_metric("logros", f"{len(self.leerTrofeosObtenidos())}/{len(trofeosMapa)}")
+            return metricas
         return {}
 
     def _on_side_nav_selected(self, nav_id: str) -> None:
@@ -189,8 +197,68 @@ class StoryMapScene(BaseState):
             # Si se selecciona mapa, enfocar la cámara suavemente en el jugador
             self.camera.target_x = max(0.0, min(float(self.camera.max_x), self.player_pos[0] - self.screen_w / 2.0))
             self.camera.target_y = max(0.0, min(float(self.camera.max_y), self.player_pos[1] - self.screen_h / 2.0))
+        elif nav_id == "logros":
+            # Muestra la sección de trofeos dentro del panel lateral
+            self.side_drawer.mostrarTrofeos()
         else:
             print(f"[StoryMap] Pestaña de navegación seleccionada: {nav_id}")
+
+    def iniciarTrofeos(self) -> None:
+        """Prepara los trofeos escondidos del mapa y la ventana que avisa al ganarlos."""
+        self.avisoTrofeo = AvisoTrofeo(self.screen_w, self.screen_h)
+        # Nodos seguidos que el personaje ha pisado junto a cada monumento
+        self.rachaGlorieta = {trofeo["id"]: [] for trofeo in trofeosMapa}
+        self.side_drawer.ponerTrofeos(trofeosMapa, self.leerTrofeosObtenidos())
+        # El nodo donde arranca también cuenta como inicio de la vuelta
+        self.revisarVueltaGlorieta(self.player_node_id)
+
+    def leerTrofeosObtenidos(self) -> list:
+        return list(self.settings.get("trofeosObtenidos", []))
+
+    def revisarVueltaGlorieta(self, idNodo: int) -> None:
+        """Cuenta los nodos seguidos junto a cada monumento y entrega el trofeo al cerrar la vuelta."""
+        nodos, aristas, mapaNodos, vecinos, mapaAristas = self._get_street_graph()
+        nodo = mapaNodos.get(idNodo)
+        if nodo is None:
+            return
+
+        obtenidos = self.leerTrofeosObtenidos()
+        for trofeo in trofeosMapa:
+            monumento = self.poi_registry.get(trofeo["monumento"])
+            if not monumento:
+                continue
+            centro = monumento["rect"].center
+            racha = self.rachaGlorieta[trofeo["id"]]
+
+            # Si se aleja del monumento, la cuenta vuelve a empezar
+            if math.hypot(nodo["x"] - centro[0], nodo["y"] - centro[1]) > radioGlorieta:
+                racha.clear()
+                continue
+
+            racha.append(idNodo)
+            if len(racha) > 12:
+                racha.pop(0)
+            if trofeo["id"] in obtenidos:
+                continue
+
+            # La vuelta se cierra al volver a un nodo ya pisado después de pasar por otros tres
+            for i in range(len(racha) - 2, -1, -1):
+                if racha[i] == idNodo:
+                    vuelta = racha[i:-1]
+                    if len(set(vuelta)) >= 4:
+                        self.ganarTrofeo(trofeo)
+                    break
+
+    def ganarTrofeo(self, trofeo: dict) -> None:
+        """Guarda el trofeo ganado y abre la ventana de ¡Qué nota!"""
+        obtenidos = self.leerTrofeosObtenidos()
+        if trofeo["id"] in obtenidos:
+            return
+        obtenidos.append(trofeo["id"])
+        self.settings.set("trofeosObtenidos", obtenidos)
+        self.side_drawer.ponerTrofeos(trofeosMapa, obtenidos)
+        self._sync_social_hud()
+        self.avisoTrofeo.abrir(trofeo["nombre"], self.side_drawer.centroPestana())
 
     def _build_world_map(self) -> None:
         """Carga y une los 4 cuadrantes, reutilizando la superficie cacheada si ya fue ensamblada."""
@@ -573,7 +641,7 @@ class StoryMapScene(BaseState):
                 "title": "GRAN MALECÓN DEL RÍO",
                 "district": "DISTRITO TURÍSTICO",
                 "microgame_id": "coaster",
-                "microgame_title": "COASTER · CALIBRA EL LAPICERO",
+                "microgame_title": "COASTER · CALIBRA EL LÁPIZ",
                 "desc": [
                     "Atardecer dorado frente al río Magdalena.",
                     "Camina tranquilo sintiendo la brisa del río."
@@ -824,7 +892,7 @@ class StoryMapScene(BaseState):
 
         self.btn_calibrate_pointer = UIButton(
             center_pos=(220, 520),
-            normal_sprite=make_drawer_btn("CALIBRAR LAPICERO", (65, 55, 105), (160, 140, 235)),
+            normal_sprite=make_drawer_btn("CALIBRAR LÁPIZ", (65, 55, 105), (160, 140, 235)),
             on_click=self._on_calibrate_pointer
         )
 
@@ -862,6 +930,9 @@ class StoryMapScene(BaseState):
             self.btn_settings,
             self.btn_exit_map
         ]
+
+        # Aspecto nuevo del menú: ventana de flores, botones morados y letra del juego de la montaña rusa
+        self.prepararMenuMapa()
 
 
     def _init_narrative_and_carnaval(self) -> None:
@@ -1886,6 +1957,11 @@ class StoryMapScene(BaseState):
             if self.dev_tool.handle_event(event, (self.camera.x, self.camera.y), poi_rects=p_rects):
                 return
 
+        # Mientras se muestra el aviso de trofeo, el mapa no recibe eventos
+        if hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado():
+            self.avisoTrofeo.handle_event(event)
+            return
+
         # Interacción con el diálogo acuarela de la Paloma
         if getattr(self, "paloma_dialog_open", False):
             if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_e):
@@ -1974,6 +2050,11 @@ class StoryMapScene(BaseState):
             return
 
         # Botón hamburguesa flotante para abrir menú con mouse
+        # Con el aspecto nuevo abre apenas se hace clic, con un área un poco más grande que su dibujo
+        if getattr(self, "menuMapaListo", False) and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.btn_menu_toggle.rect.inflate(20, 20).collidepoint(event.pos):
+                self._toggle_menu()
+                return
         consumed = self.btn_menu_toggle.handle_event(event)
         if consumed and event.type != pygame.MOUSEMOTION:
             return
@@ -2088,6 +2169,8 @@ class StoryMapScene(BaseState):
             self.social_hud.update(dt)
         if hasattr(self, "side_drawer"):
             self.side_drawer.update(dt)
+        if hasattr(self, "avisoTrofeo"):
+            self.avisoTrofeo.update(dt)
 
         # Actualizar confeti del Carnaval
         for cf in self.carnaval_confetti:
@@ -2106,6 +2189,10 @@ class StoryMapScene(BaseState):
             return
 
         if self.show_intro_dialog:
+            return
+
+        # El personaje espera quieto mientras se muestra el aviso de trofeo
+        if hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado():
             return
 
         # Si el menú, la tarjeta de misión o el drawer lateral están activos, pausar arrastre del mapa
@@ -2132,6 +2219,7 @@ class StoryMapScene(BaseState):
                 self.player_pos = (float(pts[-1][0]), float(pts[-1][1]))
                 self.player_node_id = curr_edge["to"]
                 self.settings.update_story_progress(current_node_id=self.player_node_id)
+                self.revisarVueltaGlorieta(self.player_node_id)
 
                 self.player_edge_idx += 1
                 if self.player_edge_idx >= len(self.player_path_edges):
@@ -2330,6 +2418,10 @@ class StoryMapScene(BaseState):
         if self.show_victory_modal:
             self._render_victory_modal(surface)
 
+        # 10C. Aviso de trofeo ganado con sus fuegos artificiales y el vuelo al panel
+        if hasattr(self, "avisoTrofeo"):
+            self.avisoTrofeo.render(surface)
+
         # 11. Renderizar Herramienta de Desarrollo Visual (DevTool F1)
         if hasattr(self, "dev_tool"):
             poi_rects = {k: v["rect"] for k, v in self.poi_registry.items()}
@@ -2356,6 +2448,10 @@ class StoryMapScene(BaseState):
 
     def _render_drawer_menu(self, surface: pygame.Surface) -> None:
         """Renderiza el panel lateral desplegable de opciones y guardado."""
+        # Menú nuevo con la ventana de flores
+        if self.dibujarMenuMapa(surface):
+            return
+
         # A) Oscurecimiento de fondo
         dim_surf = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
         dim_surf.fill((10, 16, 28, int(150 * self.menu_anim_t)))
@@ -2399,6 +2495,122 @@ class StoryMapScene(BaseState):
         # Posición horizontal animada (slide-in desde la derecha)
         drawer_x = int(self.screen_w - self.drawer_w * self.menu_anim_t)
         surface.blit(drawer_surf, (drawer_x, 0))
+
+    def textoConContorno(self, fuente, texto: str, color, colorContorno) -> pygame.Surface:
+        # Texto con un contorno parejo alrededor para que se lea sobre los botones
+        cuerpo = fuente.render(texto, True, color)
+        borde = fuente.render(texto, True, colorContorno)
+        lienzo = pygame.Surface((cuerpo.get_width() + 6, cuerpo.get_height() + 6), pygame.SRCALPHA)
+        for dx in (-3, -2, 0, 2, 3):
+            for dy in (-3, -2, 0, 2, 3):
+                if abs(dx) + abs(dy) >= 3:
+                    lienzo.blit(borde, (3 + dx, 3 + dy))
+        lienzo.blit(cuerpo, (3, 3))
+        return lienzo
+
+    def cambiarImagenBoton(self, boton: UIButton, imagen: pygame.Surface, centro: Tuple[int, int]) -> None:
+        # Cambia la imagen y el lugar de un botón sin cambiar lo que hace al pulsarlo
+        boton.normal_sprite = imagen
+        boton.width, boton.height = imagen.get_size()
+        boton.center_x, boton.center_y = centro
+        boton.rect = pygame.Rect(0, 0, boton.width, boton.height)
+        boton.rect.center = centro
+
+    def ponerContorno(self, imagen: pygame.Surface, color, grosor: int) -> pygame.Surface:
+        # Pega la silueta de la imagen en el color pedido, corrida en círculo, por debajo de la imagen
+        conContorno = pygame.Surface((imagen.get_width() + grosor * 2, imagen.get_height() + grosor * 2), pygame.SRCALPHA)
+        silueta = pygame.mask.from_surface(imagen, 100).to_surface(setcolor=(*color, 255), unsetcolor=(0, 0, 0, 0))
+        for grados in range(0, 360, 15):
+            dx = round(math.cos(math.radians(grados)) * grosor)
+            dy = round(math.sin(math.radians(grados)) * grosor)
+            conContorno.blit(silueta, (grosor + dx, grosor + dy))
+        conContorno.blit(imagen, (grosor, grosor))
+        return conContorno
+
+    def prepararMenuMapa(self) -> None:
+        """Carga la ventana y los botones nuevos del menú del mapa y el botón para abrirlo."""
+        self.menuMapaListo = False
+        try:
+            # El panel se ensancha y llega de arriba a abajo para que los botones quepan con aire a los lados
+            self.drawer_w = 560
+            alto = self.screen_h
+            # El papel de la ventana va del 18% al 83% del ancho; su centro queda un poco a la derecha
+            self.centroPapelMenu = int(self.drawer_w * 0.508)
+            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), self.drawer_w)
+            self.ventanaMenuMapa = pygame.transform.smoothscale(ventana, (self.drawer_w, alto))
+            morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 300)
+            rojo = pygame.transform.smoothscale(
+                self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 300), morado.get_size())
+            self.fuenteTituloMenu = self.assets.cargarFuenteCuento(44)
+            self.fuenteTextoMenu = self.assets.cargarFuenteCuento(22)
+            fuenteBoton = self.assets.cargarFuenteCuento(36)
+
+            # Cada botón guarda su versión morada y la roja que se ve al pasar el mouse
+            botones = [
+                (self.btn_resume, "Reanudar", 360),
+                (self.btn_save_game, "Guardar partida", 448),
+                (self.btn_calibrate_pointer, "Calibrar lápiz", 624),
+                (self.btn_settings, "Ajustes", 712),
+                (self.btn_exit_map, "Salir al menú", 800),
+            ]
+            self.botonesMenuMapa = []
+            for boton, texto, y in botones:
+                versiones = []
+                for fondo, contorno in ((morado, (70, 30, 110)), (rojo, (120, 26, 34))):
+                    imagen = fondo.copy()
+                    letras = self.textoConContorno(fuenteBoton, texto, (255, 248, 236), contorno)
+                    imagen.blit(letras, letras.get_rect(center=(imagen.get_width() // 2, imagen.get_height() // 2 - 3)))
+                    versiones.append(imagen)
+                self.cambiarImagenBoton(boton, versiones[0], (self.centroPapelMenu, y))
+                self.botonesMenuMapa.append((boton, versiones[0], versiones[1]))
+
+            # Los botones de música y sonido quedan entre guardar y calibrar
+            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 60, 536)
+            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 60, 536)
+            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu + 60, 536)
+            self.btn_drawer_sound.rect.center = (self.centroPapelMenu + 60, 536)
+
+            # Botón nuevo para abrir el menú
+            botonMenu = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMenu.jpg"), 76)
+            # Contorno rojo más oscuro de la misma familia para que resalte sobre el mapa
+            botonMenu = self.ponerContorno(botonMenu, (128, 52, 48), 4)
+            self.cambiarImagenBoton(self.btn_menu_toggle, botonMenu, (1855, 58))
+            self.menuMapaListo = True
+        except Exception as e:
+            print(f"Aviso: no se pudo cargar el menú nuevo del mapa: {e}")
+
+    def dibujarMenuMapa(self, surface: pygame.Surface) -> bool:
+        if not getattr(self, "menuMapaListo", False):
+            return False
+
+        # Oscurece el mapa multiplicando sus colores, según qué tan abierto esté el menú
+        tono = [int(255 - (255 - c) * self.menu_anim_t) for c in (120, 112, 136)]
+        surface.fill(tono, special_flags=pygame.BLEND_RGB_MULT)
+
+        panel = pygame.Surface((self.drawer_w, self.screen_h), pygame.SRCALPHA)
+        panel.blit(self.ventanaMenuMapa, (0, 0))
+
+        cafe = (110, 68, 38)
+        titulo = self.textoConContorno(self.fuenteTituloMenu, "Modo historia", (110, 62, 150), (255, 250, 238))
+        panel.blit(titulo, titulo.get_rect(center=(int(self.drawer_w * 0.56), 200)))
+        explorando = self.fuenteTextoMenu.render(f"Explorando con {self.character_id.capitalize()}", True, cafe)
+        panel.blit(explorando, explorando.get_rect(center=(int(self.drawer_w * 0.56), 248)))
+
+        if self.save_feedback_timer > 0.0:
+            aviso = self.fuenteTextoMenu.render("Partida guardada", True, (56, 146, 76))
+        else:
+            aviso = self.fuenteTextoMenu.render("Guardado automático", True, (150, 118, 90))
+        panel.blit(aviso, aviso.get_rect(center=(int(self.drawer_w * 0.56), 284)))
+
+        # Morado normal y rojo cuando el mouse está encima
+        for boton, morado, rojo in self.botonesMenuMapa:
+            boton.normal_sprite = rojo if boton.is_hovered else morado
+        for boton in self.drawer_buttons:
+            boton.render(panel)
+
+        drawerX = int(self.screen_w - self.drawer_w * self.menu_anim_t)
+        surface.blit(panel, (drawerX, 0))
+        return True
 
     def _render_quest_card(self, surface: pygame.Surface) -> None:
         """Renderiza la tarjeta modal de misión del nodo activo con marco de acuarela ilustrado."""
