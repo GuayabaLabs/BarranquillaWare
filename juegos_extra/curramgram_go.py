@@ -3,23 +3,28 @@ import json
 import math
 import random
 import pygame
-from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, fuente, texto, panel, leer_entrada, menu_pausa, pantalla_final
+from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, fuente, texto, texto_con_contorno, panel, leer_entrada, menu_pausa, pantalla_final
 from animacion import Animacion
 
 # Ajustes del recorrido
 DURACION=120.0
-MUNDO=5700
-ZONAS=((0,1250,"ZONA 1: ENTRADA Y CHECK-IN"),(1250,3250,"ZONA 2: TIENDAS Y COMIDA"),(3250,MUNDO,"ZONA 3: SALA DE ESPERA Y PUERTA"))
-PUNTOS=(520,1530,2500,3390,4240,5030)
+MUNDO=6500
+ALTURA_PERSONAJE_PX=175
+PISO=round(ALTO*.71)
+VELOCIDAD_CAMI=320.0
+PUERTA_X=MUNDO-115
+ZONAS=((0,1450,"ZONA 1"),(1450,3650,"ZONA 2"),(3650,MUNDO,"ZONA 3"))
+PUNTOS=(520,1420,2320,3220,4120,5020)
+ESTRELLAS_CURRAM=(150,250,350)
 CASOS=[
- ("Viajero con harina","La bolsa blanca era maizena y harina de yuca.","Acércate a confirmar; no difundas una acusación."),
- ("Tamborero sospechoso","Ocultaba paquetes sellados: era contrabando real.","Esconde la cámara, espera a que mire al otro lado y entrega la prueba a Policía."),
- ("Turista con pasabordo","El código del vuelo permite acceder a datos y al viaje.","Avísale con E. Nunca publiques su boleto."),
- ("Joven en la banca","La persona estaba pasando un momento difícil.","Respeta su privacidad; sigue caminando sin apuntar."),
- ("Señora y cava","Se había derramado el hielo de las butifarras.","Comprueba antes de repetir una acusación."),
- ("Comparsa de marimondas","Los bailarines posaban en una actividad pública.","Una foto respetuosa del evento puede compartirse."),
+ ("Viajero","Confirma antes de acusar."),
+ ("Turista","Protege datos privados."),
+ ("Joven","Respeta su privacidad."),
+ ("Señora","Verifica antes de publicar."),
+ ("Comparsa","Comparte con respeto."),
+ ("Tamborero","Busca evidencia y avisa a Policía."),
 ]
-NPC_SPRITES=("hombre_gorra","tamborero","turista_pasaporte","joven_llorando","senora_cava","bailarina_comparsa")
+NPC_SPRITES=("hombre_gorra","turista_pasaporte","joven_llorando","senora_cava","bailarina_comparsa","tamborero")
 
 class CurramGramGo:
  def __init__(self):
@@ -34,9 +39,26 @@ class CurramGramGo:
   try:self.anclajes=json.loads((RAIZ/"juegos_extra/assets/anclajes.json").read_text(encoding="utf-8"))["curramgram"]
   except (OSError,ValueError):self.anclajes={}
   self.anclajes.update(json.loads((RAIZ/"juegos_extra/assets/curramgram/anclajes_cami.json").read_text(encoding="utf-8")))
+  self._normalizar_personajes()
+  self.sprites_flip={n:pygame.transform.flip(self.sprites[n],True,False) for n in self.personajes if self.sprites.get(n)}
   self.fondo_proyecto=cargar_imagen("fondo_minijuego_crossy.png",(ANCHO,ALTO),alpha=False)
   self.fondo_terminal=self._construir_fondo()
   self._iniciar_audio();self.reiniciar()
+
+ def _normalizar_personajes(self):
+  """Preescala una vez a la altura objetivo; Cami conserva escala común por hoja."""
+  self.personajes=set(NPC_SPRITES)|{"policia","bailarina_comparsa","trabajador_carrito","pasajero_sentado_1","senor_sentado"}
+  frames={f for d in self.animacion.defs.values() for f in d["frames"]}
+  self.personajes.update(frames)
+  idle=self.sprites.get("cami_idle");factor_cami=ALTURA_PERSONAJE_PX/max(1,idle.get_height()) if idle else 1
+  for nombre in self.personajes:
+   img=self.sprites.get(nombre)
+   if img is None:continue
+   factor=factor_cami if nombre in frames else ALTURA_PERSONAJE_PX/max(1,img.get_height())
+   size=(max(1,round(img.get_width()*factor)),max(1,round(img.get_height()*factor)))
+   self.sprites[nombre]=pygame.transform.scale(img,size)
+   anchor=self.anclajes.get(nombre,{}).get("anchor",[img.get_width()//2,img.get_height()])
+   self.anclajes[nombre]={**self.anclajes.get(nombre,{}),"anchor":[round(anchor[0]*factor),round(anchor[1]*factor)]}
 
  def _iniciar_audio(self):
   try:
@@ -46,10 +68,17 @@ class CurramGramGo:
   except (pygame.error,OSError):self.sonido_tambor=None
 
  def reiniciar(self):
+  self.animacion.seleccionar("idle")
   self.x=350.;self.tiempo=DURACION;self.puntos=0;self.likes=0;self.ocultando=False;self.salto=0.;self.amenaza=False;self.gaze_clock=1.0;self.gaze_right=True
   self.casos=[None]*6;self.foto=None;self.evidencia=False;self.aviso="Explora la terminal y protege la privacidad.";self.aviso_t=4.;self.apunte=None;self.apunte_t=0.
   self.final=None;self.victoria=False;self.pausa=False;self.sel=0;self.rects=[];self.elapsed=0.;self.loss_timer=0.
-  self.carrito=None;self.carrito_clock=6.;self.jump_avoid=False;self.walk_phase=0.;self.facing=1;self.last_camera=None
+  self.inicio=True;self.revelados=[False]*6;self.investigacion=[0.]*6;self.racha_casos=0;self.casos_bien=0
+  self.guia="A / D";self.guia_vista=False;self.flash_timer=0.;self.anim_event_t=0.;self.anim_event="";self.stumble_t=0.
+  self.guia_camino=False;self.guia_salto=False;self.guia_sigilo=False;self.guia_aviso=False
+  self.sellos=[{"x":round(440+i*(PUERTA_X-700)/24),"y":PISO-(92,150,205,150,92)[i%5],"recogido":False} for i in range(25)]
+  self.flotante=None;self.pop_puntos=0.;self.en_escondite=False;self.persecucion=0.;self.parpadeo=0.;self.invulnerable=0.
+  self.maletas=[{"x":x,"hit":False} for x in (930,1880,2790,3720,4630,5740)]
+  self.carrito=None;self.carrito_clock=5.;self.jump_avoid=False;self.walk_phase=0.;self.facing=1;self.last_camera=None
 
  def _construir_fondo(self):
   """Terminal 2D por capas a 480x270; se escala a 1920 con vecino más cercano."""
@@ -89,122 +118,183 @@ class CurramGramGo:
   for y in (207,232,257):pygame.draw.line(s,(186,163,145),(0,y),(w,y),1)
   return s
 
- def _mensaje(self,frase,d=3):self.aviso=frase;self.aviso_t=d
+ def _mensaje(self,frase,d=2.2):self.aviso=" ".join(str(frase).split()[:4]);self.aviso_t=d
  def _camara(self):return max(0,min(MUNDO-ANCHO,self.x-ANCHO*.43))
  def cerca(self,i):return abs(self.x-PUNTOS[i])<210
 
  def keydown(self,k):
-  if k in (pygame.K_s,pygame.K_DOWN):self.ocultando=True
-  elif k==pygame.K_SPACE and self.salto<=0:self.salto=.72;self.jump_avoid=True
-  elif k==pygame.K_e:self.interactuar()
+  if self.inicio and k==pygame.K_SPACE:self.inicio=False;self._mensaje("A / D para caminar",3);return
+  if k in (pygame.K_s,pygame.K_DOWN):
+   self.ocultando=True
+   if self.cerca(5):self.guia_sigilo=True
+  elif k==pygame.K_SPACE and self.salto<=0:
+   self.salto=.72;self.jump_avoid=True
+   if self.carrito:self.guia_salto=True
+  elif k==pygame.K_e:
+   if self.cerca(1):self.guia_aviso=True
+   self.interactuar()
   elif k==pygame.K_p:self.publicar()
  def keyup(self,k):
   if k in (pygame.K_s,pygame.K_DOWN):self.ocultando=False
 
  def interactuar(self):
-  # Evidencia del delito se entrega primero a la Policía de la Zona 1.
+  if self.x>=PUERTA_X-170:
+   self.final="LLEGASTE A GATE 7";self.victoria=True
+   self.estrellas=sum(self.puntos>=umbral for umbral in ESTRELLAS_CURRAM)
+   return
   if self.x<340 and self.evidencia:
-   self.casos[1]="Prueba discreta entregada a Policía";self.puntos+=60;self.evidencia=False;self._mensaje("+60 pts: evidencia verificada y entregada a Policía")
+   self._resolver_caso(5,80,"Evidencia entregada a Policía")
+   self.tiempo=min(180,self.tiempo+10);self.evidencia=False;self.persecucion=0
    return
   for i in range(6):
-   if not self.cerca(i):continue
-   if i==0 and self.casos[i] is None:
-    self.casos[i]="Confirmó que era harina y no acusó";self.puntos+=30;self._mensaje("+30 pts: ¡No caíste en la falsa acusación!")
-   elif i==1:
-    self._mensaje("S: escóndete; espera a que mire al otro lado y toma la foto.")
-   elif i==2 and self.casos[i] is None:
-    self.casos[i]="Avisó a la turista del código visible";self.puntos+=45;self._mensaje("+45 pts: ¡Guarda el tiquete que se ve el código!")
-   elif i==3 and self.casos[i] is None:
-    self.casos[i]="Pasó de largo y respetó su intimidad";self.puntos+=20;self._mensaje("+20 pts: respetaste un momento vulnerable")
-   elif i==4 and self.casos[i] is None:
-    self.casos[i]="Comprobó que solo se derramó el hielo";self.puntos+=30;self._mensaje("+30 pts: era hielo de las butifarras, no una pelea")
-   elif i==5:
-    self._mensaje("La comparsa posa para el evento público. Clic y P para compartir.")
-   return
-  self._mensaje("Acércate a una situación o al puesto de Policía para interactuar.")
+   if self.cerca(i) and self.revelados[i] and self.casos[i] is None:
+    if i==1:self._resolver_caso(1,40,"Avisó a la turista")
+    elif i==4:self._mensaje("¡FOTO Y P!")
+    elif i==5:self._mensaje("¡FOTO SIGILOSA!")
+    else:self._mensaje("Sigue la señal")
+    return
+  self._mensaje("Busca el siguiente sello")
+
+ def _resolver_caso(self,i,puntos,decision):
+  if self.casos[i] is not None:return
+  bonus=min(30,self.racha_casos*10)
+  self.racha_casos+=1;self.casos_bien+=1;self.casos[i]=decision
+  total=puntos+bonus;self.puntos+=total;self.tiempo=min(180,self.tiempo+4)
+  self._popup(f"+{total}",self.x,PISO-210);self._mensaje(f"+{total} ¡Bien!");self.pop_puntos=.35
 
  def publicar(self):
-  if self.foto is None:self._mensaje("No tienes una foto encuadrada.");return
-  i=self.foto;dist=self.last_camera[1] if self.last_camera else 9999
-  if i==5:
-   self.casos[i]="Publicó una foto respetuosa de la comparsa";self.puntos+=35;self.likes+=120;self._mensaje("+35 pts: publicación pública y respetuosa")
-  elif i==0:
-   self.puntos=max(0,self.puntos-20);self.likes+=500;self._mensaje("−20 pts: publicaste una acusación sin verificar")
-  elif i==1:
-   if self.evidencia:self._mensaje("No publiques la prueba: llévala en privado a Policía.")
-   else:self._mensaje("No hay prueba válida que entregar a Policía.")
-  elif i==2:
-   self.puntos=max(0,self.puntos-35);self.likes+=500;self._mensaje("−35 pts: publicaste el pasabordo con datos privados")
-  elif i==3:
-   self.puntos=max(0,self.puntos-25);self.likes+=500;self._mensaje("−25 pts: publicaste un momento vulnerable")
-  elif i==4:
-   self.puntos=max(0,self.puntos-20);self.likes+=500;self._mensaje("−20 pts: compartiste morbo antes de verificar")
+  if self.foto is None:self._mensaje("No hay foto lista");return
+  i=self.foto
+  if i==4 and self.casos[4] is None:
+   self._resolver_caso(4,40,"Foto pública y respetuosa");self.likes+=120
+  elif i==2 and self.casos[2] is None:
+   self.puntos=max(0,self.puntos-20);self.casos[2]="ERROR: Publicó una imagen privada";self.racha_casos=0;self._mensaje("-20 Privado")
   self.foto=None;self.last_camera=None
 
  def _capturar_foto(self,mouse):
   mx,my=mouse;world_x=self._camara()+mx
-  candidatos=[i for i,p in enumerate(PUNTOS) if abs(world_x-p)<175 and 390<my<820]
-  if not candidatos:self._mensaje("Apunta el visor a una de las situaciones.");return
-  i=min(candidatos,key=lambda n:abs(world_x-PUNTOS[n]));dist=abs(self.x-PUNTOS[i]);self.foto=i;self.last_camera=(i,dist)
-  if i in (2,3) and dist<240 and self.apunte_t>=1:
-   self.tiempo=max(0,self.tiempo-10);self.puntos=max(0,self.puntos-10);self.casos[i]="Tomó foto de una persona vulnerable: invasión de privacidad";self.foto=None;self._mensaje("Privacidad: la persona se molestó. −10 s y −10 ciudadanía.");return
-  if i==1:
-   if not self.ocultando or self.amenaza:
-    self.tiempo=max(0,self.tiempo-8);self.x=max(0,self.x-110);self.casos[1]="Te vio grabando; el sospechoso escapó";self.final="MISIÓN FALLIDA: SOSPECHOSO ESCAPÓ";self.victoria=False;self._mensaje("¡Eche, qué grabas! Te empujó y escapó.");return
-   self.evidencia=True;self._mensaje("Foto sigilosa lista. Regresa a Zona 1 y usa E con Policía.")
-  elif dist>240:
-   self._mensaje("¿NARCO EN EL CORTISSOZ? · +500 likes (titular engañoso)")
-  elif i==2:self._mensaje("Privacidad: el código del boleto queda visible. Avísale con E.")
-  elif i==4:self._mensaje("Realidad: el hielo de sus butifarras se derramó.")
-  elif i==0:self._mensaje("Realidad: es maizena y harina de yuca; no es delito.")
-  elif i==3:self._mensaje("No publiques: la persona está pasando un mal momento.")
-  elif i==5:self._mensaje("La comparsa posa en un evento público.")
+  candidatos=[i for i,p in enumerate(PUNTOS) if abs(world_x-p)<175 and 350<my<PISO+40]
+  if not candidatos:self._mensaje("Enfoca una persona");return
+  i=min(candidatos,key=lambda n:abs(world_x-PUNTOS[n]));dist=abs(self.x-PUNTOS[i])
+  self.foto=i;self.last_camera=(i,dist)
+  if i==2:
+   self.puntos=max(0,self.puntos-20);self.casos[i]="ERROR: Foto de momento privado";self.racha_casos=0;self.foto=None;self._mensaje("-20 Privado");return
+  if i==5:
+   if self.ocultando and self.en_escondite and not self.amenaza:
+    self.flash_timer=.18;self.anim_event="foto_agachada" if self.ocultando else "foto_pie";self.anim_event_t=.30;self.animacion.seleccionar(self.anim_event)
+    self.evidencia=True;self.persecucion=20.;self._mensaje("¡CORRE AL POLICÍA!")
+   else:
+    self.tiempo=max(0,self.tiempo-3);self.casos[5]="ERROR: Detectado; sospechoso huyó";self.racha_casos=0;self.foto=None;self._mensaje("¡Eche, qué grabas!")
+   return
+  if i==4:self.flash_timer=.18;self.anim_event="foto_agachada" if self.ocultando else "foto_pie";self.anim_event_t=.30;self.animacion.seleccionar(self.anim_event);self._mensaje("¡FOTO Y P!")
+  else:self._mensaje("No publiques datos privados")
+
+ def _popup(self,texto,x,y):
+  self.flotante={"texto":texto,"x":x,"y":y,"t":1.0}
+
+ def _recoger_sellos(self):
+  py=PISO-90-(178*math.sin(math.pi*(.72-self.salto)/.72) if self.salto>0 else 0)
+  for sello in self.sellos:
+   if sello["recogido"]:continue
+   if abs(self.x-sello["x"])<48 and abs(py-sello["y"])<76:
+    sello["recogido"]=True;self.puntos+=5;self.pop_puntos=.35
+    self._popup("+5",self.x,sello["y"]-25)
+    self._mensaje("+5 Sello")
+    if self.sonido_tambor:
+     try:self.sonido_tambor.play()
+     except pygame.error:pass
+
+ def _actualizar_interacciones(self,dt):
+  for i,x in enumerate(PUNTOS):
+   if self.casos[i] is not None:continue
+   if abs(self.x-x)<=250:
+    self.investigacion[i]+=dt
+    if self.investigacion[i]>=.8 and not self.revelados[i]:
+     self.revelados[i]=True
+     if i==0:self._resolver_caso(i,30,"Confirmó que era maizena")
+     elif i==3:self._resolver_caso(i,30,"Era hielo derramado")
+     else:self._mensaje(("¡AVÍSALE!" if i==1 else "PRIVADO" if i==2 else "¡FOTO Y P!" if i==4 else "¡FOTO SIGILOSA!"))
+   else:self.investigacion[i]=0.
+  # Pasar de largo sin apuntar protege a la persona vulnerable.
+  if self.casos[2] is None and self.revelados[2] and self.x>=PUNTOS[2]+55 and self.apunte!=2:
+   self._resolver_caso(2,30,"Pasó de largo y respetó privacidad")
 
  def update(self,dt,keys,mouse):
-  if self.pausa or self.final:return
-  dt=min(dt,.05);self.elapsed+=dt
-  if self.loss_timer>0:self.loss_timer=max(0,self.loss_timer-dt)
-  else:self.tiempo=max(0,self.tiempo-dt)
-  self.salto=max(0,self.salto-dt);self.aviso_t=max(0,self.aviso_t-dt);self.walk_phase+=dt*10
+  if self.pausa or self.final or self.inicio:return
+  dt=min(dt,.05);self.elapsed+=dt;self.tiempo=max(0,self.tiempo-dt)
+  self.salto=max(0,self.salto-dt);self.aviso_t=max(0,self.aviso_t-dt);self.walk_phase+=dt*VELOCIDAD_CAMI/34
+  self.invulnerable=max(0,self.invulnerable-dt);self.parpadeo=max(0,self.parpadeo-dt);self.flash_timer=max(0,getattr(self,"flash_timer",0)-dt);self.anim_event_t=max(0,getattr(self,"anim_event_t",0)-dt);self.stumble_t=max(0,getattr(self,"stumble_t",0)-dt)
+  if self.anim_event_t==0:self.anim_event=""
+  self.pop_puntos=max(0,self.pop_puntos-dt)
+  if self.flotante:self.flotante["t"]-=dt;self.flotante["y"]-=28*dt
+  if self.flotante and self.flotante["t"]<=0:self.flotante=None
   left=keys[pygame.K_a] or keys[pygame.K_LEFT];right=keys[pygame.K_d] or keys[pygame.K_RIGHT]
   if left!=right:
-   direction=-1 if left else 1;self.facing=direction;self.x=max(0,min(MUNDO-100,self.x+direction*350*dt))
+   self.guia_camino=True
+   direction=-1 if left else 1;self.facing=direction;self.x=max(0,min(PUERTA_X,self.x+direction*VELOCIDAD_CAMI*dt))
   self.gaze_clock-=dt
-  if self.gaze_clock<=0:self.gaze_right=not self.gaze_right;self.gaze_clock=random.uniform(2.2,3.8)
+  if self.gaze_clock<=0:self.gaze_right=not self.gaze_right;self.gaze_clock=random.uniform(2.0,3.2)
   self.amenaza=self.gaze_clock<.65
-  # La alerta de privacidad se activa tras mantener el visor sobre una persona vulnerable.
   world_mouse=self._camara()+mouse[0]
-  apuntado=next((i for i in (2,3) if abs(world_mouse-PUNTOS[i])<90 and 430<mouse[1]<840),None)
-  if apuntado is not None:
-   if self.apunte==apuntado:self.apunte_t+=dt
-   else:self.apunte=apuntado;self.apunte_t=dt
-  else:self.apunte=None;self.apunte_t=0
-  # El respeto se registra al pasar junto a la persona sin apuntarle la cámara.
-  if self.casos[3] is None and self.apunte!=3 and abs(self.x-PUNTOS[3])<90:
-   self.casos[3]="Pasó de largo y respetó su intimidad";self.puntos+=20;self._mensaje("+20 pts: respetaste un momento vulnerable")
-  # El carrito cruza de verdad el pasillo; ocultarse o saltar evita perder tiempo.
+  self.apunte=2 if abs(world_mouse-PUNTOS[2])<90 and 430<mouse[1]<840 else None
+  self.apunte_t=self.apunte_t+dt if self.apunte is not None else 0.
+  self._actualizar_interacciones(dt)
+  refugios=(2240,3840,4660,5440,PUNTOS[5]-105)
+  self.en_escondite=any(abs(self.x-p)<125 for p in refugios)
+  self._recoger_sellos()
+  if self.persecucion>0:
+   self.persecucion=max(0,self.persecucion-dt)
+   if self.persecucion<=0 and self.evidencia:
+    self.evidencia=False;self.casos[5]="ERROR: El sospechoso escapó";self.racha_casos=0;self._mensaje("El sospechoso escapó")
   self.carrito_clock-=dt
   if self.carrito is None and self.carrito_clock<=0:
-   self.carrito={"x":self.x+520,"hit":False};self.carrito_clock=random.uniform(10,14);self.jump_avoid=False
+   self.carrito={"x":self.x+520,"hit":False};self.carrito_clock=random.uniform(7,10);self.jump_avoid=False
   if self.carrito:
-   self.carrito["x"]-=570*dt
-   if not self.carrito["hit"] and abs(self.carrito["x"]-self.x)<100:
+   self.carrito["x"]-=520*dt;dist=abs(self.carrito["x"]-self.x)
+   if 100<dist<260 and not self.carrito["hit"]:self._mensaje("¡SALTA!")
+   if not self.carrito["hit"] and dist<95 and self.invulnerable<=0:
     self.carrito["hit"]=True
-    if self.salto>0 or self.ocultando:self._mensaje("Evitaste el carrito de maletas.")
-    else:self.tiempo=max(0,self.tiempo-5);self.loss_timer=.5;self._mensaje("¡Carrito! Perdiste 5 s; salta o escóndete.")
+    if self.salto>0 or (self.ocultando and self.en_escondite):self._mensaje("¡Esquivaste!")
+    else:
+     self.tiempo=max(0,self.tiempo-3);self.invulnerable=1.5;self.parpadeo=1.5
+     self.animacion.seleccionar("empujon");self.stumble_t=.18;self.x=max(0,self.x-36);self._mensaje("-3 s Tropiezo")
    if self.carrito["x"]<self.x-180:self.carrito=None
-  if self.x>=MUNDO-125:self.final="LLEGASTE A GATE 7";self.victoria=True
+  for maleta in self.maletas:
+   if not maleta["hit"] and abs(maleta["x"]-self.x)<48 and self.invulnerable<=0:
+    maleta["hit"]=True
+    if self.salto>0 or (self.ocultando and self.en_escondite):self._mensaje("¡Esquivaste!")
+    else:
+     self.tiempo=max(0,self.tiempo-3);self.invulnerable=1.5;self.parpadeo=1.5
+     self.animacion.seleccionar("empujon");self.stumble_t=.18;self.x=max(0,self.x-36);self._mensaje("-3 s Tropiezo")
+  if self.evidencia and self.x<340:self._mensaje("¡Entrega a Policía!")
+  self._actualizar_animacion(dt,bool(left!=right))
   if self.tiempo<=0:self.final="VUELO PERDIDO";self.victoria=False
+
+ def _actualizar_animacion(self,dt,caminando):
+  nombre=self.animacion.nombre
+  if self.anim_event_t>0 or self.stumble_t>0:return
+  if nombre=="empujon" and not self.animacion.terminada():return
+  if nombre in ("foto_pie","foto_agachada") and self.animacion.terminada():
+   self.animacion.seleccionar("cuclillas" if self.ocultando else "idle");nombre=self.animacion.nombre
+  if self.salto>0:nuevo="salto"
+  elif self.ocultando:
+   if nombre not in ("agachar","cuclillas"):nuevo="agachar"
+   elif nombre=="agachar" and self.animacion.terminada():nuevo="cuclillas"
+   else:nuevo=nombre
+  elif nombre in ("agachar","cuclillas"):nuevo="levantarse"
+  elif nombre=="levantarse" and not self.animacion.terminada():nuevo=nombre
+  else:nuevo="walk" if caminando else "idle"
+  self.animacion.seleccionar(nuevo)
 
  def _escala_entera(self,img,factor=2):
   if img is None:return None
   return pygame.transform.scale(img,(img.get_width()*factor,img.get_height()*factor))
 
- def _sprite_en(self,s,nombre,screen_x,base_y,factor=2,flip=False,bob=0):
+ def _sprite_en(self,s,nombre,screen_x,base_y,factor=1,flip=False,bob=0):
   img=self.sprites.get(nombre)
   if img is None:return
   if factor!=1:img=self._escala_entera(img,factor)
-  if flip:img=pygame.transform.flip(img,True,False)
+  if flip:img=self.sprites_flip[nombre] if nombre in self.sprites_flip else pygame.transform.flip(img,True,False)
   anchor=self.anclajes.get(nombre,{}).get("anchor",[img.get_width()//(2*factor),img.get_height()//factor])
   ax,ay=int(anchor[0]*factor),int(anchor[1]*factor)
   s.blit(img,(int(screen_x-ax),int(base_y-ay+bob)))
@@ -235,75 +325,92 @@ class CurramGramGo:
   if img:s.blit(img,pos)
 
  def _draw_prop_personajes(self,s):
-  cam=self._camara();ground=764
-  # Policía aeroportuaria de turno.
-  self._sprite_en(s,"policia",180-cam,ground,2,bob=int(math.sin(self.elapsed*1.8)*2))
-  # Puesto con vendedor/letrero como grupo manual porque la hoja los superpone.
+  cam=self._camara();ground=PISO
+  self._sprite_en(s,"policia",180-cam,ground,1,bob=int(math.sin(self.elapsed*1.8)*2))
   self._sprite_en(s,"grupo_vendedor_letrero",1940-cam,ground,2)
-  # Seis situaciones representadas con los sprites reales de la hoja.
   for i,(x,nombre) in enumerate(zip(PUNTOS,NPC_SPRITES)):
    sx=x-cam
    if not -230<sx<ANCHO+230:continue
-   bob=0
-   if i==5:bob=int(math.sin(self.elapsed*5)*7)
-   elif i in (2,3,4):bob=int(math.sin(self.elapsed*1.4+i)*2)
-   flip=(i==1 and not self.gaze_right) or (i==0 and self.facing<0)
-   # Sombras elípticas sostienen los anclajes a pie.
-   sw=145 if i in (1,5) else 118
-   pygame.draw.ellipse(s,(89,73,64),(int(sx-sw//2),ground-5,sw,18))
-   self._sprite_en(s,nombre,sx,ground+bob,2,flip=flip)
-   if i==0:
-    # Bolsa sencilla de papel: no existe objeto equivalente en las hojas.
-    bag=pygame.Rect(int(sx+50),ground-105,34,38);pygame.draw.rect(s,(249,239,215),bag);pygame.draw.rect(s,(116,84,69),bag,3);pygame.draw.line(s,(175,135,97),bag.topleft,(bag.centerx,bag.top+8),3)
-    for j in range(2):pygame.draw.circle(s,(80,181,203),(int(sx+18+j*12),ground-300-j*11),4)
-   if i==5:
-    self._blit_escalado(s,"cartel_comparsa",(int(sx-96),ground-380),1)
-   if i==1:
-    # Indicador de mirada ? → !, y ojos en la dirección actual.
-    alert=self.sprites.get("alerta");self._blit_escalado(s,"alerta",(int(sx-75),400),1)
-    pygame.draw.circle(s,(231,74,59) if self.amenaza else (229,180,58),(int(sx),415),15)
-    texto(s,"!" if self.amenaza else "?",(int(sx),415),19,(255,255,255),True)
-  # Una pequeña comparsa recibe a los viajeros al inicio de la terminal.
-  for k,wx in enumerate((860,960,1060)):
+   bob=int(math.sin(self.elapsed*1.7+i)*3) if i in (4,5) else 0
+   flip=(i==5 and not self.gaze_right) or (i==0 and self.facing<0)
+   pygame.draw.ellipse(s,(89,73,64),(int(sx-58),ground-5,116,16))
+   self._sprite_en(s,nombre,sx,ground+bob,1,flip=flip)
+   # Iconos de estado por encima del NPC: investigación, acción o resultado.
+   cy=ground-ALTURA_PERSONAJE_PX-34
+   if self.casos[i] is None and not self.revelados[i]:
+    pygame.draw.circle(s,(244,188,54),(int(sx),cy),20);texto_con_contorno(s,"?",(sx,cy),25,(255,255,255),centro=True,grosor=1)
+    progreso=min(1,self.investigacion[i]/.8)
+    if progreso:pygame.draw.arc(s,(255,255,255),(sx-28,cy-28,56,56),-math.pi/2,-math.pi/2+math.tau*progreso,4)
+   elif self.casos[i] is not None:
+    error=str(self.casos[i]).startswith("ERROR:");pygame.draw.circle(s,(207,72,80) if error else (67,166,110),(int(sx),cy),19)
+    if error:pygame.draw.line(s,(255,255,255),(sx-7,cy-7),(sx+7,cy+7),4);pygame.draw.line(s,(255,255,255),(sx+7,cy-7),(sx-7,cy+7),4)
+    else:pygame.draw.lines(s,(255,255,255),False,[(sx-8,cy),(sx-2,cy+7),(sx+9,cy-8)],4)
+    if not error:
+     etiqueta_ok={0:"NO ES DELITO",1:"AVISÓ",2:"PRIVADO",3:"SOLO HIELO",4:"FOTO Y P",5:"POLICÍA"}.get(i,"OK")
+     texto_con_contorno(s,etiqueta_ok,(sx,cy+29),18,(255,255,255),centro=True,grosor=2)
+   else:
+    colors={1:(79,149,211),2:(205,73,84),4:(67,166,110),5:(225,143,57)}
+    pygame.draw.circle(s,colors.get(i,(67,166,110)),(int(sx),cy),20)
+    etiqueta={1:"E",2:"PRIVADO",4:"FOTO + P",5:("S" if self.amenaza else "FOTO")}.get(i,"OK")
+    if i==5:
+     ojo=(227,65,69) if self.amenaza else (68,179,118)
+     pygame.draw.ellipse(s,ojo,(sx-12,cy-8,24,16));pygame.draw.circle(s,(255,255,255),(int(sx),cy),4)
+    texto_con_contorno(s,etiqueta,(sx,cy+29),18,(255,255,255),centro=True,grosor=2)
+  # Refugios marcados y teclas de sigilo junto a los pilares existentes.
+  for wx in (2240,3840,4660,5440,PUNTOS[5]-105):
    sx=wx-cam
-   if -100<sx<ANCHO+100:
-    pygame.draw.ellipse(s,(89,73,64),(int(sx-45),ground-4,90,14))
-    self._sprite_en(s,"bailarina_comparsa",sx,ground+int(math.sin(self.elapsed*5+k)*5),2,flip=bool(k%2))
-  # Pasajeros de sala de espera y comparsa adicional como personajes de fondo.
-  for wx,name in ((3800,"pasajero_sentado_1"),(4480,"senor_sentado")):
-   sx=wx-cam
-   if 80<sx<ANCHO-80:self._sprite_en(s,name,sx,ground-2,2,bob=int(math.sin(self.elapsed*1.2+wx)*2))
-  # Vendedor/puesto de comida en zona 2 se marca con su cartel recortado.
-  self._blit_escalado(s,"letrero_butifarras",(int(1820-cam),485),2)
+   if -50<sx<ANCHO+50:
+    pygame.draw.ellipse(s,(95,183,122),(sx-42,ground-7,84,18),3)
+    key=self.sprites.get("tecla_s_sigilo")
+    if key:s.blit(key,key.get_rect(center=(sx,ground-28)))
+  if self.carrito:
+   sx=self.carrito["x"]-cam
+   if -120<sx<ANCHO+120:pygame.draw.ellipse(s,(240,186,57),(sx-58,ground-200,116,36),4);texto_con_contorno(s,"¡SALTA!",(sx,ground-182),22,(255,255,255),centro=True,grosor=2)
+  for maleta in self.maletas:
+   sx=maleta["x"]-cam
+   if not maleta["hit"] and -30<sx<ANCHO+30:
+    pygame.draw.rect(s,(170,104,76),(int(sx-15),ground-22,30,20));pygame.draw.rect(s,(242,209,157),(int(sx-11),ground-18,22,12),2);pygame.draw.line(s,(80,61,59),(sx-4,ground-23),(sx+4,ground-23),3)
+  # Puerta del mundo, además del indicador pequeño del HUD.
+  door_x=PUERTA_X-cam
+  if -160<door_x<ANCHO+160:
+   self._blit_escalado(s,"puerta_embarque",(int(door_x-70),ground-190),1)
+   texto_con_contorno(s,"E PARA ABORDAR",(door_x,ground-205),23,(255,255,255),centro=True,grosor=2)
+  self._dibujar_sellos(s,cam)
+
+ def _dibujar_sellos(self,s,cam):
+  for i,sello in enumerate(self.sellos):
+   if sello["recogido"]:continue
+   sx=sello["x"]-cam;sy=sello["y"]
+   if not -30<sx<ANCHO+30:continue
+   # Insignia pixel art nueva (no hay un sello equivalente en las hojas).
+   pygame.draw.rect(s,(67,166,110),(int(sx-13),int(sy-13),26,26))
+   pygame.draw.rect(s,(227,245,212),(int(sx-8),int(sy-8),16,16))
+   pygame.draw.rect(s,(65,147,97),(int(sx-5),int(sy),4,5));pygame.draw.rect(s,(65,147,97),(int(sx-2),int(sy+3),4,3));pygame.draw.rect(s,(65,147,97),(int(sx+1),int(sy-4),5,4))
+   if i%4==0:pygame.draw.circle(s,(255,241,150),(int(sx+15),int(sy-14)),3)
 
  def _draw_player(self,s):
-  sx=self.x-self._camara();ground=764
-  jump_y=0
-  if self.salto>0:jump_y=int(178*math.sin(math.pi*(.72-self.salto)/.72))
-  bob=0 if self.ocultando or self.salto>0 else int(abs(math.sin(self.walk_phase))*5) if self.facing else 0
-  # La sombra permanece en el piso durante el salto.
-  pygame.draw.ellipse(s,(96,76,66),(int(sx-70),ground-3,140,18))
+  sx=self.x-self._camara();ground=PISO
+  jump_y=int(178*math.sin(math.pi*(.72-self.salto)/.72)) if self.salto>0 else 0
   moving=bool(self.facing and not self.ocultando and self.salto<=0)
-  state="salto" if self.salto>0 else "cuclillas" if self.ocultando else "walk" if moving else "idle"
-  self.animacion.seleccionar(state)
-  frame=self.animacion.cuadro(1/FPS if moving else 0)
+  bob=0 if self.ocultando or self.salto>0 else int(abs(math.sin(self.walk_phase))*3) if moving else 0
+  shadow_scale=max(.35,1-jump_y/230)
+  pygame.draw.ellipse(s,(96,76,66),(int(sx-65*shadow_scale),ground-3, int(130*shadow_scale),13))
+  frame=self.animacion.cuadro(1/FPS)
   img=self.sprites.get(frame)
-  if img:
-   factor=2;scaled=self._escala_entera(img,factor)
-   if self.facing<0:scaled=pygame.transform.flip(scaled,True,False)
-   if self.ocultando:scaled=pygame.transform.scale(scaled,(scaled.get_width(),int(scaled.get_height()*.68)))
-   anchor=self.anclajes.get(frame,{}).get("anchor",[img.get_width()//2,img.get_height()])
-   ax=int(anchor[0]*factor);ay=int(anchor[1]*factor)
-   if self.ocultando:ay=int(ay*.68)
-   s.blit(scaled,(int(sx-ax),int(ground-ay-jump_y+bob)))
-  if self.ocultando:
-   # Señal de sigilo, no sustituye el arte del personaje.
-   panel(s,pygame.Rect(int(sx-64),ground-335,128,40),(229,246,217),(70,127,84),8,2);texto(s,"SIGILO",(int(sx),ground-315),19,(50,108,68),True)
+  if img and (self.invulnerable<=0 or int(self.elapsed*14)%2==0):
+   rendered=self.sprites_flip.get(frame,img) if self.facing<0 else img
+   ax,ay=self.anclajes.get(frame,{}).get("anchor",[img.get_width()//2,img.get_height()])
+   s.blit(rendered,(int(sx-ax),int(ground-ay-jump_y+bob)))
+  if self.ocultando and self.en_escondite:
+   key=self.sprites.get("tecla_s_sigilo")
+   if key:s.blit(key,key.get_rect(center=(int(sx),ground-207)))
+  if self.flash_timer>0:
+   flash=pygame.Surface((110,110),pygame.SRCALPHA);flash.fill((255,255,230,150));s.blit(flash,(int(sx-55),ground-225))
 
  def _draw_carrito(self,s):
   if not self.carrito:return
   sx=self.carrito["x"]-self._camara()
-  if -190<sx<ANCHO+190:self._sprite_en(s,"trabajador_carrito",sx,764,2,flip=True)
+  if -190<sx<ANCHO+190:self._sprite_en(s,"trabajador_carrito",sx,PISO,1,flip=True)
 
  def _draw_camera(self,s,mouse):
   mx,my=mouse;pygame.draw.rect(s,(246,249,232),(mx-46,my-38,92,76),4);pygame.draw.line(s,(246,249,232),(mx-58,my),(mx+58,my),3);pygame.draw.line(s,(246,249,232),(mx,my-51),(mx,my+51),3)
@@ -314,38 +421,61 @@ class CurramGramGo:
    panel(s,pygame.Rect(ANCHO-300,205,260,54),(239,247,226),(77,113,80),10,2);texto(s,"FOTO LISTA · P",(ANCHO-170,232),20,(55,88,63),True)
 
  def _draw_hud(self,s):
-  # Paneles, nombre de ciudad, aeropuerto y gates de la hoja.
-  self._blit_escalado(s,"titulo",(40,24),2)
-  self._blit_escalado(s,"barranquilla",(640,24),2);self._blit_escalado(s,"aeropuerto",(930,20),2);self._blit_escalado(s,"gates_1_10",(1412,27),2)
-  # Píldora original con el reloj/ciudadanía dinámicos encima.
-  pill=self._escala_entera(self.sprites.get("hud_pildora"),2)
-  if pill:
-   # El sprite contiene un ejemplo impreso; cubre solo el interior, no el marco del HUD.
-   pygame.draw.rect(pill,(255,247,228),(22,12,pill.get_width()-44,pill.get_height()-24))
-   s.blit(pill,(623,112))
-  texto(s,f"{int(self.tiempo//60)}:{int(self.tiempo%60):02} / 2:00   ·   CIUDADANÍA: {self.puntos} PTS",(960,147),25,(63,52,57),True)
-  self._blit_escalado(s,"puerta_embarque",(ANCHO-40-154,182),2)
-  self._draw_zonas(s)
-  # Reloj inferior y cámara, dentro del margen seguro.
-  self._blit_escalado(s,"icono_camara",(48,730),2)
-  reloj=self._escala_entera(self.sprites.get("reloj_grande"),2)
-  if reloj:
-   pygame.draw.rect(reloj,(255,218,113),(47,29,151,55))
-   s.blit(reloj,(40,812))
-  texto(s,f"{int(self.tiempo//60)}:{int(self.tiempo%60):02}",(163,869),44,(100,49,44),True)
-  # Barra inferior fija: teclas reales y etiquetas textuales, sin tecla F.
+  titulo=self._escala_entera(self.sprites.get("titulo"),1)
+  if titulo:s.blit(titulo,(32,18))
+  pop=1.0+max(0,self.pop_puntos)/.35*.10
+  score=fuente(round(54*pop),True).render(f"CIUDADANÍA  {self.puntos}",True,(255,248,226))
+  rect=score.get_rect(center=(990,54))
+  texto_con_contorno(s,f"CIUDADANÍA  {self.puntos}",(990,54),round(54*pop),(255,248,226),centro=True,grosor=4,negrita=True)
+  texto_con_contorno(s,f"{int(self.tiempo//60)}:{int(self.tiempo%60):02}",(1780,55),38,(255,248,226),centro=True,grosor=3,negrita=True)
+  texto_con_contorno(s,"LLEGA A LA PUERTA 7",(42,112),32,(255,248,226),grosor=3,negrita=True)
+  pygame.draw.rect(s,(57,48,65),(42,155,440,20),border_radius=8)
+  pygame.draw.rect(s,(83,167,200),(42,155,round(440*min(1,self.x/PUERTA_X)),20),border_radius=8)
+  # Meta de estrellas por ciudadanía, con hitos visibles.
+  pygame.draw.rect(s,(57,48,65),(650,137,620,22),border_radius=9)
+  pygame.draw.rect(s,(102,185,123),(650,137,round(620*min(1,self.puntos/ESTRELLAS_CURRAM[-1])),22),border_radius=9)
+  for umbral in ESTRELLAS_CURRAM:
+   px=650+round(620*umbral/ESTRELLAS_CURRAM[-1]);pygame.draw.polygon(s,(255,226,126),[(px,126),(px+4,135),(px+14,136),(px+7,143),(px+9,153),(px,148),(px-9,153),(px-7,143),(px-14,136),(px-4,135)])
+  for i in range(6):
+   status=self.casos[i];color=(145,143,145) if status is None else (208,73,82) if str(status).startswith("ERROR:") else (72,170,112)
+   cx=1400+i*78;pygame.draw.circle(s,color,(cx,148),20);texto(s,str(i+1),(cx,148),22,(255,255,255),True,True)
+  # Controles breves con los iconos de las teclas de la hoja.
   pygame.draw.rect(s,(52,43,51),(40,958,ANCHO-80,82),border_radius=17);pygame.draw.rect(s,(181,142,111),(40,958,ANCHO-80,82),3,border_radius=17)
-  grupos=[("tecla_a", "A / D  CAMINAR"),("tecla_s","S / ↓  SIGILO"),("tecla_space","ESPACIO  SALTAR"),("tecla_e","E  INTERACTUAR"),("tecla_camara","MOUSE + CLIC  FOTO"),("tecla_p","P  PUBLICAR")]
-  centros=(390,625,880,1123,1378,1615)
+  grupos=[("tecla_a","A/D"),("tecla_space","SALTAR"),("tecla_s","ESCONDER"),("tecla_e","AVISAR"),("tecla_camara","FOTO"),("tecla_p","PUBLICAR")];centros=(330,585,840,1095,1350,1605)
   for (key,label),cx in zip(grupos,centros):
-   factor=1 if key=="tecla_space" else 1
-   img=self._escala_entera(self.sprites.get(key),factor)
-   if img:s.blit(img,img.get_rect(center=(cx,990)))
-   texto(s,label,(cx,1026),18,(255,246,228),True)
-  # Gate de la barra inferior.
-  self._blit_escalado(s,"gate_7",(ANCHO-40-60,955),1)
+   img=self.sprites.get(key)
+   if img:s.blit(img,img.get_rect(center=(cx,988)))
+   texto_con_contorno(s,label,(cx,1027),24,(255,246,228),centro=True,grosor=2,negrita=True)
   if self.evidencia:
-   panel(s,pygame.Rect(42,744,280,42),(236,246,222),(62,119,79),9,2);texto(s,"PRUEBA SEGURA · LLEVAR A POLICÍA",(182,765),15,(49,98,61),True)
+   texto_con_contorno(s,"¡CORRE AL POLICÍA!",(960,225),42,(255,246,222),centro=True,grosor=4,negrita=True)
+   pygame.draw.polygon(s,(255,225,120),[(1000,265),(982,298),(1018,298)])
+   pygame.draw.rect(s,(54,48,61),(810,305,300,16),border_radius=7)
+   pygame.draw.rect(s,(223,110,77),(810,305,round(300*self.persecucion/20),16),border_radius=7)
+  elif self.carrito and 100<abs(self.carrito["x"]-self.x)<260:
+   texto_con_contorno(s,"¡SALTA!",(960,225),40,(255,246,222),centro=True,grosor=4,negrita=True)
+  if self.flotante:
+   sx=self.flotante["x"]-self._camara();texto_con_contorno(s,self.flotante["texto"],(sx,self.flotante["y"]),30,(255,241,153),centro=True,grosor=3,negrita=True)
+  if self.aviso_t>0:pass
+
+ def _draw_inicio(self,s):
+  velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((22,19,32,210));s.blit(velo,(0,0))
+  panel(s,pygame.Rect(350,230,1220,610),(37,31,48),(239,222,190),26,5)
+  texto_con_contorno(s,"CAMINA · JUNTA SELLOS · RESUELVE",(960,320),52,(255,247,224),centro=True,grosor=4,negrita=True)
+  lineas=("A / D: LLEGA A LA PUERTA 7", "JUNTA SELLOS. AYUDA. ESQUIVA.", "NO PUBLIQUES CHISMES NI DATOS PRIVADOS.")
+  for i,linea in enumerate(lineas):texto_con_contorno(s,linea,(960,420+i*78),36,(255,255,255),centro=True,grosor=3,negrita=True)
+  texto_con_contorno(s,"ESPACIO PARA EMPEZAR",(960,750),35,(255,225,126),centro=True,grosor=3,negrita=True)
+
+ def _draw_guia(self,s):
+  key=label=None
+  if not self.guia_camino:key="tecla_a";label="A / D CAMINAR"
+  elif self.carrito and not self.guia_salto and 100<abs(self.carrito["x"]-self.x)<260:key="tecla_space";label="¡SALTA!"
+  elif self.cerca(5) and not self.guia_sigilo:key="tecla_s_sigilo";label="S ESCONDERSE"
+  elif self.cerca(1) and self.revelados[1] and not self.guia_aviso:key="tecla_e";label="E PARA AVISAR"
+  if not key:return
+  panel(s,pygame.Rect(60,855,360,82),(39,34,52),(248,224,171),16,3)
+  img=self.sprites.get(key)
+  if img:s.blit(img,img.get_rect(center=(120,895)))
+  texto_con_contorno(s,label,(280,895),27,(255,255,255),centro=True,grosor=2,negrita=True)
 
  def _draw_notificacion(self,s):
   if self.aviso_t<=0:return
@@ -353,16 +483,17 @@ class CurramGramGo:
   texto(s,self.aviso,(ANCHO//2,871),24,(69,51,57),True)
 
  def _draw_final(self,s):
-  balance=f"Ciudadanía {self.puntos} pts · Likes {self.likes}"
-  lineas=[balance]
-  for i,(nombre,real,aprendizaje) in enumerate(CASOS):
-   decision=self.casos[i] or "Pendiente"
-   lineas.append(f"{'OK' if self.casos[i] else '--'}  {nombre}: {decision}")
+  estrellas=sum(self.puntos>=umbral for umbral in ESTRELLAS_CURRAM) if self.victoria else 0
+  lineas=[f"CIUDADANÍA {self.puntos} · {estrellas} ESTRELLAS"]
+  for i,(nombre,leccion) in enumerate(CASOS):
+   estado="Pendiente" if self.casos[i] is None else "ERROR" if str(self.casos[i]).startswith("ERROR:") else "OK"
+   lineas.append(f"{estado} · {nombre}: {leccion}")
   pantalla_final(s,"PERFIL CURRAMGRAM · "+str(self.final),lineas,"R PARA REINICIAR")
 
  def draw(self,s,mouse=(960,540)):
   self._dibujar_fondo(s);self._draw_prop_personajes(s);self._draw_carrito(s);self._draw_player(s)
-  self._draw_hud(s);self._draw_camera(s,mouse);self._draw_notificacion(s)
+  self._draw_hud(s);self._draw_camera(s,mouse);self._draw_notificacion(s);self._draw_guia(s)
+  if self.inicio:self._draw_inicio(s);return
   if self.pausa:self.rects=menu_pausa(s,["Continuar","Reiniciar","Salir"],self.sel,cursor=mouse)
   if self.final:self._draw_final(s)
 

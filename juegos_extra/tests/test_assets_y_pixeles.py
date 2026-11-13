@@ -50,15 +50,18 @@ class AssetsYPixelesTest(unittest.TestCase):
 
     def test_capturas_1920_muestran_sprites_en_regiones_clave(self):
         carpeta = ROOT / "_capturas"
+        escala=5/6
         e = EmojiCatch(); ec = pygame.image.load(str(carpeta / "emoji_catch_1920x1080.png"))
-        eb = pygame.Surface((1920,1080)); e._draw_fondo(eb)
+        eb = pygame.Surface((1920,1080)); e._draw_fondo(eb); eb=pygame.transform.scale(eb,ec.get_size())
         for rect in ((48,24,680,80),(40,300,152,436),(1728,300,152,436),(390,690,340,340),(1190,690,340,340)):
+            rect=tuple(round(v*escala) for v in rect)
             self.assertGreater(diferencias(ec,eb,rect),60, f"Región vacía de Emoji Catch: {rect}")
         c = CurramGramGo(); cc = pygame.image.load(str(carpeta / "curramgram_go_1920x1080.png"))
-        cb = pygame.Surface((1920,1080)); c._dibujar_fondo(cb)
+        cb = pygame.Surface((1920,1080)); c._dibujar_fondo(cb); cb=pygame.transform.scale(cb,cc.get_size())
+        self.assertLessEqual(cc.get_width(),1600)
         # En la captura de referencia Cami está cerca del centro del pasillo.
-        self.assertGreater(diferencias(cc,cb,(730,430,250,360)),120)
-        self.assertGreater(diferencias(cc,cb,(35,15,580,150)),100)
+        self.assertGreater(diferencias(cc,cb,tuple(round(v*escala) for v in (730,430,250,360))),90)
+        self.assertGreater(diferencias(cc,cb,tuple(round(v*escala) for v in (35,15,580,150))),70)
 
 
 if __name__ == "__main__":

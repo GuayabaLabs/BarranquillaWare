@@ -27,28 +27,32 @@ def capturar(nombre, tipo_juego, dibujar):
                 juego.items.clear()
                 for tipo,x,y in (("emoji_enojado_naranja",425,465),("emoji_corazon",1230,610),("emoji_bolsa_dinero",1510,355)):
                     juego._nuevo_item(tipo,x);juego.items[-1]["y"]=y
-                if modo=="final":juego.final="BALANCE LOGRADO";juego.victoria=True;juego.estrellas=2;juego.porcentaje_equilibrio=.52;juego.tiempo_equilibrio=62.4;juego.elapsed=120;juego.tiempo=0
+                if modo=="final":juego.final="BALANCE LOGRADO";juego.victoria=True;juego.estrellas=1;juego.porcentaje_equilibrio=.52;juego.tiempo_equilibrio=62.4;juego.elapsed=120;juego.tiempo=0
             else:
-                juego.x=1220;juego.tiempo=102.0;juego.puntos=145
-                juego.aviso="Explora con respeto y confirma antes de publicar.";juego.aviso_t=4
-                if modo=="final":juego.final="LLEGASTE A GATE 7";juego.victoria=True;juego.casos=["Verificado","Evidencia entregada","Avisó","Respetó","Comprobó","Foto pública"]
+                juego.inicio=False;juego.x=350;juego.tiempo=102.0;juego.puntos=145
+                juego.aviso="+5 Sello";juego.aviso_t=4
+                juego.revelados[0]=True;juego.investigacion[0]=.45
+                if modo=="final":
+                    juego.final="LLEGASTE A GATE 7";juego.victoria=True;juego.puntos=375
+                    juego.casos=["Confirmó que era maizena","Avisó a la turista","Pasó de largo y respetó privacidad","Era hielo derramado","Foto pública y respetuosa","Evidencia entregada a Policía"]
             juego.pausa=(modo=="pausa")
             dibujar(juego,ventana.canvas)
             ventana.presentar((249,229,239))
-            out=RAIZ_EXTRA/"_capturas"/f"{nombre}_{modo}_{ancho}x{alto}.png"
+            sufijo="" if modo=="juego" else f"_{modo}"
+            out=RAIZ_EXTRA/"_capturas"/f"{nombre}{sufijo}_{ancho}x{alto}.png"
             pygame.image.save(ventana.window,str(out))
-            # Preview para inspección visual segura (ancho máximo 1600 px).
+            # Los renders 1920×1080 se guardan reducidos para inspección segura.
             from PIL import Image
             preview=Image.open(out)
             if preview.width>1600:
                 preview.thumbnail((1600,1600),Image.Resampling.LANCZOS)
-                preview.save(out.with_name(out.stem+"_preview.png"))
+                preview.save(out)
 
 def main():
     pygame.init()
     (RAIZ_EXTRA / "_capturas").mkdir(exist_ok=True)
-    capturar("emoji_catch", EmojiCatch, lambda juego, canvas: juego.draw(canvas))
-    capturar("curramgram_go", CurramGramGo, lambda juego, canvas: juego.draw(canvas))
+    capturar("emoji_catch", EmojiCatch, lambda juego, canvas: juego.draw(canvas,(80,80)))
+    capturar("curramgram_go", CurramGramGo, lambda juego, canvas: juego.draw(canvas,(80,80)))
     pygame.quit()
 
 

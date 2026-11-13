@@ -15,3 +15,6 @@ class Animacion:
         if d.get('loop',True):n%=len(frames)
         else:n=min(n,len(frames)-1)
         return frames[n]
+    def terminada(self):
+        d=self.defs[self.nombre]
+        return not d.get('loop',True) and self.t>=float(d['duracion'])*len(d['frames'])

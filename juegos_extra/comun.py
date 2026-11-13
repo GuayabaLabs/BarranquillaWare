@@ -129,7 +129,7 @@ def fuente(tamano=28, negrita=False):
 
 
 def cargar_imagen(nombre, tamano=None, alpha=True, carpeta="assets"):
-    """Carga el archivo exacto; solo el modo tolerante permite un respaldo None."""
+    """Carga el archivo exacto; falla con ErrorRecursos salvo modo tolerante explícito."""
     ruta = _ruta_recurso(Path(carpeta) / nombre)
     try:
         if not ruta.is_file():
@@ -144,7 +144,7 @@ def cargar_imagen(nombre, tamano=None, alpha=True, carpeta="assets"):
 
 
 def cargar_sprite(nombre, grupo):
-    """Carga recortes propios; el escalado se deja al juego para que sea entero."""
+    """Carga un recorte requerido; los errores conservan la ruta que se intentó."""
     return cargar_imagen(nombre, carpeta=f"juegos_extra/assets/{grupo}")
 
 
