@@ -206,3 +206,20 @@ class AudioManager:
             self._whistle_sound.set_volume(self.sfx_volume * 0.7)
             self._whistle_sound.play()
 
+    def get_pitched_sound(self, sound: pygame.mixer.Sound, pitch_factor: float) -> pygame.mixer.Sound:
+        """
+        Modula dinámicamente el tono (pitch) de un Sound mediante remuestreo de numpy.
+        Útil para generar variaciones de voz por personaje cuando no existen audios grabados propios.
+        """
+        if abs(pitch_factor - 1.0) < 0.02 or not pygame.mixer.get_init():
+            return sound
+        try:
+            arr = pygame.sndarray.array(sound)
+            n_samples = len(arr)
+            indices = np.round(np.arange(0, n_samples, pitch_factor)).astype(int)
+            indices = indices[indices < n_samples]
+            pitched_arr = arr[indices]
+            return pygame.sndarray.make_sound(pitched_arr)
+        except Exception:
+            return sound
+
