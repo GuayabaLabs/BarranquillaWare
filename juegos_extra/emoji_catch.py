@@ -125,7 +125,7 @@ class EmojiCatch:
                             if i==0:self.pausa=False
                             elif i==1:self.reiniciar()
                             else:running=False
-            else:self.update(dt,pygame.key.get_pressed())
+            else:self.update(dt,a["held"])
             self.draw(s); pygame.display.flip()
         pygame.quit()
 

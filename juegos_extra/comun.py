@@ -39,18 +39,31 @@ def panel(superficie, rect, color=(255, 247, 234), borde=(94, 66, 73), radio=18,
     pygame.draw.rect(superficie, borde, rect, ancho, border_radius=radio)
 
 
+def boton(superficie, rect, etiqueta, seleccionado=False, cursor=None):
+    """Dibuja un botón con respuesta visual y reporta si el cursor lo cubre."""
+    cursor = cursor if cursor is not None else pygame.mouse.get_pos()
+    hover = rect.collidepoint(cursor)
+    panel(superficie, rect, (228, 222, 250) if seleccionado or hover else (255, 255, 255), (105, 79, 135), 14, 2)
+    texto(superficie, etiqueta, rect.center, 30, centro=True)
+    return hover
+
+
 def leer_entrada(eventos):
     """Traduce eventos de teclado y ratón en acciones simples."""
-    acciones = {"pausa": False, "reiniciar": False, "salir": False, "click": None, "teclas": set()}
+    acciones = {"pausa": False, "reiniciar": False, "salir": False, "click": None, "teclas": set(), "soltadas": set()}
     for evento in eventos:
         if evento.type == pygame.KEYDOWN:
             acciones["teclas"].add(evento.key)
             if evento.key == pygame.K_ESCAPE: acciones["pausa"] = True
             if evento.key == pygame.K_r: acciones["reiniciar"] = True
+        elif evento.type == pygame.KEYUP:
+            acciones["soltadas"].add(evento.key)
         elif evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
             acciones["click"] = evento.pos
         elif evento.type == pygame.QUIT:
             acciones["salir"] = True
+    acciones["held"] = pygame.key.get_pressed()
+    acciones["mouse"] = pygame.mouse.get_pos()
     return acciones
 
 
@@ -63,8 +76,7 @@ def menu_pausa(pantalla, opciones, seleccionado=0):
     rects = []
     for i, opcion in enumerate(opciones):
         r = pygame.Rect(720, 455 + i * 90, 480, 68)
-        panel(pantalla, r, (228, 222, 250) if i == seleccionado else (255, 255, 255), (105, 79, 135), 14, 2)
-        texto(pantalla, opcion, r.center, 30, centro=True)
+        boton(pantalla, r, opcion, seleccionado=(i == seleccionado))
         rects.append(r)
     return rects
 

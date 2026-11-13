@@ -72,9 +72,9 @@ class CurramGramGo:
   elif i==3:self.mensaje("No apuntes: la persona está pasando un mal momento.")
   elif i==4:self.mensaje("Realidad: se derramó el hielo de sus butifarras.")
   elif i==5:self.mensaje("La comparsa posa feliz para el evento público.")
- def tomar_foto(self):
+ def tomar_foto(self, mouse_pos=None):
   # Apunta con retícula del mouse; sólo activa dentro del cuadro de cámara central.
-  mx,my=pygame.mouse.get_pos(); world_x=self.x+(mx-ANCHO/2)
+  mx,my=mouse_pos or pygame.mouse.get_pos(); world_x=self.x+(mx-ANCHO/2)
   i=min(range(6),key=lambda n:abs(world_x-PUNTOS[n]))
   if abs(world_x-PUNTOS[i])>190:self.mensaje("Apunta el cuadro a una situación.");return
   if i in (2,3) and abs(self.x-PUNTOS[i])<250:
@@ -89,14 +89,14 @@ class CurramGramGo:
    else:self.mensaje("Foto sigilosa tomada. Corre a Zona 1 y avisa a Policía.")
   elif i==2 and distancia<220:self.mensaje("Privacidad: el código del boleto queda visible. Usa E para avisar.")
   else:self.revelar(i)
- def update(self,dt,keys):
+ def update(self,dt,keys,mouse_pos=None):
   if self.pausa or self.final:return
   if self.perdida>0:self.perdida=max(0,self.perdida-dt)
   else:self.tiempo=max(0,self.tiempo-dt)
   if self.salto>0:self.salto=max(0,self.salto-dt)
   if self.aviso_t>0:self.aviso_t-=dt
   if self.apunte_t>0:self.apunte_t-=dt
-  mx,my=pygame.mouse.get_pos(); world_x=self.x+(mx-ANCHO/2)
+  mx,my=mouse_pos or pygame.mouse.get_pos(); world_x=self.x+(mx-ANCHO/2)
   candidato=min(range(6),key=lambda n:abs(world_x-PUNTOS[n]))
   if candidato in (2,3) and abs(world_x-PUNTOS[candidato])<150:
    if self.apunte==candidato:self.apunte_t+=dt
@@ -123,7 +123,7 @@ class CurramGramGo:
   if i==4:pygame.draw.ellipse(s,(239,239,227),(sx-42,sy+51,30,34));
   if i==5:
    for j in range(3):pygame.draw.circle(s,[(215,67,65),(245,192,57),(60,146,179)][j],(sx-22+j*23,sy-28),11)
- def draw(self,s):
+ def draw(self,s,mouse_pos=None):
   if self.fondo:s.blit(self.fondo,(0,0))
   else:s.fill((215,222,213))
   # Cabecera independiente
@@ -161,7 +161,7 @@ class CurramGramGo:
   else:pygame.draw.rect(s,(62,110,168),(me_x-28,me_y-75,56,75),border_radius=14);pygame.draw.circle(s,(220,172,135),(me_x,me_y-91),22)
   if self.ocultando:pygame.draw.ellipse(s,(80,148,102,160),(me_x-46,me_y-94,92,100),4);texto(s,"SIGILO",(me_x,me_y-120),19,(36,111,69),True)
   # retícula de cámara
-  mx,my=pygame.mouse.get_pos();pygame.draw.rect(s,(245,255,235),(mx-35,my-30,70,60),3);pygame.draw.line(s,(245,255,235),(mx-44,my),(mx+44,my),2);pygame.draw.line(s,(245,255,235),(mx,my-42),(mx,my+42),2)
+  mx,my=mouse_pos or pygame.mouse.get_pos();pygame.draw.rect(s,(245,255,235),(mx-35,my-30,70,60),3);pygame.draw.line(s,(245,255,235),(mx-44,my),(mx+44,my),2);pygame.draw.line(s,(245,255,235),(mx,my-42),(mx,my+42),2)
   if self.foto is not None:panel(s,pygame.Rect(ANCHO-310,205,280,50),(244,251,229));texto(s,"FOTO LISTA · P",(ANCHO-170,230),20,centro=True)
   if self.apunte_t>=1.0:panel(s,pygame.Rect(ANCHO//2-150,220,300,58),(255,218,218),(175,43,53));texto(s,"PRIVACIDAD",(ANCHO//2,249),25,(153,34,45),True)
   # Meta visible al final
@@ -192,10 +192,10 @@ class CurramGramGo:
   while running:
    dt=min(clock.tick(FPS)/1000,.05);events=pygame.event.get();a=leer_entrada(events)
    if a["salir"]:break
-   for e in events:
-    if e.type==pygame.KEYDOWN and not self.pausa and not self.final:self.keydown(e.key)
-    if e.type==pygame.KEYUP:self.keyup(e.key)
-    if e.type==pygame.MOUSEBUTTONDOWN and e.button==1 and not self.pausa and not self.final:self.tomar_foto()
+   for tecla in a["teclas"]:
+    if not self.pausa and not self.final:self.keydown(tecla)
+   for tecla in a["soltadas"]:self.keyup(tecla)
+   if a["click"] and not self.pausa and not self.final:self.tomar_foto(a["click"])
    if self.final and pygame.K_r in a["teclas"]:self.reiniciar()
    elif pygame.K_ESCAPE in a["teclas"] and not self.final:self.pausa=not self.pausa
    elif self.pausa:
@@ -211,9 +211,8 @@ class CurramGramGo:
        if i==0:self.pausa=False
        elif i==1:self.reiniciar()
        else:running=False
-   else:self.update(dt,pygame.key.get_pressed())
-   self.draw(s);pygame.display.flip()
+   else:self.update(dt,a["held"],a["mouse"])
+   self.draw(s,a["mouse"]);pygame.display.flip()
   pygame.quit()
 
 if __name__=="__main__":CurramGramGo().run()
-
