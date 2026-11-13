@@ -120,14 +120,35 @@ class Engine:
         self.screen = pygame.display.set_mode((self.width, self.height), flags)
 
     def toggle_fullscreen(self) -> None:
-        self.is_fullscreen = not self.is_fullscreen
-        self.settings.set("fullscreen", self.is_fullscreen)
+        entering_fullscreen = not self.is_fullscreen
 
-        flags = (pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE) if self.enable_gl else (pygame.DOUBLEBUF | pygame.RESIZABLE)
-        if self.is_fullscreen:
+        if entering_fullscreen:
+            # Capturar el tamaño real de la ventana antes de cambiar a fullscreen.
+            if not (pygame.display.get_surface().get_flags() & pygame.FULLSCREEN):
+                current_size = pygame.display.get_window_size()
+                if current_size[0] > 0 and current_size[1] > 0:
+                    self.width, self.height = current_size
+                    self.settings.data["window_width"] = self.width
+                    self.settings.data["window_height"] = self.height
+            self.is_fullscreen = True
+            self.settings.data["fullscreen"] = True
+            flags = (pygame.OPENGL | pygame.DOUBLEBUF) if self.enable_gl else 0
             flags |= pygame.FULLSCREEN
+            sizes = pygame.display.get_desktop_sizes()
+            target_size = sizes[0] if sizes else (self.VIRTUAL_WIDTH, self.VIRTUAL_HEIGHT)
+        else:
+            self.is_fullscreen = False
+            self.settings.data["fullscreen"] = False
+            flags = (pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE) if self.enable_gl else (pygame.DOUBLEBUF | pygame.RESIZABLE)
+            self.width = max(640, int(self.settings.get("window_width", self.VIRTUAL_WIDTH)))
+            self.height = max(360, int(self.settings.get("window_height", self.VIRTUAL_HEIGHT)))
+            target_size = (self.width, self.height)
 
-        self.screen = pygame.display.set_mode((self.width, self.height), flags)
+        self.screen = pygame.display.set_mode(target_size, flags)
+        actual_size = pygame.display.get_window_size()
+        if not self.is_fullscreen and actual_size[0] > 0 and actual_size[1] > 0:
+            self.width, self.height = actual_size
+        self.settings.save()
 
     def _map_mouse_event(self, event: pygame.event.Event) -> pygame.event.Event:
         """Traduce las coordenadas del mouse de la ventana a coordenadas virtuales (1920x1080)."""
@@ -205,13 +226,12 @@ class Engine:
                     break
 
                 if event.type == pygame.VIDEORESIZE:
-                    self.width, self.height = event.w, event.h
-                    self.settings.set("window_width", self.width)
-                    self.settings.set("window_height", self.height)
-                    flags = (pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE) if self.enable_gl else (pygame.DOUBLEBUF | pygame.RESIZABLE)
-                    if self.is_fullscreen:
-                        flags |= pygame.FULLSCREEN
-                    self.screen = pygame.display.set_mode((self.width, self.height), flags)
+                    if not self.is_fullscreen:
+                        # Pygame/SDL ya redimensionó la ventana. No llamar a
+                        # set_mode aquí: en Windows eso reinicia el drag del borde.
+                        self.width, self.height = event.w, event.h
+                        self.settings.data["window_width"] = self.width
+                        self.settings.data["window_height"] = self.height
                     continue
 
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
@@ -302,8 +322,16 @@ class Engine:
 
             self._apply_visual_settings(self.virtual_surface, brightness, matrix, intensity)
 
-            scaled = pygame.transform.smoothscale(self.virtual_surface, (win_w, win_h))
-            self.screen.blit(scaled, (0, 0))
+            # Mantener 16:9 también sin OpenGL: escalar el lienzo completo a
+            # la ventana deformaba la imagen y las coordenadas de interacción.
+            scale = min(win_w / self.VIRTUAL_WIDTH, win_h / self.VIRTUAL_HEIGHT)
+            draw_w = max(1, int(self.VIRTUAL_WIDTH * scale))
+            draw_h = max(1, int(self.VIRTUAL_HEIGHT * scale))
+            offset_x = (win_w - draw_w) // 2
+            offset_y = (win_h - draw_h) // 2
+            self.screen.fill((10, 10, 14))
+            scaled = pygame.transform.smoothscale(self.virtual_surface, (draw_w, draw_h))
+            self.screen.blit(scaled, (offset_x, offset_y))
 
     def _apply_visual_settings(
         self,

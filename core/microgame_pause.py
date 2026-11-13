@@ -23,11 +23,13 @@ class MicrogamePauseState(BaseState):
         previous: BaseState,
         return_callback: Optional[Callable[[], None]] = None,
         restart_callback: Optional[Callable[[], None]] = None,
+        menu_callback: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__()
         self.previous = previous
         self.return_callback = return_callback
         self.restart_callback = restart_callback
+        self.menu_callback = menu_callback
 
         self.assets = AssetManager.get_instance()
         self.audio = AudioManager.get_instance()
@@ -40,16 +42,18 @@ class MicrogamePauseState(BaseState):
         if self.restart_callback:
             self.items.append({"id": "restart", "label": "REINICIAR", "asset": "boton_reiniciar_menu_pausa.png"})
         if self.return_callback:
-            self.items.append({"id": "quit", "label": "SALIR AL MAPA", "asset": "boton_salir_menu_pausa.png"})
+            self.items.append({"id": "map", "label": "VOLVER AL MAPA", "asset": None})
+        if self.menu_callback:
+            self.items.append({"id": "menu", "label": "SALIR AL MENÚ", "asset": "boton_salir_menu_pausa.png"})
 
         # Tipografías y geometría de la ventana
         self.font_item = pygame.font.SysFont("Arial Black, Impact, sans-serif", 24)
         self.font_hint = pygame.font.SysFont("Arial, sans-serif", 16, bold=True)
 
         self.box_w = 640
-        self.box_h = 560
+        self.box_h = 620
         self.btn_w = 400
-        self.btn_h = 80
+        self.btn_h = 72
 
         # Cargar y pre-escalar texturas oficiales
         self.bg_box: Optional[pygame.Surface] = None
@@ -64,6 +68,9 @@ class MicrogamePauseState(BaseState):
             self.bg_box = None
 
         for it in self.items:
+            if not it["asset"]:
+                self.button_surfs[it["id"]] = None
+                continue
             try:
                 raw_btn = self.assets.load_surface(it["asset"], has_alpha=True)
                 self.button_surfs[it["id"]] = pygame.transform.smoothscale(raw_btn, (self.btn_w, self.btn_h))
@@ -87,8 +94,8 @@ class MicrogamePauseState(BaseState):
             # Detección de hover por cursor
             box_x = (1920 - self.box_w) // 2
             box_y = (1080 - self.box_h) // 2
-            start_y = box_y + 110
-            spacing = min(95, (self.box_h - 170) // max(1, len(self.items)))
+            start_y = box_y + 90
+            spacing = min(92, (self.box_h - 140) // max(1, len(self.items)))
             for i in range(len(self.items)):
                 btn_rect = pygame.Rect((1920 - self.btn_w) // 2, start_y + i * spacing, self.btn_w, self.btn_h)
                 if btn_rect.collidepoint(event.pos):
@@ -100,8 +107,8 @@ class MicrogamePauseState(BaseState):
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             box_x = (1920 - self.box_w) // 2
             box_y = (1080 - self.box_h) // 2
-            start_y = box_y + 110
-            spacing = min(95, (self.box_h - 170) // max(1, len(self.items)))
+            start_y = box_y + 90
+            spacing = min(92, (self.box_h - 140) // max(1, len(self.items)))
             for i in range(len(self.items)):
                 btn_rect = pygame.Rect((1920 - self.btn_w) // 2, start_y + i * spacing, self.btn_w, self.btn_h)
                 if btn_rect.collidepoint(event.pos):
@@ -142,10 +149,14 @@ class MicrogamePauseState(BaseState):
             self.audio.play_click()
             if self.restart_callback:
                 self.restart_callback()
-        elif current_id == "quit":
+        elif current_id == "map":
             self.audio.play_click()
             if self.return_callback:
                 self.return_callback()
+        elif current_id == "menu":
+            self.audio.play_click()
+            if self.menu_callback:
+                self.menu_callback()
 
     def update(self, dt: float) -> None:
         pass
@@ -169,8 +180,8 @@ class MicrogamePauseState(BaseState):
             pygame.draw.rect(surface, (20, 26, 44), box_rect, border_radius=24)
             pygame.draw.rect(surface, (245, 195, 75), box_rect, width=4, border_radius=24)
 
-        start_y = box_y + 110
-        spacing = min(95, (self.box_h - 170) // max(1, len(self.items)))
+        start_y = box_y + 90
+        spacing = min(92, (self.box_h - 140) // max(1, len(self.items)))
 
         for i, it in enumerate(self.items):
             item_id = it["id"]

@@ -192,7 +192,7 @@ class ArcadeModeScene(BaseState):
             self.character_id = params["character_id"]
             self._load_character_sprite()
         self._restart_arcade()
-        self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
+        # La música del último minijuego continúa durante los intersticios.
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.phase == self.STATE_GAME_OVER:

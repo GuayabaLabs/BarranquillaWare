@@ -26,6 +26,9 @@ class MaleconRuedaMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        self.audio.play_bgm("contraRelojMusic.mp3")
+
     def setup_game(self) -> None:
         self.wheel_cx = self.screen_w // 2
         self.wheel_cy = 470

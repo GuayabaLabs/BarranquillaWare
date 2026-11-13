@@ -98,7 +98,10 @@ class MainMenuScene(BaseState):
         self.font_body = pygame.font.SysFont("Arial, sans-serif", 28, bold=True)
 
         # 7. Precarga Cálida de Selección de Modo (Warm Scene Pre-instancing)
-        self.mode_select_scene = ModeSelectScene(on_back_callback=self._return_from_mode_select)
+        self.mode_select_scene = ModeSelectScene(
+            on_back_callback=self._return_from_mode_select,
+            on_main_menu_callback=self._return_from_mode_select,
+        )
 
     def _init_iguana(self) -> None:
         self.iguana_hd = self.assets.load_cropped_surface("iguana_main_menu.png")
@@ -193,14 +196,14 @@ class MainMenuScene(BaseState):
             )
         )
 
-    def _return_from_mode_select(self) -> None:
+    def _return_from_mode_select(self, from_scene: Optional[BaseState] = None) -> None:
         if not self.state_machine:
             return
 
         self.audio.play_bgm("7am_ancpg_ost_main_menu.ogg")
         self.sync_audio_buttons()
         trans = SlideTransitionState(
-            from_scene=self.mode_select_scene,
+            from_scene=from_scene or self.mode_select_scene,
             to_scene=self,
             direction="right",
             duration=0.65
