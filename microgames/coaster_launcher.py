@@ -28,10 +28,13 @@ class CoasterLauncherState(BaseState):
 
     def enter(self, params: Optional[dict] = None) -> None:
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        coaster_dir = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
+        # Buscar prioritariamente en la carpeta oficial del juego (coaster_game)
+        coaster_dir = os.path.join(root, "coaster_game")
+        if not os.path.exists(coaster_dir):
+            coaster_dir = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
         coaster_file = os.path.join(coaster_dir, "Coaster.py")
         if not os.path.exists(coaster_file):
-            self.error = "No se encontró la versión original de Coaster"
+            self.error = "No se encontró el juego de Coaster"
             return
         try:
             if coaster_dir not in sys.path:
@@ -132,7 +135,9 @@ class CoasterCalibrationState(BaseState):
     def enter(self, params: Optional[dict] = None) -> None:
         try:
             root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            folder = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
+            folder = os.path.join(root, "coaster_game")
+            if not os.path.exists(folder):
+                folder = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
             path = os.path.join(folder, "Coaster.py")
             if folder not in sys.path:
                 sys.path.insert(0, folder)
