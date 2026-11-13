@@ -54,7 +54,8 @@ class CurramGramGo:
   i=self.foto
   if i==1 and self.casos[i] is None:
    if self.ocultando and not self.amenaza:self.mensaje("Foto discreta lista. Vuelve a Zona 1 y entrégala con E.")
-   else:self.revelar(self.x)
+   else:self.revelar(i)
+   return
   elif i==5:
    self.casos[i]="Foto pública respetuosa publicada";self.puntos+=35;self.likes+=120;self.mensaje("+35 pts: publicación pública y respetuosa")
   elif i==0:self.penal("Publicaste una acusación falsa",20)
@@ -83,7 +84,8 @@ class CurramGramGo:
   self.foto=i
   distancia=abs(self.x-PUNTOS[i])
   if i==1:
-   if not self.ocultando or self.amenaza:self.revelar(i);self.amenaza=True;self.tiempo=max(0,self.tiempo-8);self.x=max(0,self.x-110);self.mensaje("¡Eche, qué grabas! Te empujó; perdiste 8 s.")
+   if not self.ocultando or self.amenaza:
+    self.revelar(i);self.amenaza=True;self.tiempo=max(0,self.tiempo-8);self.x=max(0,self.x-110);self.casos[i]="Te vio tomando la foto y escapó";self.final="MISIÓN FALLIDA: SOSPECHOSO ESCAPÓ";self.ganador=False;self.mensaje("¡Eche, qué grabas! Te empujó; el sospechoso escapó.")
    else:self.mensaje("Foto sigilosa tomada. Corre a Zona 1 y avisa a Policía.")
   elif i==2 and distancia<220:self.mensaje("Privacidad: el código del boleto queda visible. Usa E para avisar.")
   else:self.revelar(i)
