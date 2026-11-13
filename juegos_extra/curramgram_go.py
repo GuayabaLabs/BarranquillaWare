@@ -172,6 +172,9 @@ class CurramGramGo:
    if self.apunte==apuntado:self.apunte_t+=dt
    else:self.apunte=apuntado;self.apunte_t=dt
   else:self.apunte=None;self.apunte_t=0
+  # El respeto se registra al pasar junto a la persona sin apuntarle la cámara.
+  if self.casos[3] is None and self.apunte!=3 and abs(self.x-PUNTOS[3])<90:
+   self.casos[3]="Pasó de largo y respetó su intimidad";self.puntos+=20;self._mensaje("+20 pts: respetaste un momento vulnerable")
   # El carrito cruza de verdad el pasillo; ocultarse o saltar evita perder tiempo.
   self.carrito_clock-=dt
   if self.carrito is None and self.carrito_clock<=0:
@@ -253,6 +256,12 @@ class CurramGramGo:
     alert=self.sprites.get("alerta");self._blit_escalado(s,"alerta",(int(sx-75),400),1)
     pygame.draw.circle(s,(231,74,59) if self.amenaza else (229,180,58),(int(sx),415),15)
     texto(s,"!" if self.amenaza else "?",(int(sx),415),19,(255,255,255),True)
+  # Una pequeña comparsa recibe a los viajeros al inicio de la terminal.
+  for k,wx in enumerate((860,960,1060)):
+   sx=wx-cam
+   if -100<sx<ANCHO+100:
+    pygame.draw.ellipse(s,(89,73,64),(int(sx-45),ground-4,90,14))
+    self._sprite_en(s,"bailarina_comparsa",sx,ground+int(math.sin(self.elapsed*5+k)*5),2,flip=bool(k%2))
   # Pasajeros de sala de espera y comparsa adicional como personajes de fondo.
   for wx,name in ((3800,"pasajero_sentado_1"),(4480,"senor_sentado")):
    sx=wx-cam
