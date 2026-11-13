@@ -72,3 +72,13 @@ python juegos_extra/herramientas/capturar_juegos.py
 ```
 
 Las capturas quedan en `juegos_extra/_capturas/` con sufijos `1280x720`, `1366x768` y `1920x1080`.
+
+
+## Cambios recientes en `juegos_extra/`
+
+- `comun.py` dibuja pausa y finales en un panel oscuro propio; sus botones responden a teclado, hover y clic. `texto_con_contorno()` queda disponible para texto sobre escena.
+- Emoji Catch ya ubica negativos a la izquierda y positivos a la derecha, limita cada mano a su mitad y ya no penaliza una supuesta mano equivocada. Su cronómetro, balance y salud siguen bajo ajuste.
+- La hoja `assets/hojas/hoja_cami_animaciones.png` se recortó a 12 PNG, con anclajes al pie y contacto `assets/curramgram/_contacto_cami.png`. `assets/curramgram/animaciones.json` define ciclos editables y `animacion.py` los reproduce.
+- La captura headless puede recrear escenas de juego, pausa y final a 1280×720 y 1920×1080. Los previews de 1920 se reducen a 1600 px de ancho para revisión.
+
+La integración actual de Cami ya anima idle, caminar, agachada y salto. Aún falta conectar transiciones de agacharse/levantarse, fotos y empujón. El rediseño completo de CurramGram (tutorial contextual, investigación por proximidad, semáforo del tamborero, ruta más corta, bonus de tiempo y pruebas de bots) no está implementado. Los requisitos de bots para ambos juegos tampoco tienen resultados medidos en esta etapa.

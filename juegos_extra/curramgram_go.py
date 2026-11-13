@@ -3,7 +3,8 @@ import json
 import math
 import random
 import pygame
-from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, fuente, texto, panel, leer_entrada, menu_pausa
+from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, fuente, texto, panel, leer_entrada, menu_pausa, pantalla_final
+from animacion import Animacion
 
 # Ajustes del recorrido
 DURACION=120.0
@@ -26,8 +27,13 @@ class CurramGramGo:
   self.sprites={}
   nombres={"titulo","barranquilla","aeropuerto","gates_1_10","hud_pildora","zona_1","zona_2","zona_3","puerta_embarque","icono_camara","reloj_grande","policia","bailarina_comparsa","trabajador_carrito","grupo_vendedor_letrero","cami","tamborero","hombre_gorra","turista_pasaporte","pasajero_sentado_1","joven_llorando","senor_sentado","senora_cava","globito_clickbait","dialogo_toma_foto","dialogo_salto","dialogo_confirma","dialogo_privacidad","dialogo_respeto","dialogo_pelea","dialogo_hielo","cartel_policia","cartel_comparsa","alerta","tecla_s_sigilo","tecla_flash","tecla_a","tecla_d","tecla_s","tecla_space","tecla_e","tecla_camara","tecla_p","gate_7","letrero_butifarras"}
   for name in nombres:self.sprites[name]=cargar_sprite(f"{name}.png","curramgram")
+  self.animacion=Animacion(RAIZ/"juegos_extra/assets/curramgram/animaciones.json")
+  for name in self.animacion.defs:
+   for frame in self.animacion.defs[name]["frames"]:
+    self.sprites[frame]=cargar_sprite(f"{frame}.png","curramgram")
   try:self.anclajes=json.loads((RAIZ/"juegos_extra/assets/anclajes.json").read_text(encoding="utf-8"))["curramgram"]
   except (OSError,ValueError):self.anclajes={}
+  self.anclajes.update(json.loads((RAIZ/"juegos_extra/assets/curramgram/anclajes_cami.json").read_text(encoding="utf-8")))
   self.fondo_proyecto=cargar_imagen("fondo_minijuego_crossy.png",(ANCHO,ALTO),alpha=False)
   self.fondo_terminal=self._construir_fondo()
   self._iniciar_audio();self.reiniciar()
@@ -277,12 +283,16 @@ class CurramGramGo:
   bob=0 if self.ocultando or self.salto>0 else int(abs(math.sin(self.walk_phase))*5) if self.facing else 0
   # La sombra permanece en el piso durante el salto.
   pygame.draw.ellipse(s,(96,76,66),(int(sx-70),ground-3,140,18))
-  img=self.sprites.get("cami")
+  moving=bool(self.facing and not self.ocultando and self.salto<=0)
+  state="salto" if self.salto>0 else "cuclillas" if self.ocultando else "walk" if moving else "idle"
+  self.animacion.seleccionar(state)
+  frame=self.animacion.cuadro(1/FPS if moving else 0)
+  img=self.sprites.get(frame)
   if img:
    factor=2;scaled=self._escala_entera(img,factor)
    if self.facing<0:scaled=pygame.transform.flip(scaled,True,False)
    if self.ocultando:scaled=pygame.transform.scale(scaled,(scaled.get_width(),int(scaled.get_height()*.68)))
-   anchor=self.anclajes.get("cami",{}).get("anchor",[img.get_width()//2,img.get_height()])
+   anchor=self.anclajes.get(frame,{}).get("anchor",[img.get_width()//2,img.get_height()])
    ax=int(anchor[0]*factor);ay=int(anchor[1]*factor)
    if self.ocultando:ay=int(ay*.68)
    s.blit(scaled,(int(sx-ax),int(ground-ay-jump_y+bob)))
@@ -343,21 +353,12 @@ class CurramGramGo:
   texto(s,self.aviso,(ANCHO//2,871),24,(69,51,57),True)
 
  def _draw_final(self,s):
-  velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((28,24,42,208));s.blit(velo,(0,0))
-  marco=cargar_imagen("recuadro_menu_pausa.png",(1660,960))
-  if marco:s.blit(marco,marco.get_rect(center=(960,540)))
-  else:panel(s,pygame.Rect(130,60,1660,960))
-  texto(s,"TU PERFIL DE CURRAMGRAM · REPORTE DEL VUELO",(960,116),42,(77,51,73),True)
-  texto(s,f"{self.final}  ·  CIUDADANÍA DIGITAL {self.puntos} PTS  ·  LIKES {self.likes}",(960,180),26,(58,54,62),True)
+  balance=f"Ciudadanía {self.puntos} pts · Likes {self.likes}"
+  lineas=[balance]
   for i,(nombre,real,aprendizaje) in enumerate(CASOS):
-   col=i%2;fila=i//2;x=165+col*805;y=230+fila*186;rect=pygame.Rect(x,y,770,164)
-   panel(s,rect,(255,251,240),(137,106,94),13,2)
-   texto(s,f"{i+1}. {nombre}",(x+18,y+14),23,(100,56,49))
-   decision=self.casos[i] or "Sin resolver durante este vuelo."
-   texto(s,decision,(x+18,y+51),18,(53,61,62))
-   texto(s,aprendizaje,(x+18,y+89),17,(89,73,72))
-  texto(s,"VERIFICA ANTES DE PUBLICAR · PROTEGE LOS DATOS · RESPETA LOS MOMENTOS VULNERABLES",(960,842),21,(69,57,72),True)
-  texto(s,"R PARA REINICIAR",(960,916),25,(95,75,109),True)
+   decision=self.casos[i] or "Pendiente"
+   lineas.append(f"{'OK' if self.casos[i] else '--'}  {nombre}: {decision}")
+  pantalla_final(s,"PERFIL CURRAMGRAM · "+str(self.final),lineas,"R PARA REINICIAR")
 
  def draw(self,s,mouse=(960,540)):
   self._dibujar_fondo(s);self._draw_prop_personajes(s);self._draw_carrito(s);self._draw_player(s)
