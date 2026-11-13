@@ -391,6 +391,15 @@ class BuenavistaCineMicrogame(BaseMicrogame):
                         self.pacified_count += 1
                         self.last_shh_visual_pulse = 1.0
 
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # El cursor MediaPipe permite apuntar y pellizcar sobre la butaca infractora.
+            for spec in self.spectators:
+                if spec.rect_segment.collidepoint(event.pos) and spec.state == SpectatorSeat.STATE_OFFENDING:
+                    spec.pacify()
+                    self.pacified_count += 1
+                    self.last_shh_visual_pulse = 1.0
+                    break
+
     def render_game(self, surface: pygame.Surface) -> None:
         # 1. Fondo de la sala
         surface.blit(self.bg_surf, (0, 0))

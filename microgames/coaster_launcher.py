@@ -13,6 +13,7 @@ import pygame
 
 from core.state_machine import BaseState
 from core.audio_manager import AudioManager
+from core.camera_gestures import CameraGestureInput
 
 
 class CoasterLauncherState(BaseState):
@@ -28,6 +29,9 @@ class CoasterLauncherState(BaseState):
         self.font_sub = pygame.font.SysFont("Arial, sans-serif", 20)
 
     def enter(self, params: Optional[dict] = None) -> None:
+        # Coaster usa su propio rastreador HSV y necesita exclusividad de la webcam.
+        self._shared_camera = CameraGestureInput.get_instance()
+        self._shared_camera.suspend()
         AudioManager.get_instance().play_bgm("tranquilaMusic.mp3")
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # Buscar prioritariamente en la carpeta oficial del juego (coaster_game)
@@ -56,6 +60,8 @@ class CoasterLauncherState(BaseState):
             self.game.camara.detener()
         self.game = None
         self.legacy_surface = None
+        if getattr(self, "_shared_camera", None):
+            self._shared_camera.resume()
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if not self.game:
@@ -138,6 +144,8 @@ class CoasterCalibrationState(BaseState):
         self.small = pygame.font.SysFont("Arial, sans-serif", 20, bold=True)
 
     def enter(self, params: Optional[dict] = None) -> None:
+        self._shared_camera = CameraGestureInput.get_instance()
+        self._shared_camera.suspend()
         try:
             root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             folder = os.path.join(root, "coaster_game")
@@ -162,6 +170,8 @@ class CoasterCalibrationState(BaseState):
         if self.camera:
             self.camera.detener()
         self.camera = None
+        if getattr(self, "_shared_camera", None):
+            self._shared_camera.resume()
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:

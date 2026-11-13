@@ -39,6 +39,7 @@ class TrojaBaileMicrogame(BaseMicrogame):
         # Personaje y baile
         self.dancer_center = (960, 680)
         self.dance_bob = 0.0
+        self.camera_steer = 0.0
 
         # Sprite del personaje
         self.player_sprite = None
@@ -79,6 +80,10 @@ class TrojaBaileMicrogame(BaseMicrogame):
                 self.angular_vel -= self.push_power * 0.4
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 self.angular_vel += self.push_power * 0.4
+        elif event.type == pygame.MOUSEMOTION:
+            # La posición horizontal del índice MediaPipe inclina el equilibrio.
+            dx = event.pos[0] - self.dancer_center[0]
+            self.camera_steer = -1.0 if dx < -55 else 1.0 if dx > 55 else 0.0
 
     def update_game(self, dt: float) -> None:
         # 1. Entrada continua por teclado o mouse
@@ -88,6 +93,7 @@ class TrojaBaileMicrogame(BaseMicrogame):
             correction -= self.push_power * dt
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             correction += self.push_power * dt
+        correction += self.camera_steer * self.push_power * dt
 
         # Entrada por posición relativa del ratón
         mouse_buttons = pygame.mouse.get_pressed()

@@ -450,8 +450,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
             self._jump_forward()
 
     def exit(self) -> None:
-        if hasattr(self, "camera_input"):
-            self.camera_input.stop()
+        # La cámara pertenece al motor y se comparte con el resto de escenas.
+        pass
 
     def _jump_forward(self) -> None:
         if self.player_lane < self.max_lane:
