@@ -45,13 +45,15 @@ _CURRAM_SPRITES = (
     "dialogo_respeto", "dialogo_pelea", "dialogo_hielo", "cartel_policia",
     "cartel_comparsa", "alerta", "tecla_s_sigilo", "tecla_flash", "tecla_a", "tecla_d",
     "tecla_s", "tecla_space", "tecla_e", "tecla_camara", "tecla_p", "gate_7",
-    "letrero_butifarras",
+    "letrero_butifarras", "cami_idle", "cami_walk_1", "cami_walk_2", "cami_walk_3", "cami_walk_4", "cami_walk_5",
+    "cami_agachar_1", "cami_agachar_2", "cami_cuclillas", "cami_arrodillada", "cami_foto_agachada", "cami_regreso",
 )
 ASSETS_REQUERIDOS = {
     "emoji_catch": _COMUNES + _EMOJI + tuple(f"juegos_extra/assets/emoji/{n}.png" for n in _EMOJI_SPRITES)
     + ("juegos_extra/assets/atlas_emoji.json", "juegos_extra/assets/anclajes.json"),
     "curramgram_go": _COMUNES + _CURRAM + tuple(f"juegos_extra/assets/curramgram/{n}.png" for n in _CURRAM_SPRITES)
-    + ("juegos_extra/assets/atlas_curramgram.json", "juegos_extra/assets/anclajes.json"),
+    + ("juegos_extra/assets/atlas_curramgram.json", "juegos_extra/assets/anclajes.json",
+      "juegos_extra/assets/curramgram/animaciones.json", "juegos_extra/assets/curramgram/anclajes_cami.json"),
 }
 _RECURSOS_VALIDOS = set()
 
@@ -153,6 +155,18 @@ def texto(superficie, cadena, pos, tamano=28, color=(45, 42, 55), centro=False, 
     return rect
 
 
+def texto_con_contorno(superficie, cadena, pos, tamano=28, color=(255,255,255), contorno=(28,24,38), centro=False, grosor=3, negrita=False):
+    """Texto legible encima de escenas con colores variables."""
+    fuente_actual=fuente(tamano,negrita);imagen=fuente_actual.render(str(cadena),True,color)
+    rect=imagen.get_rect(center=pos) if centro else imagen.get_rect(topleft=pos)
+    for dx in range(-grosor,grosor+1):
+        for dy in range(-grosor,grosor+1):
+            if dx*dx+dy*dy<=grosor*grosor and (dx or dy):
+                superficie.blit(fuente_actual.render(str(cadena),True,contorno),(rect.x+dx,rect.y+dy))
+    superficie.blit(imagen,rect)
+    return rect
+
+
 def panel(superficie, rect, color=(255, 247, 234), borde=(94, 66, 73), radio=18, ancho=3):
     pygame.draw.rect(superficie, color, rect, border_radius=radio)
     pygame.draw.rect(superficie, borde, rect, ancho, border_radius=radio)
@@ -231,34 +245,29 @@ def leer_entrada(eventos, ventana=None):
 
 
 def menu_pausa(pantalla, opciones, seleccionado=0, cursor=None):
-    """Menú de pausa con marco y botones ya usados por los minijuegos del proyecto."""
-    velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((20,18,32,178));pantalla.blit(velo,(0,0))
-    marco=cargar_imagen("recuadro_menu_pausa.png",(760,650))
-    if marco:pantalla.blit(marco,marco.get_rect(center=(960,540)))
-    else:panel(pantalla,pygame.Rect(580,215,760,650))
-    texto(pantalla,"PAUSA",(960,300),54,(67,49,75),True)
-    nombres=("boton_continuar_menu_pausa.png","boton_reiniciar_menu_pausa.png","boton_salir_menu_pausa.png")
-    rects=[];separacion=115;alto=102;ancho=440;inicio=395-(len(opciones)-2)*58
+    """Pausa con controles propios, legibles y clicables sobre panel opaco."""
+    velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((15,13,25,225));pantalla.blit(velo,(0,0))
+    panel(pantalla,pygame.Rect(520,120,880,840),(34,29,48),(246,229,197),26,5)
+    texto_con_contorno(pantalla,"PAUSA",(960,220),78,(255,250,239),centro=True,grosor=4)
+    rects=[];separacion=142;alto=116;ancho=620;inicio=320
+    hover_index=next((i for i in range(len(opciones)) if cursor is not None and pygame.Rect(960-ancho//2,inicio+i*separacion,ancho,alto).collidepoint(cursor)),None)
     for i,opcion in enumerate(opciones):
         r=pygame.Rect(960-ancho//2,inicio+i*separacion,ancho,alto);rects.append(r)
-        ruta=nombres[min(i,len(nombres)-1)]
-        img=cargar_imagen(ruta,(ancho,alto))
-        if img:
-            if i==seleccionado or (cursor is not None and r.collidepoint(cursor)):
-                img=pygame.transform.smoothscale(img,(int(ancho*1.04),int(alto*1.04)))
-            pantalla.blit(img,img.get_rect(center=r.center))
-        else:boton(pantalla,r,opcion,i==seleccionado,cursor)
+        active=i==(hover_index if hover_index is not None else seleccionado)
+        pygame.draw.rect(pantalla,(109,78,153) if active else (59,52,73),r,border_radius=18)
+        pygame.draw.rect(pantalla,(255,232,154) if active else (183,174,193),r,4,border_radius=18)
+        if active:pygame.draw.polygon(pantalla,(255,255,255),[(r.x+28,r.centery-15),(r.x+28,r.centery+15),(r.x+48,r.centery)])
+        texto_con_contorno(pantalla,opcion.upper(),(r.centerx+16,r.centery),48,(255,255,255),centro=True,grosor=3)
+    texto_con_contorno(pantalla,"↑  ↓  ELEGIR     ENTER  CONFIRMAR     ESC  VOLVER",(960,780),30,(255,250,239),centro=True,grosor=2)
     return rects
 
 
 def pantalla_final(pantalla,titulo,lineas,reinicio="R para reiniciar"):
-    velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((28,24,42,190));pantalla.blit(velo,(0,0))
-    marco=cargar_imagen("recuadro_menu_pausa.png",(1280,840))
-    if marco:pantalla.blit(marco,marco.get_rect(center=(960,540)))
-    else:panel(pantalla,pygame.Rect(320,120,1280,840))
-    texto(pantalla,titulo,(960,230),48,(76,51,74),True)
-    for i,linea in enumerate(lineas):texto(pantalla,linea,(960,340+i*68),29,(53,48,60),True)
-    texto(pantalla,reinicio,(960,880),28,(85,65,98),True)
+    velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((15,13,25,225));pantalla.blit(velo,(0,0))
+    panel(pantalla,pygame.Rect(260,90,1400,900),(34,29,48),(246,229,197),26,5)
+    texto_con_contorno(pantalla,titulo,(960,190),56,(255,250,239),centro=True,grosor=4)
+    for i,linea in enumerate(lineas):texto_con_contorno(pantalla,linea,(960,310+i*78),34,(255,255,255),centro=True,grosor=3)
+    texto_con_contorno(pantalla,reinicio,(960,885),30,(255,232,154),centro=True,grosor=2)
 
 
 def sonido(nombre):

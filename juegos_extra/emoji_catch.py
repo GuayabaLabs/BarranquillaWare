@@ -9,7 +9,11 @@ DURACION = 120.0
 SALUD_INICIAL = 100
 UMBRAL_BALANCE = 24
 VELOCIDAD_MANO = 680.0
-DIFICULTAD_MAX = 2.15
+DIFICULTAD_MAX = 1.65
+DRENAJE_BARRAS = 1.2
+DANO_ESCAPE_NEGATIVO = 6
+REGENERACION_EQUILIBRIO = 1.0
+UMBRAL_ESTRELLAS_EQUILIBRIO = (0.40, 0.65)
 COLOR_MORADO = (133, 79, 185)
 COLOR_AZUL = (55, 147, 218)
 
@@ -104,7 +108,7 @@ class EmojiCatch:
         self.spawn=0.5; self.wave_left=0.0; self.wave_kind=None; self.wave_clock=14.0; self.wave_label=""
         self.mega_clock=19.0; self.combo=0; self.mejor_racha=0; self.sponsor=0.0
         self.desbalance=0.0; self.desbalance_aviso=0.0; self.screen_shake=0.0; self.final=""; self.pausa=False; self.sel=0; self.rects=[]
-        self.elapsed=0.0
+        self.elapsed=0.0;self.tiempo_equilibrio=0.0;self.porcentaje_equilibrio=0.0;self.victoria=False;self.estrellas=0
 
     def mover_manos(self, teclas, dt):
         """A/D mueven exclusivamente la mano morada; J/L exclusivamente la azul."""
@@ -113,7 +117,8 @@ class EmojiCatch:
         der=int(tiene_tecla(teclas,pygame.K_l))-int(tiene_tecla(teclas,pygame.K_j))
         for i,d in enumerate((izq,der)):
             self.direccion[i]=d
-            self.manos[i]=max(180.0,min(1740.0,self.manos[i]+d*VELOCIDAD_MANO*dt))
+            limites=((120.0,900.0),(1020.0,1800.0))[i]
+            self.manos[i]=max(limites[0],min(limites[1],self.manos[i]+d*VELOCIDAD_MANO*dt))
         return self.manos[0]-antes[0], self.manos[1]-antes[1]
 
     def _aviso(self, frase, color=(255,245,224), tiempo=2.2):
@@ -121,7 +126,10 @@ class EmojiCatch:
 
     def _nuevo_item(self, tipo=None, x=None, mega=False, troll=False):
         tipo=tipo or random.choice(SPRITES)
-        x=float(x if x is not None else random.uniform(220,1700))
+        negativo=tipo in NEGATIVOS or tipo=="mitad_rota"
+        limites=(180,900) if negativo else (1020,1740)
+        x=float(x if x is not None else random.uniform(*limites))
+        x=max(limites[0],min(limites[1],x))
         factor=1.0+min(0.85,self.elapsed/145)
         item={"kind":tipo,"x":x,"base_x":x,"y":175.0,"t":0.0,"speed":random.uniform(210,330)*factor,"phase":random.random()*math.tau,"angle":0.0,"mega":mega,"hp":3 if mega else 1,"troll":troll,"mutated":False,"size":260 if mega else random.randint(100,130)}
         self.items.append(item)
@@ -131,8 +139,8 @@ class EmojiCatch:
                 self.items.append({**item,"kind":"mitad_rota","half":half,"x":x+(side*2-1)*18,"base_x":x+(side*2-1)*18,"speed":item["speed"]*random.uniform(.92,1.08),"phase":item["phase"]+side*math.pi,"size":106})
 
     def _iniciar_oleada(self):
-        self.wave_kind=random.choice(("raid","trend","troll"));self.wave_left=6.0
-        self.wave_label={"raid":"¡RAID DE HATERS!","trend":"¡TENDENCIA VIRAL!","troll":"¡TROLL DISFRAZADO!"}[self.wave_kind]
+        self.wave_kind=random.choice(("raid","trend"));self.wave_left=6.0
+        self.wave_label={"raid":"¡RAID DE HATERS!","trend":"¡TENDENCIA VIRAL!","troll":""}[self.wave_kind]
         self._aviso(self.wave_label,(255,235,215),3.0)
         self.wave_clock=random.uniform(18,25)
 
@@ -141,10 +149,8 @@ class EmojiCatch:
         if self.spawn<=0:
             if self.wave_kind=="raid":tipo=random.choice(NEGATIVOS)
             elif self.wave_kind=="trend":tipo=random.choice(POSITIVOS)
-            elif self.wave_kind=="troll":tipo=random.choice(POSITIVOS);self._nuevo_item(tipo,troll=True)
-            else:self._nuevo_item()
-            if self.wave_kind in ("raid","trend"):
-                self._nuevo_item(tipo)
+            else:tipo=None
+            self._nuevo_item(tipo)
             self.spawn=max(.22,random.uniform(.48,.78)*(1-min(.42,self.elapsed/270)))
         self.wave_clock-=dt
         if self.wave_clock<=0 and self.wave_left<=0:self._iniciar_oleada()
@@ -160,10 +166,7 @@ class EmojiCatch:
         tipo=item["kind"]
         negativo=tipo in NEGATIVOS or tipo=="mitad_rota" or (item.get("troll") and item.get("mutated"))
         mano_correcta=0 if negativo else 1
-        if mano!=mano_correcta:
-            self.salud=max(0,self.salud-14);self.puntos=max(0,self.puntos-12);self.combo=0
-            self._aviso("¡MANO EQUIVOCADA! Salud mental −14",(255,220,222));self._particulas(item["x"],item["y"],(191,66,87),14)
-            return
+        if mano!=mano_correcta:return
         if item.get("mega"):
             item["hp"]-=1;self.combo+=1;self.mejor_racha=max(self.combo,self.mejor_racha)
             self._particulas(item["x"],item["y"],(248,114,84),24);self.screen_shake=.10
@@ -198,12 +201,9 @@ class EmojiCatch:
         self.elapsed+=dt;self.tiempo=max(0,self.tiempo-dt);self.sponsor=max(0,self.sponsor-dt)
         self.mover_manos(teclas,dt)
         self._spawn(dt)
-        dificultad=1+min(DIFICULTAD_MAX-1,self.elapsed/105)
+        dificultad=1+min(DIFICULTAD_MAX-1,self.elapsed/90)
         for item in list(self.items):
             item["t"]+=dt
-            if item.get("troll") and not item["mutated"] and item["t"]>=1.5:
-                item["mutated"]=True;item["kind"]=random.choice(NEGATIVOS);self._particulas(item["x"],item["y"],(247,231,255),24)
-                self._aviso("¡CAMBIÓ DE BANDO! Atrápalo con la mano morada",(244,235,255),1.5)
             if item["kind"] in ("emoji_vomito_1","emoji_vomito_2"):
                 item["x"]=item["base_x"]+math.sin(item["t"]*6+item["phase"])*58
             elif item["kind"]=="emoji_enojado_rojo" or item["kind"]=="emoji_enojado_naranja":
@@ -221,7 +221,7 @@ class EmojiCatch:
                 if item in self.items and not item.get("mega"):self.items.remove(item)
             elif item["y"]>1040:
                 if item.get("mega") or item["kind"] in NEGATIVOS or item["kind"]=="mitad_rota":
-                    self.salud=max(0,self.salud-12 if not item.get("mega") else 24);self.grietas.append({"x":item["x"],"y":1010,"t":1.8});self.screen_shake=.32
+                    self.salud=max(0,self.salud-DANO_ESCAPE_NEGATIVO if not item.get("mega") else 12);self.grietas.append({"x":item["x"],"y":1010,"t":1.8});self.screen_shake=.32
                     self._aviso("¡UN HATER IMPACTÓ EL FEED! Salud mental −12",(255,222,221))
                 if item in self.items:self.items.remove(item)
         for part in self.particulas:
@@ -233,19 +233,25 @@ class EmojiCatch:
         self.grietas=[g for g in self.grietas if g["t"]>0]
         self.pulso=[max(0,p-dt) for p in self.pulso];self.screen_shake=max(0,self.screen_shake-dt)
         diferencia=abs(self.negatividad-self.positividad)
-        if diferencia>UMBRAL_BALANCE:
+        if diferencia<=UMBRAL_BALANCE and 30<=self.negatividad<=70 and 30<=self.positividad<=70:
+            self.tiempo_equilibrio+=dt;self.salud=min(100,self.salud+REGENERACION_EQUILIBRIO*dt)
+        self.porcentaje_equilibrio=self.tiempo_equilibrio/max(1,self.elapsed)
+        balance_ok=diferencia<=UMBRAL_BALANCE and 30<=self.negatividad<=70 and 30<=self.positividad<=70
+        if not balance_ok:
             self.desbalance+=dt;self.desbalance_aviso+=dt
             if self.desbalance_aviso>3:self._aviso("¡EL FEED SE DESBALANCEA!",(255,230,211),1.6);self.desbalance_aviso=0
             if self.desbalance>6 and int(self.desbalance*2)%2==0:self.salud=max(0,self.salud-1)
         else:self.desbalance=max(0,self.desbalance-dt*1.8)
-        if self.salud<=0:self.final="SALUD MENTAL AGOTADA"
-        elif self.tiempo<=0:self.final="BALANCE LOGRADO" if diferencia<=UMBRAL_BALANCE else "BALANCE ROTO"
+        if self.tiempo<=0:
+            self.final="BALANCE LOGRADO";self.victoria=True
+            self.estrellas=1+int(self.porcentaje_equilibrio>=UMBRAL_ESTRELLAS_EQUILIBRIO[0])+int(self.porcentaje_equilibrio>=UMBRAL_ESTRELLAS_EQUILIBRIO[1])
 
     def _draw_fondo(self,s):
         if self.fondo:s.blit(self.fondo,(0,0))
         else:s.fill((248,227,241))
-        sesgo=max(-1,min(1,(self.negatividad-self.positividad)/55))
-        tinte=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);tinte.fill((157,91,191,25) if sesgo>0 else (77,169,220,22));s.blit(tinte,(0,0))
+        tinte=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA)
+        pygame.draw.rect(tinte,(157,91,191,24),(0,0,ANCHO//2,ALTO));pygame.draw.rect(tinte,(77,169,220,22),(ANCHO//2,0,ANCHO//2,ALTO));s.blit(tinte,(0,0))
+        pygame.draw.line(s,(119,111,144),(ANCHO//2,130),(ANCHO//2,ALTO-120),2)
         # destellos suaves ligeros sobre el fondo existente
         for i in range(22):
             x=(i*173+int(self.elapsed*13))%(ANCHO-100)+50;y=250+(i*97)%490
@@ -287,8 +293,6 @@ class EmojiCatch:
     def _draw_items(self,s):
         for item in self.items:
             kind=item["kind"];size=item["size"]
-            if item.get("troll") and not item.get("mutated"):
-                if int(item["t"]*7)%2:kind="emoji_cara_azul"
             angle=item["angle"] if kind=="emoji_pulgar_abajo" else 0
             if kind=="mitad_rota":
                 half=item["half"];scale=1.18;img=pygame.transform.smoothscale(half,(int(half.get_width()*scale),int(half.get_height()*scale)))
@@ -324,7 +328,7 @@ class EmojiCatch:
         if self.wave_left>0 and self.wave_label:
             texto(s,self.wave_label,(960,255),27,(151,52,75),True)
 
-    def draw(self,s):
+    def draw(self,s,mouse=(960,540)):
         self._draw_fondo(s)
         # Título original y HUD conservan margen seguro de 40 px.
         titulo=self.decoracion.get("titulo")
@@ -345,10 +349,10 @@ class EmojiCatch:
         pygame.draw.rect(s,(76,74,99),(718,ALTO-70,484,15),border_radius=7)
         pygame.draw.rect(s,(92,197,150) if self.salud>35 else (225,83,102),(718,ALTO-70,int(484*self.salud/100),15),border_radius=7)
         self._draw_efectos(s)
-        if self.pausa:self.rects=menu_pausa(s,["Continuar","Reiniciar","Salir"],self.sel)
+        if self.pausa:self.rects=menu_pausa(s,["Continuar","Reiniciar","Salir"],self.sel,cursor=mouse)
         if self.final:
             balance="equilibrado" if abs(self.negatividad-self.positividad)<=UMBRAL_BALANCE else "desbalanceado"
-            pantalla_final(s,"PERFIL DE ÁNIMO · "+self.final,[f"Puntaje: {self.puntos}  |  Mejor racha: {self.mejor_racha}",f"Positividad {self.positividad}%  ·  Negatividad {self.negatividad}%  ·  {balance}",f"Salud mental restante: {self.salud}%", "Comparte con intención y bloquea el ruido sin perder tu balance."])
+            pantalla_final(s,"PERFIL DE ÁNIMO · "+self.final,[f"Puntaje: {self.puntos}  |  Mejor racha: {self.mejor_racha}",f"Positividad {self.positividad}%  ·  Negatividad {self.negatividad}%  ·  {balance}",f"Salud mental restante: {self.salud}%", f"{self.estrellas} ESTRELLAS · equilibrio {self.porcentaje_equilibrio:.0%}"])
 
     def run(self):
         ventana=VentanaVirtual("Emoji Catch: Balance!");clock=pygame.time.Clock();running=True
@@ -372,7 +376,7 @@ class EmojiCatch:
                             elif i==1:self.reiniciar()
                             else:running=False
             else:self.update(dt,acciones["held"])
-            self.draw(ventana.canvas);ventana.presentar((249,229,239))
+            self.draw(ventana.canvas,acciones["mouse"]);ventana.presentar((249,229,239))
         pygame.quit()
 
 if __name__=="__main__":EmojiCatch().run()
