@@ -27,6 +27,10 @@ class VentanaColoresMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        # Canción de fondo tranquila
+        self.audio.play_bgm("tranquilaMusic.mp3")
+
     def setup_game(self) -> None:
         self.colors_palette = [
             {"id": 1, "name": "ROJO", "key": pygame.K_1, "color": (235, 45, 55), "glow": (255, 120, 130)},

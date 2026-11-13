@@ -112,6 +112,10 @@ class UninorteSprintMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        # Canción de fondo contra reloj
+        self.audio.play_bgm("contraRelojMusic.mp3")
+
     def setup_game(self) -> None:
         self.camera_input = CameraGestureInput.get_instance()
         if not self.camera_input.enabled:

@@ -25,6 +25,10 @@ class TrojaBaileMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        # Canción de fondo de la batalla de flores
+        self.audio.play_bgm("BatallaDeFloresMusic.mp3")
+
     def setup_game(self) -> None:
         # Físicas del balance
         self.angle: float = 0.0          # Ángulo actual en grados (-55..+55)

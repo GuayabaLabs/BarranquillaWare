@@ -12,6 +12,7 @@ from typing import Callable, Optional
 import pygame
 
 from core.state_machine import BaseState
+from core.audio_manager import AudioManager
 
 
 class CoasterLauncherState(BaseState):
@@ -27,6 +28,8 @@ class CoasterLauncherState(BaseState):
         self.font_sub = pygame.font.SysFont("Arial, sans-serif", 20)
 
     def enter(self, params: Optional[dict] = None) -> None:
+        # Canción de fondo tranquila
+        AudioManager.get_instance().play_bgm("tranquilaMusic.mp3")
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         coaster_dir = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
         coaster_file = os.path.join(coaster_dir, "Coaster.py")

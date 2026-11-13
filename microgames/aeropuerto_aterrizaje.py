@@ -26,6 +26,10 @@ class AeropuertoAterrizajeMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def enter(self, params: Optional[dict] = None) -> None:
+        # Canción de fondo contra reloj
+        self.audio.play_bgm("contraRelojMusic.mp3")
+
     def setup_game(self) -> None:
         # Posición del avión
         self.plane_x = float(self.screen_w // 2 + random.randint(-220, 220))
