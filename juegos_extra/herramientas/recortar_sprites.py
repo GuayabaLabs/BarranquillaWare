@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-ATLAS = ROOT
+ATLAS = ROOT / 'assets'
 
 
 def key_background(rgb: np.ndarray) -> tuple[np.ndarray, int]:
@@ -88,7 +88,7 @@ def procesar(atlas_path: Path, grupo: str) -> None:
     comps=componentes(rgba[:,:,3])
     outdir=ROOT/'assets'/grupo;outdir.mkdir(parents=True,exist_ok=True)
     contactos=[];metadata={}
-    permitidos={f"{nombre}.png" for nombre in atlas['items']}|{f"_contacto_{grupo}.png","anclajes.json"}
+    permitidos={f"{nombre}.png" for nombre in atlas['items']}|{f"_contacto_{grupo}.png"}
     for antiguo in outdir.glob('*.png'):
         if antiguo.name not in permitidos: antiguo.unlink()
     for nombre,item in atlas['items'].items():
@@ -126,7 +126,11 @@ def procesar(atlas_path: Path, grupo: str) -> None:
         sprite.save(outdir/f'{nombre}.png')
         metadata[nombre]={'anchor':[ax,ay],'box':item['box'],'components_in_box':len(intersectan),'groups':item.get('groups',False)}
         contactos.append((nombre,sprite))
-    (outdir/'anclajes.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
+    # Ambos atlas guardan sus anclajes en un manifiesto común en assets/.
+    ruta_anclajes=ROOT/'assets'/'anclajes.json'
+    anclajes=json.loads(ruta_anclajes.read_text(encoding='utf-8')) if ruta_anclajes.exists() else {}
+    anclajes[grupo]=metadata
+    ruta_anclajes.write_text(json.dumps(anclajes,ensure_ascii=False,indent=2),encoding='utf-8')
     componer_contacto(contactos,outdir/f'_contacto_{grupo}.png')
     print(f'{grupo}: {len(comps)} componentes alfa; {len(atlas["items"])} recortes; {interiores} píxeles neutros protegidos dentro de contornos.')
     sin=[n for n,v in metadata.items() if v['components_in_box']==0]

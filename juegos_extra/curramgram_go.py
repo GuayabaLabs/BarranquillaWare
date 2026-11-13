@@ -3,7 +3,7 @@ import json
 import math
 import random
 import pygame
-from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, fuente, texto, panel, leer_entrada, menu_pausa
+from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, fuente, texto, panel, leer_entrada, menu_pausa
 
 # Ajustes del recorrido
 DURACION=120.0
@@ -22,10 +22,11 @@ NPC_SPRITES=("hombre_gorra","tamborero","turista_pasaporte","joven_llorando","se
 
 class CurramGramGo:
  def __init__(self):
+  revisar_recursos("curramgram_go")
   self.sprites={}
   nombres={"titulo","barranquilla","aeropuerto","gates_1_10","hud_pildora","zona_1","zona_2","zona_3","puerta_embarque","icono_camara","reloj_grande","policia","bailarina_comparsa","trabajador_carrito","grupo_vendedor_letrero","cami","tamborero","hombre_gorra","turista_pasaporte","pasajero_sentado_1","joven_llorando","senor_sentado","senora_cava","globito_clickbait","dialogo_toma_foto","dialogo_salto","dialogo_confirma","dialogo_privacidad","dialogo_respeto","dialogo_pelea","dialogo_hielo","cartel_policia","cartel_comparsa","alerta","tecla_s_sigilo","tecla_flash","tecla_a","tecla_d","tecla_s","tecla_space","tecla_e","tecla_camara","tecla_p","gate_7","letrero_butifarras"}
   for name in nombres:self.sprites[name]=cargar_sprite(f"{name}.png","curramgram")
-  try:self.anclajes=json.loads((RAIZ/"juegos_extra/assets/curramgram/anclajes.json").read_text(encoding="utf-8"))
+  try:self.anclajes=json.loads((RAIZ/"juegos_extra/assets/anclajes.json").read_text(encoding="utf-8"))["curramgram"]
   except (OSError,ValueError):self.anclajes={}
   self.fondo_proyecto=cargar_imagen("fondo_minijuego_crossy.png",(ANCHO,ALTO),alpha=False)
   self.fondo_terminal=self._construir_fondo()

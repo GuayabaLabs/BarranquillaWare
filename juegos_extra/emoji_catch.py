@@ -2,7 +2,7 @@
 import math
 import random
 import pygame
-from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, texto, panel, leer_entrada, menu_pausa, pantalla_final
+from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, texto, panel, leer_entrada, menu_pausa, pantalla_final
 
 # Parámetros configurables
 DURACION = 120.0
@@ -28,6 +28,7 @@ def tiene_tecla(teclas, codigo):
 
 class EmojiCatch:
     def __init__(self):
+        revisar_recursos("emoji_catch")
         self.fondo = cargar_imagen("fondo_concentracion_microjuego.png", (ANCHO, ALTO), alpha=False)
         self.sprites = {n: cargar_sprite(f"{n}.png", "emoji") for n in SPRITES}
         self.decoracion = {n: cargar_sprite(f"{n}.png", "emoji") for n in (

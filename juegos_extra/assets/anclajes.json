@@ -1,0 +1,930 @@
+{
+  "emoji": {
+    "titulo": {
+      "anchor": [
+        163,
+        18
+      ],
+      "box": [
+        55,
+        20,
+        340,
+        40
+      ],
+      "components_in_box": 18,
+      "groups": false
+    },
+    "tiempo": {
+      "anchor": [
+        90,
+        20
+      ],
+      "box": [
+        460,
+        20,
+        190,
+        40
+      ],
+      "components_in_box": 15,
+      "groups": false
+    },
+    "tarjeta_mano_izq": {
+      "anchor": [
+        38,
+        45
+      ],
+      "box": [
+        808,
+        20,
+        80,
+        92
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "tarjeta_mano_der": {
+      "anchor": [
+        40,
+        45
+      ],
+      "box": [
+        920,
+        20,
+        84,
+        92
+      ],
+      "components_in_box": 3,
+      "groups": false
+    },
+    "barra_negatividad": {
+      "anchor": [
+        38,
+        109
+      ],
+      "box": [
+        17,
+        94,
+        76,
+        218
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "barra_positividad": {
+      "anchor": [
+        38,
+        109
+      ],
+      "box": [
+        390,
+        94,
+        76,
+        218
+      ],
+      "components_in_box": 5,
+      "groups": false
+    },
+    "mano_azul_izq": {
+      "anchor": [
+        63,
+        151
+      ],
+      "box": [
+        247,
+        157,
+        132,
+        169
+      ],
+      "components_in_box": 27,
+      "groups": false
+    },
+    "mano_morada": {
+      "anchor": [
+        62,
+        154
+      ],
+      "box": [
+        540,
+        157,
+        125,
+        169
+      ],
+      "components_in_box": 14,
+      "groups": false
+    },
+    "mano_azul_der": {
+      "anchor": [
+        61,
+        154
+      ],
+      "box": [
+        773,
+        157,
+        126,
+        169
+      ],
+      "components_in_box": 13,
+      "groups": false
+    },
+    "emoji_enojado_naranja": {
+      "anchor": [
+        49,
+        46
+      ],
+      "box": [
+        32,
+        350,
+        100,
+        92
+      ],
+      "components_in_box": 5,
+      "groups": false
+    },
+    "emoji_enojado_rojo": {
+      "anchor": [
+        47,
+        46
+      ],
+      "box": [
+        201,
+        350,
+        100,
+        92
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "emoji_triste": {
+      "anchor": [
+        47,
+        46
+      ],
+      "box": [
+        371,
+        349,
+        99,
+        95
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "emoji_vomito_1": {
+      "anchor": [
+        46,
+        47
+      ],
+      "box": [
+        536,
+        349,
+        96,
+        96
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "emoji_vomito_2": {
+      "anchor": [
+        43,
+        48
+      ],
+      "box": [
+        696,
+        349,
+        87,
+        96
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "emoji_bolsa_dinero": {
+      "anchor": [
+        42,
+        45
+      ],
+      "box": [
+        895,
+        349,
+        89,
+        96
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "emoji_corazon_roto": {
+      "anchor": [
+        48,
+        42
+      ],
+      "box": [
+        31,
+        471,
+        103,
+        89
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "emoji_pulgar_abajo": {
+      "anchor": [
+        43,
+        40
+      ],
+      "box": [
+        205,
+        470,
+        94,
+        91
+      ],
+      "components_in_box": 4,
+      "groups": false
+    },
+    "emoji_sonriente": {
+      "anchor": [
+        47,
+        44
+      ],
+      "box": [
+        372,
+        470,
+        97,
+        90
+      ],
+      "components_in_box": 3,
+      "groups": false
+    },
+    "emoji_cara_azul": {
+      "anchor": [
+        48,
+        44
+      ],
+      "box": [
+        538,
+        470,
+        96,
+        91
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "emoji_corazon": {
+      "anchor": [
+        47,
+        42
+      ],
+      "box": [
+        706,
+        469,
+        101,
+        91
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "emoji_pulgar_arriba": {
+      "anchor": [
+        44,
+        43
+      ],
+      "box": [
+        895,
+        468,
+        92,
+        93
+      ],
+      "components_in_box": 3,
+      "groups": false
+    }
+  },
+  "curramgram": {
+    "titulo": {
+      "anchor": [
+        147,
+        30
+      ],
+      "box": [
+        30,
+        20,
+        298,
+        70
+      ],
+      "components_in_box": 6,
+      "groups": false
+    },
+    "barranquilla": {
+      "anchor": [
+        69,
+        18
+      ],
+      "box": [
+        329,
+        36,
+        138,
+        53
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "aeropuerto": {
+      "anchor": [
+        113,
+        25
+      ],
+      "box": [
+        496,
+        34,
+        230,
+        56
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "gates_1_10": {
+      "anchor": [
+        69,
+        21
+      ],
+      "box": [
+        732,
+        43,
+        140,
+        42
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "hud_pildora": {
+      "anchor": [
+        167,
+        16
+      ],
+      "box": [
+        348,
+        98,
+        337,
+        35
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "zona_1": {
+      "anchor": [
+        73,
+        14
+      ],
+      "box": [
+        36,
+        132,
+        146,
+        36
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "zona_2": {
+      "anchor": [
+        102,
+        15
+      ],
+      "box": [
+        314,
+        131,
+        204,
+        39
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "zona_3": {
+      "anchor": [
+        121,
+        16
+      ],
+      "box": [
+        661,
+        132,
+        242,
+        38
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "puerta_embarque": {
+      "anchor": [
+        36,
+        45
+      ],
+      "box": [
+        941,
+        92,
+        77,
+        99
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "icono_camara": {
+      "anchor": [
+        36,
+        21
+      ],
+      "box": [
+        208,
+        101,
+        72,
+        44
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "reloj_grande": {
+      "anchor": [
+        61,
+        29
+      ],
+      "box": [
+        184,
+        136,
+        123,
+        59
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "policia": {
+      "anchor": [
+        26,
+        114
+      ],
+      "box": [
+        39,
+        245,
+        60,
+        120
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "bailarina_comparsa": {
+      "anchor": [
+        46,
+        137
+      ],
+      "box": [
+        103,
+        216,
+        105,
+        148
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "trabajador_carrito": {
+      "anchor": [
+        58,
+        118
+      ],
+      "box": [
+        209,
+        237,
+        132,
+        126
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "letrero_butifarras": {
+      "anchor": [
+        41,
+        22
+      ],
+      "box": [
+        263,
+        380,
+        82,
+        47
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "cami": {
+      "anchor": [
+        31,
+        146
+      ],
+      "box": [
+        476,
+        260,
+        73,
+        151
+      ],
+      "components_in_box": 4,
+      "groups": false
+    },
+    "tamborero": {
+      "anchor": [
+        34,
+        92
+      ],
+      "box": [
+        547,
+        270,
+        75,
+        98
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "hombre_gorra": {
+      "anchor": [
+        28,
+        116
+      ],
+      "box": [
+        623,
+        239,
+        57,
+        129
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "turista_pasaporte": {
+      "anchor": [
+        25,
+        118
+      ],
+      "box": [
+        679,
+        250,
+        56,
+        124
+      ],
+      "components_in_box": 4,
+      "groups": false
+    },
+    "pasajero_sentado_1": {
+      "anchor": [
+        21,
+        84
+      ],
+      "box": [
+        735,
+        273,
+        47,
+        92
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "joven_llorando": {
+      "anchor": [
+        7,
+        78
+      ],
+      "box": [
+        800,
+        276,
+        38,
+        95
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "senor_sentado": {
+      "anchor": [
+        14,
+        82
+      ],
+      "box": [
+        845,
+        274,
+        38,
+        94
+      ],
+      "components_in_box": 3,
+      "groups": false
+    },
+    "senora_cava": {
+      "anchor": [
+        32,
+        116
+      ],
+      "box": [
+        900,
+        259,
+        73,
+        123
+      ],
+      "components_in_box": 4,
+      "groups": false
+    },
+    "globito_clickbait": {
+      "anchor": [
+        85,
+        69
+      ],
+      "box": [
+        430,
+        168,
+        170,
+        71
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "dialogo_toma_foto": {
+      "anchor": [
+        41,
+        41
+      ],
+      "box": [
+        107,
+        378,
+        83,
+        49
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "dialogo_salto": {
+      "anchor": [
+        38,
+        66
+      ],
+      "box": [
+        190,
+        380,
+        76,
+        67
+      ],
+      "components_in_box": 3,
+      "groups": false
+    },
+    "dialogo_confirma": {
+      "anchor": [
+        65,
+        46
+      ],
+      "box": [
+        350,
+        380,
+        131,
+        50
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "dialogo_privacidad": {
+      "anchor": [
+        60,
+        48
+      ],
+      "box": [
+        550,
+        390,
+        121,
+        52
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "dialogo_respeto": {
+      "anchor": [
+        47,
+        56
+      ],
+      "box": [
+        674,
+        382,
+        94,
+        61
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "dialogo_pelea": {
+      "anchor": [
+        48,
+        58
+      ],
+      "box": [
+        772,
+        382,
+        96,
+        65
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "dialogo_hielo": {
+      "anchor": [
+        47,
+        52
+      ],
+      "box": [
+        874,
+        382,
+        94,
+        55
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "cartel_policia": {
+      "anchor": [
+        38,
+        23
+      ],
+      "box": [
+        31,
+        380,
+        78,
+        48
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "cartel_comparsa": {
+      "anchor": [
+        43,
+        22
+      ],
+      "box": [
+        30,
+        429,
+        93,
+        44
+      ],
+      "components_in_box": 2,
+      "groups": false
+    },
+    "alerta": {
+      "anchor": [
+        54,
+        13
+      ],
+      "box": [
+        182,
+        472,
+        108,
+        27
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_s_sigilo": {
+      "anchor": [
+        63,
+        12
+      ],
+      "box": [
+        183,
+        499,
+        126,
+        24
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_flash": {
+      "anchor": [
+        63,
+        12
+      ],
+      "box": [
+        183,
+        523,
+        126,
+        24
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_a": {
+      "anchor": [
+        10,
+        19
+      ],
+      "box": [
+        354,
+        485,
+        27,
+        39
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_d": {
+      "anchor": [
+        16,
+        18
+      ],
+      "box": [
+        432,
+        485,
+        32,
+        39
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_s": {
+      "anchor": [
+        14,
+        18
+      ],
+      "box": [
+        512,
+        485,
+        33,
+        39
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_space": {
+      "anchor": [
+        27,
+        18
+      ],
+      "box": [
+        572,
+        485,
+        57,
+        39
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_e": {
+      "anchor": [
+        16,
+        18
+      ],
+      "box": [
+        649,
+        485,
+        33,
+        39
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_camara": {
+      "anchor": [
+        23,
+        19
+      ],
+      "box": [
+        721,
+        485,
+        49,
+        40
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "tecla_p": {
+      "anchor": [
+        14,
+        18
+      ],
+      "box": [
+        879,
+        485,
+        34,
+        39
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "gate_7": {
+      "anchor": [
+        30,
+        81
+      ],
+      "box": [
+        940,
+        465,
+        60,
+        85
+      ],
+      "components_in_box": 1,
+      "groups": false
+    },
+    "grupo_vendedor_letrero": {
+      "anchor": [
+        64,
+        119
+      ],
+      "box": [
+        339,
+        238,
+        130,
+        125
+      ],
+      "components_in_box": 2,
+      "groups": false
+    }
+  }
+}

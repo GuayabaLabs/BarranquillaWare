@@ -1,9 +1,120 @@
 """Utilidades aisladas: lienzo virtual, recursos y paneles del proyecto."""
 from pathlib import Path
+from functools import lru_cache
+import os
 import pygame
 
 ANCHO, ALTO, FPS = 1920, 1080, 60
 RAIZ = Path(__file__).resolve().parent.parent
+RAIZ_EXTRA = Path(__file__).resolve().parent
+TOLERANTE = os.environ.get("JUEGOS_EXTRA_TOLERANTE") == "1"
+
+# Catálogo central: los dos ejecutables y los tests validan los mismos recursos.
+_COMUNES = (
+    "assets/fonts/Impact.ttf", "assets/fonts/ArialBold.ttf",
+    "assets/recuadro_menu_pausa.png", "assets/boton_continuar_menu_pausa.png",
+    "assets/boton_reiniciar_menu_pausa.png", "assets/boton_salir_menu_pausa.png",
+    "assets/7am_ancpg_ost_main_menu.ogg",
+)
+_EMOJI = (
+    "assets/fondo_concentracion_microjuego.png", "assets/char_audio_0_microjuego_puño.ogg",
+    "juegos_extra/assets/hojas/hoja_emoji_catch.png",
+    "juegos_extra/assets/hojas/hoja_emoji_limpia.png",
+    "juegos_extra/assets/emoji/_contacto_emoji.png",
+)
+_EMOJI_SPRITES = (
+    "titulo", "tiempo", "tarjeta_mano_izq", "tarjeta_mano_der", "barra_negatividad",
+    "barra_positividad", "mano_morada", "mano_azul_der", "emoji_enojado_naranja",
+    "emoji_enojado_rojo", "emoji_triste", "emoji_vomito_1", "emoji_vomito_2",
+    "emoji_corazon_roto", "emoji_pulgar_abajo", "emoji_sonriente", "emoji_cara_azul",
+    "emoji_corazon", "emoji_pulgar_arriba", "emoji_bolsa_dinero",
+)
+_CURRAM = (
+    "assets/fondo_minijuego_crossy.png", "assets/char_audio_1_microjuego_puño.ogg",
+    "juegos_extra/assets/hojas/hoja_curramgram.png",
+    "juegos_extra/assets/hojas/hoja_curramgram_limpia.png",
+    "juegos_extra/assets/curramgram/_contacto_curramgram.png",
+)
+_CURRAM_SPRITES = (
+    "titulo", "barranquilla", "aeropuerto", "gates_1_10", "hud_pildora", "zona_1",
+    "zona_2", "zona_3", "puerta_embarque", "icono_camara", "reloj_grande", "policia",
+    "bailarina_comparsa", "trabajador_carrito", "grupo_vendedor_letrero", "cami",
+    "tamborero", "hombre_gorra", "turista_pasaporte", "pasajero_sentado_1",
+    "joven_llorando", "senor_sentado", "senora_cava", "globito_clickbait",
+    "dialogo_toma_foto", "dialogo_salto", "dialogo_confirma", "dialogo_privacidad",
+    "dialogo_respeto", "dialogo_pelea", "dialogo_hielo", "cartel_policia",
+    "cartel_comparsa", "alerta", "tecla_s_sigilo", "tecla_flash", "tecla_a", "tecla_d",
+    "tecla_s", "tecla_space", "tecla_e", "tecla_camara", "tecla_p", "gate_7",
+    "letrero_butifarras",
+)
+ASSETS_REQUERIDOS = {
+    "emoji_catch": _COMUNES + _EMOJI + tuple(f"juegos_extra/assets/emoji/{n}.png" for n in _EMOJI_SPRITES)
+    + ("juegos_extra/assets/atlas_emoji.json", "juegos_extra/assets/anclajes.json"),
+    "curramgram_go": _COMUNES + _CURRAM + tuple(f"juegos_extra/assets/curramgram/{n}.png" for n in _CURRAM_SPRITES)
+    + ("juegos_extra/assets/atlas_curramgram.json", "juegos_extra/assets/anclajes.json"),
+}
+_RECURSOS_VALIDOS = set()
+
+
+class ErrorRecursos(RuntimeError):
+    """Recurso requerido ausente o ilegible; incluye rutas probadas."""
+
+
+def _ruta_recurso(ruta):
+    ruta = Path(ruta)
+    return ruta if ruta.is_absolute() else RAIZ / ruta
+
+
+def revisar_recursos(juego, intentar_carga=True):
+    """Devuelve una lista de errores del catálogo; lanza por defecto si algo falla."""
+    if juego not in ASSETS_REQUERIDOS:
+        raise ValueError(f"Juego sin catálogo ASSETS_REQUERIDOS: {juego}")
+    if intentar_carga and juego in _RECURSOS_VALIDOS:
+        return []
+    errores = []
+    pygame.font.init()
+    if intentar_carga and not pygame.mixer.get_init():
+        try:
+            pygame.mixer.init()
+        except pygame.error:
+            # Sin dispositivo de sonido se verificará al menos que el archivo exista.
+            pass
+    for relativo in ASSETS_REQUERIDOS[juego]:
+        ruta = _ruta_recurso(relativo)
+        if not ruta.is_file():
+            errores.append(f"FALTA {relativo} -> {ruta}")
+            continue
+        if not intentar_carga:
+            continue
+        try:
+            if ruta.suffix.lower() == ".png":
+                imagen = pygame.image.load(str(ruta))
+                if imagen.get_width() <= 0 or imagen.get_height() <= 0:
+                    raise pygame.error("dimensiones vacías")
+            elif ruta.suffix.lower() == ".ttf":
+                pygame.font.Font(str(ruta), 16)
+            elif ruta.suffix.lower() in (".ogg", ".wav", ".mp3"):
+                if pygame.mixer.get_init(): pygame.mixer.Sound(str(ruta))
+            elif ruta.suffix.lower() == ".json":
+                import json
+                json.loads(ruta.read_text(encoding="utf-8-sig"))
+        except (OSError, pygame.error, ValueError) as exc:
+            errores.append(f"ILEGIBLE {relativo} -> {ruta}: {exc}")
+    if errores and not TOLERANTE:
+        raise ErrorRecursos("Recursos requeridos no disponibles:\n  - " + "\n  - ".join(errores))
+    if errores:
+        print("WARNING JUEGOS_EXTRA_TOLERANTE=1; recursos ausentes/ilegibles:\n  - " + "\n  - ".join(errores))
+    elif intentar_carga:
+        _RECURSOS_VALIDOS.add(juego)
+    return errores
+
+
+@lru_cache(maxsize=256)
+def _cargar_imagen_cache(ruta, alpha):
+    imagen = pygame.image.load(ruta)
+    if pygame.display.get_surface():
+        return imagen.convert_alpha() if alpha else imagen.convert()
+    return imagen.copy()
 
 
 def fuente(tamano=28, negrita=False):
@@ -16,20 +127,18 @@ def fuente(tamano=28, negrita=False):
 
 
 def cargar_imagen(nombre, tamano=None, alpha=True, carpeta="assets"):
-    """Carga solo lectura, devuelve None si falta y nunca escribe un recurso fuente."""
-    candidatos = [RAIZ / carpeta / nombre]
-    if carpeta == "assets":
-        candidatos.insert(0, Path(__file__).resolve().parent / "assets" / nombre)
-    for ruta in candidatos:
-        try:
-            imagen = pygame.image.load(str(ruta))
-            imagen = imagen.convert_alpha() if alpha else imagen.convert()
-            if tamano:
-                imagen = pygame.transform.smoothscale(imagen, tamano)
-            return imagen
-        except (OSError, pygame.error):
-            continue
-    return None
+    """Carga el archivo exacto; solo el modo tolerante permite un respaldo None."""
+    ruta = _ruta_recurso(Path(carpeta) / nombre)
+    try:
+        if not ruta.is_file():
+            raise FileNotFoundError(f"No existe el recurso: {nombre}; ruta probada: {ruta}")
+        imagen = _cargar_imagen_cache(str(ruta), bool(alpha))
+    except (OSError, pygame.error) as exc:
+        if TOLERANTE:
+            print(f"WARNING recurso de imagen omitido: {nombre}; ruta probada: {ruta}; {exc}")
+            return None
+        raise ErrorRecursos(f"No se pudo cargar {nombre}; ruta absoluta probada: {ruta}: {exc}") from exc
+    return pygame.transform.smoothscale(imagen, tamano) if tamano else imagen
 
 
 def cargar_sprite(nombre, grupo):
