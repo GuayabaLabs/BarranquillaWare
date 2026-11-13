@@ -24,12 +24,16 @@ class MicrogamePauseState(BaseState):
         return_callback: Optional[Callable[[], None]] = None,
         restart_callback: Optional[Callable[[], None]] = None,
         menu_callback: Optional[Callable[[], None]] = None,
+        save_callback: Optional[Callable[[], None]] = None,
+        on_calibrate: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__()
         self.previous = previous
         self.return_callback = return_callback
         self.restart_callback = restart_callback
         self.menu_callback = menu_callback
+        self.save_callback = save_callback
+        self.calibrate_callback = on_calibrate
 
         self.assets = AssetManager.get_instance()
         self.audio = AudioManager.get_instance()
@@ -41,6 +45,10 @@ class MicrogamePauseState(BaseState):
         ]
         if self.restart_callback:
             self.items.append({"id": "restart", "label": "REINICIAR", "asset": "boton_reiniciar_menu_pausa.png"})
+        if self.save_callback:
+            self.items.append({"id": "save", "label": "GUARDAR PARTIDA", "asset": None})
+        if self.calibrate_callback:
+            self.items.append({"id": "calibrate", "label": "CALIBRAR CÁMARA", "asset": None})
         if self.return_callback:
             self.items.append({"id": "map", "label": "VOLVER AL MAPA", "asset": None})
         if self.menu_callback:
@@ -157,6 +165,14 @@ class MicrogamePauseState(BaseState):
             self.audio.play_click()
             if self.menu_callback:
                 self.menu_callback()
+        elif current_id == "save":
+            self.audio.play_click()
+            if self.save_callback:
+                self.save_callback()
+        elif current_id == "calibrate":
+            self.audio.play_click()
+            if self.calibrate_callback:
+                self.calibrate_callback()
 
     def update(self, dt: float) -> None:
         pass
