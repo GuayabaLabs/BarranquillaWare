@@ -2666,40 +2666,40 @@ class StoryMapScene(BaseState):
         title_size = 32
         f_title = self.assets.get_font("arial rounded", title_size, bold=True)
         txt_title = f_title.render(title_text, True, (42, 26, 16))
-        max_title_w = int(cw * 0.65)
-        while txt_title.get_width() > max_title_w and title_size > 22:
+        max_title_w = int(cw * 0.58)
+        while txt_title.get_width() > max_title_w and title_size > 20:
             title_size -= 2
             f_title = self.assets.get_font("arial rounded", title_size, bold=True)
             txt_title = f_title.render(title_text, True, (42, 26, 16))
-        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2 + 14, int(ch * 0.165))))
+        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2 + 18, int(ch * 0.175))))
 
         # Subtítulo de Distrito sobre cinta de pergamino limpia
         cart_w = int(cw * 0.55)
         if hasattr(self, "tex_quest_cartridge") and self.tex_quest_cartridge:
             cart_h = int(cart_w * (self.tex_quest_cartridge.get_height() / max(1, self.tex_quest_cartridge.get_width())))
             cart_scaled = pygame.transform.smoothscale(self.tex_quest_cartridge, (cart_w, cart_h))
-            cart_rect = cart_scaled.get_rect(center=(cw // 2, int(ch * 0.235)))
+            cart_rect = cart_scaled.get_rect(center=(cw // 2, int(ch * 0.245)))
             card_surf.blit(cart_scaled, cart_rect)
             txt_dist = self.font_quest_sub.render(poi_info["district"], True, (135, 80, 25))
             card_surf.blit(txt_dist, txt_dist.get_rect(center=cart_rect.center))
         else:
             txt_dist = self.font_quest_sub.render(poi_info["district"], True, (80, 55, 35))
-            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cw // 2, int(ch * 0.235))))
+            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cw // 2, int(ch * 0.245))))
 
         # Separador decorativo ilustrado de pincelada floral
         if hasattr(self, "tex_quest_sep") and self.tex_quest_sep:
             sep_w = int(cw * 0.58)
             sep_h = int(sep_w * (self.tex_quest_sep.get_height() / max(1, self.tex_quest_sep.get_width())))
             sep_scaled = pygame.transform.smoothscale(self.tex_quest_sep, (sep_w, max(12, sep_h)))
-            card_surf.blit(sep_scaled, sep_scaled.get_rect(center=(cw // 2, int(ch * 0.298))))
+            card_surf.blit(sep_scaled, sep_scaled.get_rect(center=(cw // 2, int(ch * 0.308))))
 
         # Título del Microjuego / Rondas en terracota caribeño cálido
         txt_m_title = self.font_quest_btn.render(poi_info["microgame_title"], True, (215, 75, 35))
-        card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.355))))
+        card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.362))))
 
         # Descripción de la misión con tipografía cálida, redondeada y sin caracteres rotos
         desc_lines = poi_info["desc"]
-        curr_y = int(ch * 0.428)
+        curr_y = int(ch * 0.430)
         for line in desc_lines:
             txt_line = self.font_quest_body.render(line, True, (55, 38, 26))
             card_surf.blit(txt_line, txt_line.get_rect(center=(cw // 2, curr_y)))
