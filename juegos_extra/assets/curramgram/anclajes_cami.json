@@ -1,0 +1,146 @@
+{
+  "cami_idle": {
+    "anchor": [
+      39,
+      222
+    ],
+    "source_cell": [
+      0,
+      0,
+      171,
+      286
+    ]
+  },
+  "cami_walk_1": {
+    "anchor": [
+      49,
+      225
+    ],
+    "source_cell": [
+      171,
+      0,
+      341,
+      286
+    ]
+  },
+  "cami_walk_2": {
+    "anchor": [
+      60,
+      219
+    ],
+    "source_cell": [
+      341,
+      0,
+      512,
+      286
+    ]
+  },
+  "cami_walk_3": {
+    "anchor": [
+      57,
+      221
+    ],
+    "source_cell": [
+      512,
+      0,
+      683,
+      286
+    ]
+  },
+  "cami_walk_4": {
+    "anchor": [
+      52,
+      225
+    ],
+    "source_cell": [
+      683,
+      0,
+      853,
+      286
+    ]
+  },
+  "cami_walk_5": {
+    "anchor": [
+      45,
+      223
+    ],
+    "source_cell": [
+      853,
+      0,
+      1024,
+      286
+    ]
+  },
+  "cami_agachar_1": {
+    "anchor": [
+      51,
+      223
+    ],
+    "source_cell": [
+      0,
+      286,
+      171,
+      572
+    ]
+  },
+  "cami_agachar_2": {
+    "anchor": [
+      58,
+      197
+    ],
+    "source_cell": [
+      171,
+      286,
+      341,
+      572
+    ]
+  },
+  "cami_cuclillas": {
+    "anchor": [
+      53,
+      167
+    ],
+    "source_cell": [
+      341,
+      286,
+      512,
+      572
+    ]
+  },
+  "cami_arrodillada": {
+    "anchor": [
+      56,
+      177
+    ],
+    "source_cell": [
+      512,
+      286,
+      683,
+      572
+    ]
+  },
+  "cami_foto_agachada": {
+    "anchor": [
+      59,
+      155
+    ],
+    "source_cell": [
+      683,
+      286,
+      853,
+      572
+    ]
+  },
+  "cami_regreso": {
+    "anchor": [
+      46,
+      225
+    ],
+    "source_cell": [
+      853,
+      286,
+      1024,
+      572
+    ]
+  }
+}

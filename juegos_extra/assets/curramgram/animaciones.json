@@ -1,0 +1,74 @@
+{
+  "idle": {
+    "frames": [
+      "cami_idle"
+    ],
+    "duracion": 0.2,
+    "loop": true
+  },
+  "walk": {
+    "frames": [
+      "cami_walk_1",
+      "cami_walk_2",
+      "cami_walk_3",
+      "cami_walk_4",
+      "cami_walk_5"
+    ],
+    "duracion": 0.09,
+    "loop": true
+  },
+  "agachar": {
+    "frames": [
+      "cami_agachar_1",
+      "cami_agachar_2",
+      "cami_cuclillas"
+    ],
+    "duracion": 0.06,
+    "loop": false
+  },
+  "cuclillas": {
+    "frames": [
+      "cami_cuclillas"
+    ],
+    "duracion": 0.2,
+    "loop": true
+  },
+  "levantarse": {
+    "frames": [
+      "cami_agachar_2",
+      "cami_agachar_1",
+      "cami_regreso"
+    ],
+    "duracion": 0.06,
+    "loop": false
+  },
+  "foto_pie": {
+    "frames": [
+      "cami_walk_4"
+    ],
+    "duracion": 0.25,
+    "loop": false
+  },
+  "foto_agachada": {
+    "frames": [
+      "cami_arrodillada",
+      "cami_foto_agachada"
+    ],
+    "duracion": 0.15,
+    "loop": false
+  },
+  "salto": {
+    "frames": [
+      "cami_walk_3"
+    ],
+    "duracion": 0.72,
+    "loop": false
+  },
+  "empujon": {
+    "frames": [
+      "cami_agachar_1"
+    ],
+    "duracion": 0.18,
+    "loop": false
+  }
+}
