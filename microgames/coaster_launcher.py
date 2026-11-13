@@ -164,6 +164,19 @@ class CoasterCalibrationState(BaseState):
         self.camera = None
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Botón verde de volver (como el de jugar del juego de la montaña rusa) y enter para volver
+        botonVolver = getattr(self, "botonVolver", None)
+        if botonVolver is not None:
+            if hasattr(event, "pos"):
+                # El mouse llega en medidas de pantalla completa; el botón está en las del juego de la montaña rusa
+                self.posMouse = (event.pos[0] * self.module.ancho / 1920.0, event.pos[1] * self.module.alto / 1080.0)
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and botonVolver.caja.collidepoint(self.posMouse):
+                    botonVolver.accion()
+                    return
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                botonVolver.accion()
+                return
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self._finish(False)
@@ -235,6 +248,10 @@ class CoasterCalibrationState(BaseState):
             self.fuentesCoaster = {n: m.cargarFuente(n) for n in (20, 26, 36)}
             self.rectVista = pygame.Rect(140, 175, 400, 300)
             self.vistaCamara = None
+            self.botonVolver = m.Boton((m.ancho // 2 - 110, 520, 220, 70), "Volver", m.cVerde,
+                                       lambda: self._finish(self.saved), "flecha")
+            self.posMouse = (-100, -100)
+            self.ultimoCuadro = pygame.time.get_ticks()
 
         s = self.lienzoCoaster
         tiempo = pygame.time.get_ticks() / 1000.0
@@ -288,12 +305,24 @@ class CoasterCalibrationState(BaseState):
         for i, linea in enumerate(m.partirTexto(estado, self.fuentesCoaster[26], 400)):
             texto(linea, 26, color, (590, 350 + i * 38))
 
-        if self.saved:
-            frase = "Calibración guardada. Pulsa enter para volver."
-        else:
-            frase = "Después de calibrar, pulsa enter para volver. Con esc cancelas."
+        frase = "Para volver, deja el lápiz sobre el botón volver o pulsa enter en el teclado."
         for i, linea in enumerate(m.partirTexto(frase, self.fuentesCoaster[20], 400)):
-            texto(linea, 20, m.cMaderaOsc, (590, 440 + i * 30))
+            texto(linea, 20, m.cMaderaOsc, (590, 410 + i * 30))
+
+        # El botón se llena poco a poco cuando el lápiz o el mouse se quedan encima, como en el juego
+        ahora = pygame.time.get_ticks()
+        delta = min(0.1, (ahora - self.ultimoCuadro) / 1000.0)
+        self.ultimoCuadro = ahora
+        lapiz = self.camera.pos if self.camera is not None else None
+        encima = self.botonVolver.caja.collidepoint(self.posMouse) or (lapiz is not None and self.botonVolver.caja.collidepoint(lapiz))
+        if encima:
+            self.botonVolver.sobre += delta
+        else:
+            self.botonVolver.sobre = max(0.0, self.botonVolver.sobre - delta * 3)
+        self.botonVolver.dibujar(s, self.fuentesCoaster[20])
+        if self.botonVolver.sobre >= m.tBoton:
+            self.botonVolver.sobre = 0.0
+            self.botonVolver.accion()
 
         surface.blit(pygame.transform.smoothscale(s, surface.get_size()), (0, 0))
         return True

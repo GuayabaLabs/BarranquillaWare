@@ -235,11 +235,13 @@ class MicrogamePauseState(BaseState):
             return self.pausaLista
         try:
             import os
-            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), 780)
-            # Se estira a lo ancho para que los botones y el texto quepan cómodos
-            self.ventanaPausa = pygame.transform.smoothscale(ventana, (780, 980))
-            self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 370)
-            rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 370)
+            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), 860)
+            # Se estira a lo ancho y de arriba a abajo para que los botones y el texto quepan cómodos
+            self.ventanaPausa = pygame.transform.smoothscale(ventana, (860, 1080))
+            # El papel de la ventana va del 18% al 83% del ancho; su centro queda un poco a la derecha
+            self.centroPapel = 960 - 430 + int(860 * 0.508)
+            self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 380)
+            rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 380)
             # El rojo crece un poquito para que se note cuál está elegido
             self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
             self.fuenteTituloPausa = self.assets.cargarFuenteCuento(84)
@@ -256,12 +258,12 @@ class MicrogamePauseState(BaseState):
         if not self.prepararPausa():
             return []
         alto = self.botonMorado.get_height()
-        separacion = 16
+        separacion = 12
         total = len(self.items) * alto + (len(self.items) - 1) * separacion
-        arriba = 605 - total // 2
+        arriba = 564 - total // 2
         cajas = []
         for i in range(len(self.items)):
-            caja = self.botonMorado.get_rect(midtop=(960, arriba + i * (alto + separacion)))
+            caja = self.botonMorado.get_rect(midtop=(self.centroPapel, arriba + i * (alto + separacion)))
             cajas.append(caja)
         return cajas
 
@@ -285,11 +287,11 @@ class MicrogamePauseState(BaseState):
         # Oscurece el juego congelado multiplicando sus colores
         surface.fill((104, 98, 122), special_flags=pygame.BLEND_RGB_MULT)
 
-        ventana = self.ventanaPausa.get_rect(center=(960, 525))
+        ventana = self.ventanaPausa.get_rect(center=(960, 540))
         surface.blit(self.ventanaPausa, ventana)
 
         titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (110, 62, 150), (255, 250, 238))
-        surface.blit(titulo, titulo.get_rect(center=(ventana.centerx + 40, ventana.top + 215)))
+        surface.blit(titulo, titulo.get_rect(center=(ventana.left + int(ventana.width * 0.56), ventana.top + 215)))
 
         for i, caja in enumerate(self.cajasBotones()):
             elegido = i == self.selected
@@ -301,9 +303,8 @@ class MicrogamePauseState(BaseState):
             texto = self.textoConContorno(self.fuenteBotonPausa, etiqueta, (255, 248, 236), contorno)
             surface.blit(texto, texto.get_rect(center=(caja.centerx, caja.centery - 3)))
 
-        ayuda = self.fuenteAyudaPausa.render("Flechas o mouse para elegir  ·  Enter para aceptar  ·  Esc para seguir", True, (250, 240, 216))
-        cajaAyuda = ayuda.get_rect(center=(960, ventana.bottom + 30))
-        # Franja oscura suave detrás de la ayuda para que se lea sobre el juego
-        surface.fill((70, 64, 84), cajaAyuda.inflate(40, 10), special_flags=pygame.BLEND_RGB_MULT)
-        surface.blit(ayuda, cajaAyuda)
+        # Ayuda corta abajo a la izquierda del papel, donde no hay flores
+        for i, linea in enumerate(("Enter para aceptar", "Esc para seguir")):
+            ayuda = self.fuenteAyudaPausa.render(linea, True, (126, 90, 62))
+            surface.blit(ayuda, (ventana.left + int(ventana.width * 0.21), ventana.top + 872 + i * 32))
         return True
