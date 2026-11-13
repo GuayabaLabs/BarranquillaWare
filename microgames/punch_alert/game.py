@@ -82,10 +82,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         )
 
     def enter(self, params: Optional[dict] = None) -> None:
-        # Canción de fondo más bajita para que se oigan las voces
-        self.audio.play_bgm("PunchMusic.mp3")
-        volumenMusica = self.audio.music_volume * 0.35
-        pygame.mixer.music.set_volume(volumenMusica)
+        self.audio.play_bgm("PunchMusic.mp3", volume_scale=0.35)
 
     def _extract_tight_surface(self, surface: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
         """Extrae un subsurface y lo ajusta a su bounding box de píxeles no transparentes."""
@@ -180,13 +177,23 @@ class PunchAlertMicrogame(BaseMicrogame):
                 except Exception:
                     pass
 
-        # Fallback a las voces de 'char' si el personaje actual aún no tiene sus audios propios en assets/
+        # Fallback a las voces de 'char' con modulación tímbrica por personaje si no tiene audios grabados propios
         if not self.punch_voices:
+            pitch_profiles = {
+                "shakira": 1.32,    # Agudo y enérgico
+                "katherine": 1.22,  # Tono femenino claro y dinámico
+                "westcol": 0.94,    # Tono ligeramente más grave y raspado
+                "char": 1.0,        # Tono nativo
+            }
+            pitch_shift = pitch_profiles.get(self.character_id, 1.0)
+
             for fname in self.CHARACTER_PUNCH_VOICES["char"]:
                 resolved = self._resolve_audio_file(fname)
                 if resolved:
                     try:
                         snd = pygame.mixer.Sound(resolved)
+                        if abs(pitch_shift - 1.0) > 0.02 and hasattr(self.audio, "get_pitched_sound"):
+                            snd = self.audio.get_pitched_sound(snd, pitch_shift)
                         snd.set_volume(sfx_vol)
                         self.punch_voices.append(snd)
                     except Exception:

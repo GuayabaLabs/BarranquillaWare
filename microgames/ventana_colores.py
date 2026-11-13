@@ -28,7 +28,6 @@ class VentanaColoresMicrogame(BaseMicrogame):
         )
 
     def enter(self, params: Optional[dict] = None) -> None:
-        # Canción de fondo tranquila
         self.audio.play_bgm("tranquilaMusic.mp3")
 
     def setup_game(self) -> None:

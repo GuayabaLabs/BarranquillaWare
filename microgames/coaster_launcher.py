@@ -28,13 +28,15 @@ class CoasterLauncherState(BaseState):
         self.font_sub = pygame.font.SysFont("Arial, sans-serif", 20)
 
     def enter(self, params: Optional[dict] = None) -> None:
-        # Canción de fondo tranquila
         AudioManager.get_instance().play_bgm("tranquilaMusic.mp3")
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        coaster_dir = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
+        # Buscar prioritariamente en la carpeta oficial del juego (coaster_game)
+        coaster_dir = os.path.join(root, "coaster_game")
+        if not os.path.exists(coaster_dir):
+            coaster_dir = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
         coaster_file = os.path.join(coaster_dir, "Coaster.py")
         if not os.path.exists(coaster_file):
-            self.error = "No se encontró la versión original de Coaster"
+            self.error = "No se encontró el juego de Coaster"
             return
         try:
             if coaster_dir not in sys.path:
@@ -70,6 +72,7 @@ class CoasterLauncherState(BaseState):
         previous_state = self.game.estado
         previous_level = self.game.numNivel
         previous_won = bool((self.game.resultado or {}).get("gano", False))
+        previous_next_label = getattr(getattr(self.game, "botSiguiente", None), "etiqueta", "")
         handled = self.game.manejar(forwarded)
         # El juego legacy usa False para salir solo en QUIT o Q. No convertir
         # una transición de nivel en una salida accidental del estado embebido.
@@ -85,6 +88,8 @@ class CoasterLauncherState(BaseState):
             and self.legacy_level_count > 0
             and previous_level == self.legacy_level_count - 1
             and self.game.estado == "dibujar"
+            and self.game.numNivel == 0
+            and "volver al mapa" in previous_next_label.casefold()
         ):
             self._finish(True)
 
@@ -135,7 +140,9 @@ class CoasterCalibrationState(BaseState):
     def enter(self, params: Optional[dict] = None) -> None:
         try:
             root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            folder = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
+            folder = os.path.join(root, "coaster_game")
+            if not os.path.exists(folder):
+                folder = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
             path = os.path.join(folder, "Coaster.py")
             if folder not in sys.path:
                 sys.path.insert(0, folder)

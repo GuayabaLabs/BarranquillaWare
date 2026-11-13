@@ -36,7 +36,6 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
         self.outro_duration = 1.8
 
     def enter(self, params: Optional[dict] = None) -> None:
-        # Canción de fondo del estadio
         self.audio.play_bgm("JuniorCancion.mp3")
 
     def setup_game(self) -> None:

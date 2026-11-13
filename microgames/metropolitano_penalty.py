@@ -25,7 +25,6 @@ class MetropolitanoPenaltyMicrogame(BaseMicrogame):
         )
 
     def enter(self, params: Optional[dict] = None) -> None:
-        # Canción de fondo del penal
         self.audio.play_bgm("PenalMusic.mp3")
 
     def setup_game(self) -> None:

@@ -83,13 +83,15 @@ class StoryMapScene(BaseState):
     def __init__(
         self,
         character_id: str = "westcol",
-        on_back_callback: Optional[Callable[[], None]] = None
+        on_back_callback: Optional[Callable[[], None]] = None,
+        on_main_menu_callback: Optional[Callable[[BaseState], None]] = None,
     ) -> None:
         super().__init__()
         self.screen_w = 1920
         self.screen_h = 1080
         self.character_id = character_id
         self.on_back_callback = on_back_callback
+        self.on_main_menu_callback = on_main_menu_callback
 
         self.assets = AssetManager.get_instance()
         self.audio = AudioManager.get_instance()
@@ -1159,7 +1161,8 @@ class StoryMapScene(BaseState):
             __import__("core.microgame_pause", fromlist=["MicrogamePauseState"]).MicrogamePauseState(
                 previous=microgame,
                 return_callback=getattr(microgame, "pause_return_callback", None),
-                restart_callback=self._launch_microgame
+                restart_callback=self._launch_microgame,
+                menu_callback=self._exit_microgame_to_main_menu,
             )
         ) if self.state_machine else None
         if hasattr(self, "state_machine") and self.state_machine:
@@ -1171,6 +1174,14 @@ class StoryMapScene(BaseState):
         self.state_machine.pop_state()  # pausa
         self.state_machine.pop_state()  # minijuego
         self.state_machine.push_state(self)
+
+    def _exit_microgame_to_main_menu(self) -> None:
+        if not self.state_machine:
+            return
+        self.state_machine.pop_state()  # pausa
+        self.state_machine.pop_state()  # minijuego
+        self.state_machine.push_state(self)
+        self.request_exit()
 
     def _on_microgame_complete(self, won: bool) -> None:
         """Retorna al mapa o encadena la Ronda 2 del nivel actual y muestra la reflexión de la Paloma."""
@@ -1327,9 +1338,11 @@ class StoryMapScene(BaseState):
         self.settings.update_story_progress(**update_payload)
 
     def request_exit(self) -> None:
-        """Persiste el progreso y ejecuta el retorno hacia el flujo previo."""
+        """Guarda el progreso y sale directamente al menú principal cuando está disponible."""
         self.save_current_state()
-        if self.on_back_callback:
+        if self.on_main_menu_callback:
+            self.on_main_menu_callback(self)
+        elif self.on_back_callback:
             self.on_back_callback()
 
     def _init_player_navigation(self) -> None:

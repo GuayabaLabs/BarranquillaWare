@@ -27,7 +27,6 @@ class MaleconRuedaMicrogame(BaseMicrogame):
         )
 
     def enter(self, params: Optional[dict] = None) -> None:
-        # Canción de fondo contra reloj
         self.audio.play_bgm("contraRelojMusic.mp3")
 
     def setup_game(self) -> None:

@@ -49,9 +49,17 @@ class AudioManager:
 
         self._generate_procedural_sounds()
 
-    def play_bgm(self, filename: str, force_restart: bool = False) -> None:
-        """Carga y reproduce una pista BGM en loop si no es la pista que ya suena."""
+    def play_bgm(
+        self,
+        filename: str,
+        force_restart: bool = False,
+        volume_scale: float = 1.0,
+    ) -> None:
+        """Carga y reproduce una pista en loop con un volumen relativo opcional."""
+        volume = max(0.0, min(1.0, self.music_volume * volume_scale))
         if self.current_track == filename and not force_restart:
+            if pygame.mixer.get_init():
+                pygame.mixer.music.set_volume(volume)
             return
 
         self.current_track = filename
@@ -59,7 +67,7 @@ class AudioManager:
         if os.path.exists(track_path):
             try:
                 pygame.mixer.music.load(track_path)
-                pygame.mixer.music.set_volume(self.music_volume)
+                pygame.mixer.music.set_volume(volume)
                 if self.music_enabled:
                     pygame.mixer.music.play(loops=-1, fade_ms=300)
             except Exception as e:
@@ -205,4 +213,21 @@ class AudioManager:
         if self.sound_enabled and self._whistle_sound:
             self._whistle_sound.set_volume(self.sfx_volume * 0.7)
             self._whistle_sound.play()
+
+    def get_pitched_sound(self, sound: pygame.mixer.Sound, pitch_factor: float) -> pygame.mixer.Sound:
+        """
+        Modula dinámicamente el tono (pitch) de un Sound mediante remuestreo de numpy.
+        Útil para generar variaciones de voz por personaje cuando no existen audios grabados propios.
+        """
+        if abs(pitch_factor - 1.0) < 0.02 or not pygame.mixer.get_init():
+            return sound
+        try:
+            arr = pygame.sndarray.array(sound)
+            n_samples = len(arr)
+            indices = np.round(np.arange(0, n_samples, pitch_factor)).astype(int)
+            indices = indices[indices < n_samples]
+            pitched_arr = arr[indices]
+            return pygame.sndarray.make_sound(pitched_arr)
+        except Exception:
+            return sound
 
