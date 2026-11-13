@@ -2,18 +2,22 @@
 import math
 import random
 import pygame
-from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, texto, panel, leer_entrada, menu_pausa, pantalla_final
+from comun import ANCHO, ALTO, FPS, RAIZ, VentanaVirtual, cargar_imagen, cargar_sprite, revisar_recursos, texto, fuente, panel, leer_entrada, menu_pausa, pantalla_final
 
 # Parámetros configurables
 DURACION = 120.0
-SALUD_INICIAL = 100
+SALUD_INICIAL = 50
+SALUD_ACIERTO = 3
+SALUD_COMBO_5 = 1
+SALUD_COMBO_10 = 2
+SALUD_ESCAPE = 5
+SALUD_ESCAPE_MEGA = 10
+SALUD_TOPE = 100
+ANIMO_DURACION = 8.0
+ANIMO_ENFRIAMIENTO = 20.0
 UMBRAL_BALANCE = 24
 VELOCIDAD_MANO = 680.0
 DIFICULTAD_MAX = 1.65
-DRENAJE_BARRAS = 1.2
-DANO_ESCAPE_NEGATIVO = 6
-REGENERACION_EQUILIBRIO = 1.0
-UMBRAL_ESTRELLAS_EQUILIBRIO = (0.40, 0.65)
 COLOR_MORADO = (133, 79, 185)
 COLOR_AZUL = (55, 147, 218)
 
@@ -108,7 +112,9 @@ class EmojiCatch:
         self.spawn=0.5; self.wave_left=0.0; self.wave_kind=None; self.wave_clock=14.0; self.wave_label=""
         self.mega_clock=19.0; self.combo=0; self.mejor_racha=0; self.sponsor=0.0
         self.desbalance=0.0; self.desbalance_aviso=0.0; self.screen_shake=0.0; self.final=""; self.pausa=False; self.sel=0; self.rects=[]
-        self.elapsed=0.0;self.tiempo_equilibrio=0.0;self.porcentaje_equilibrio=0.0;self.victoria=False;self.estrellas=0
+        self.elapsed=0.0;self.victoria=False;self.estrellas=0
+        self.salud_visual=float(self.salud);self.salud_flash=0.0;self.salud_flash_color=(70,190,115)
+        self.salud_floaters=[];self.animo_activo=0.0;self.animo_enfriamiento=0.0
 
     def mover_manos(self, teclas, dt):
         """A/D mueven exclusivamente la mano morada; J/L exclusivamente la azul."""
@@ -169,15 +175,17 @@ class EmojiCatch:
         if mano!=mano_correcta:return
         if item.get("mega"):
             item["hp"]-=1;self.combo+=1;self.mejor_racha=max(self.combo,self.mejor_racha)
+            self._cambiar_salud(SALUD_ACIERTO+(SALUD_COMBO_5 if self.combo>=5 else 0)+(SALUD_COMBO_10 if self.combo>=10 else 0))
             self._particulas(item["x"],item["y"],(248,114,84),24);self.screen_shake=.10
             if item["hp"]>0:self._aviso(f"¡GOLPE! Mega-Hater {item['hp']}/3")
-            else:self.puntos+=60;self.negatividad=min(100,self.negatividad+12);self._aviso("¡MEGA-HATER BLOQUEADO! +60",(255,232,205));self.items.remove(item)
+            else:self.puntos+=60*(2 if self.sponsor>0 or self.animo_activo>0 else 1);self.negatividad=min(100,self.negatividad+12);self._aviso("¡MEGA-HATER BLOQUEADO! +60",(255,232,205));self.items.remove(item)
             return
         self.combo+=1;self.mejor_racha=max(self.combo,self.mejor_racha)
         mult=3 if self.combo>=10 else 2 if self.combo>=5 else 1
+        self._cambiar_salud(SALUD_ACIERTO+(SALUD_COMBO_5 if self.combo>=5 else 0)+(SALUD_COMBO_10 if self.combo>=10 else 0))
         if item.get("troll") and item.get("mutated"):
             mult=1;self._aviso("Troll desenmascarado: contaste su estado final",(232,228,255))
-        score=int(10*mult*(2 if self.sponsor>0 else 1));self.puntos+=score
+        score=int(10*mult*(2 if self.sponsor>0 or self.animo_activo>0 else 1));self.puntos+=score
         if negativo:self.negatividad=min(100,self.negatividad+3)
         else:self.positividad=min(100,self.positividad+3)
         self.pulso[mano]=.22;self._particulas(item["x"],item["y"],COLOR_MORADO if mano==0 else COLOR_AZUL,18)
@@ -189,6 +197,19 @@ class EmojiCatch:
         else:self._aviso(f"+{score} pts"+(f"  COMBO x{mult}" if mult>1 else ""),(226,243,255))
         if tipo=="emoji_bolsa_dinero":self.sponsor=6.0;self._aviso("PATROCINIO ACTIVO · 6 s de puntos dobles",(255,244,211),3.0)
 
+    def _cambiar_salud(self, cantidad):
+        anterior=self.salud
+        self.salud=max(0,min(SALUD_TOPE,self.salud+cantidad))
+        real=self.salud-anterior
+        if real:
+            self.salud_flash=.65;self.salud_flash_color=(70,190,115) if real>0 else (225,75,90)
+            self.salud_floaters.append({"texto":f"{real:+d}","t":1.0})
+            if self.salud==SALUD_TOPE and anterior<SALUD_TOPE and self.animo_enfriamiento<=0:
+                self.animo_activo=ANIMO_DURACION;self.animo_enfriamiento=ANIMO_ENFRIAMIENTO
+                self._aviso("ÁNIMO A TOPE · PUNTOS x2",(224,249,215),2.2)
+            if self.salud<=0:
+                self.final="SALUD MENTAL AGOTADA";self.victoria=False;self.estrellas=0
+
     def _particulas(self,x,y,color,n=12):
         for _ in range(n):
             ang=random.random()*math.tau;v=random.uniform(70,260)
@@ -199,6 +220,9 @@ class EmojiCatch:
         dt=min(dt,.05)
         if self.tiempo<3:dt*=.38
         self.elapsed+=dt;self.tiempo=max(0,self.tiempo-dt);self.sponsor=max(0,self.sponsor-dt)
+        self.animo_activo=max(0,self.animo_activo-dt);self.animo_enfriamiento=max(0,self.animo_enfriamiento-dt)
+        self.salud_flash=max(0,self.salud_flash-dt)
+        self.salud_visual+=(self.salud-self.salud_visual)*min(1,dt*8)
         self.mover_manos(teclas,dt)
         self._spawn(dt)
         dificultad=1+min(DIFICULTAD_MAX-1,self.elapsed/90)
@@ -220,10 +244,12 @@ class EmojiCatch:
                 self._puntos_captura(capturada,item)
                 if item in self.items and not item.get("mega"):self.items.remove(item)
             elif item["y"]>1040:
-                if item.get("mega") or item["kind"] in NEGATIVOS or item["kind"]=="mitad_rota":
-                    self.salud=max(0,self.salud-DANO_ESCAPE_NEGATIVO if not item.get("mega") else 12);self.grietas.append({"x":item["x"],"y":1010,"t":1.8});self.screen_shake=.32
-                    self._aviso("¡UN HATER IMPACTÓ EL FEED! Salud mental −12",(255,222,221))
+                self._cambiar_salud(-SALUD_ESCAPE_MEGA if item.get("mega") else -SALUD_ESCAPE)
+                self.grietas.append({"x":item["x"],"y":1010,"t":1.8});self.screen_shake=.32
+                self._aviso("¡SE ESCAPÓ! Salud mental −10" if item.get("mega") else "¡SE ESCAPÓ! Salud mental −5",(255,222,221))
                 if item in self.items:self.items.remove(item)
+                self.combo=0
+                if self.final:break
         for part in self.particulas:
             part["x"]+=part["vx"]*dt;part["y"]+=part["vy"]*dt;part["vy"]+=160*dt;part["t"]-=dt
         self.particulas=[p for p in self.particulas if p["t"]>0]
@@ -232,19 +258,11 @@ class EmojiCatch:
         for g in self.grietas:g["t"]-=dt
         self.grietas=[g for g in self.grietas if g["t"]>0]
         self.pulso=[max(0,p-dt) for p in self.pulso];self.screen_shake=max(0,self.screen_shake-dt)
-        diferencia=abs(self.negatividad-self.positividad)
-        if diferencia<=UMBRAL_BALANCE and 30<=self.negatividad<=70 and 30<=self.positividad<=70:
-            self.tiempo_equilibrio+=dt;self.salud=min(100,self.salud+REGENERACION_EQUILIBRIO*dt)
-        self.porcentaje_equilibrio=self.tiempo_equilibrio/max(1,self.elapsed)
-        balance_ok=diferencia<=UMBRAL_BALANCE and 30<=self.negatividad<=70 and 30<=self.positividad<=70
-        if not balance_ok:
-            self.desbalance+=dt;self.desbalance_aviso+=dt
-            if self.desbalance_aviso>3:self._aviso("¡EL FEED SE DESBALANCEA!",(255,230,211),1.6);self.desbalance_aviso=0
-            if self.desbalance>6 and int(self.desbalance*2)%2==0:self.salud=max(0,self.salud-1)
-        else:self.desbalance=max(0,self.desbalance-dt*1.8)
-        if self.tiempo<=0:
+        for floater in self.salud_floaters:floater["t"]-=dt
+        self.salud_floaters=[f for f in self.salud_floaters if f["t"]>0]
+        if not self.final and self.tiempo<=0 and self.salud>0:
             self.final="BALANCE LOGRADO";self.victoria=True
-            self.estrellas=1+int(self.porcentaje_equilibrio>=UMBRAL_ESTRELLAS_EQUILIBRIO[0])+int(self.porcentaje_equilibrio>=UMBRAL_ESTRELLAS_EQUILIBRIO[1])
+            self.estrellas=1+int(self.salud>=60)+int(self.salud>=85)
 
     def _draw_fondo(self,s):
         if self.fondo:s.blit(self.fondo,(0,0))
@@ -338,21 +356,37 @@ class EmojiCatch:
         texto(s,f"TIEMPO  {int(self.tiempo//60):02}:{int(self.tiempo%60):02}",(900,64),30,(72,56,82),True)
         texto(s,f"PUNTAJE  {self.puntos}",(1144,64),30,(72,56,82),True)
         panel(s,pygame.Rect(1370,28,510,70),(255,248,235),(99,75,95),18,3)
-        texto(s,f"SALUD MENTAL  {self.salud}%",(1625,63),27,(66,65,91),True)
+        texto(s,f"ÁNIMO x2  {self.animo_activo:.0f}s" if self.animo_activo>0 else "¡A JUGAR!",(1625,63),26,(66,65,91),True)
         self._draw_balance(s);self._draw_barras(s);self._draw_items(s);self._draw_manos(s)
         # Tarjetas originales de controles quedan abajo dentro del margen.
         for k,x in (("tarjeta_mano_izq",45),("tarjeta_mano_der",ANCHO-45-168)):
             img=self.decoracion.get(k)
             if img:s.blit(pygame.transform.smoothscale(img,(168,190)),(x,ALTO-226))
-        # Medidor de salud en una franja propia, entre ambas tarjetas.
-        panel(s,pygame.Rect(690,ALTO-84,540,42),(255,248,235),(98,76,98),16,2)
-        pygame.draw.rect(s,(76,74,99),(718,ALTO-70,484,15),border_radius=7)
-        pygame.draw.rect(s,(92,197,150) if self.salud>35 else (225,83,102),(718,ALTO-70,int(484*self.salud/100),15),border_radius=7)
+        # Medidor independiente: la salud solo cambia con capturas y escapes.
+        x,y,w,h=690,898,560,42
+        pulso=1+int(3*math.sin(self.elapsed*9)) if self.salud<25 else 0
+        panel(s,pygame.Rect(x-pulso,y-pulso,w+2*pulso,h+2*pulso),(255,248,235),(225,83,102) if self.salud<25 else (98,76,98),16,3+bool(pulso))
+        pygame.draw.rect(s,(76,74,99),(x+14,y+13,w-62,17),border_radius=8)
+        relleno=round((w-62)*max(0,min(100,self.salud_visual))/100)
+        color=(92,197,150) if self.salud_visual>35 else (225,83,102)
+        if relleno:pygame.draw.rect(s,color,(x+14,y+13,relleno,17),border_radius=8)
+        if self.salud_flash>0 and relleno:
+            glow=pygame.Surface((relleno,17),pygame.SRCALPHA);glow.fill((*self.salud_flash_color,int(105*self.salud_flash/.65)));s.blit(glow,(x+14,y+13))
+        texto(s,f"SALUD MENTAL  {round(self.salud_visual)}%",(x+w//2-18,y-20),26,(66,65,91),True)
+        cara="emoji_triste" if self.salud_visual<30 else "emoji_sonriente" if self.salud_visual>70 else "emoji_cara_azul"
+        cara_img=self.sprites[cara]
+        s.blit(pygame.transform.scale(cara_img,(40,40)),cara_img.get_rect(center=(x+w-19,y+h//2)))
+        if self.salud_floaters:
+            f=self.salud_floaters[-1];alpha=max(0,min(255,round(255*f["t"])));lab=fuente(30,True).render(f["texto"],True,self.salud_flash_color)
+            lab.set_alpha(alpha);s.blit(lab,(x+14+relleno,y-12-round((1-f["t"])*28)))
+        pygame.draw.rect(s,(76,74,99),(x+6,846,w-12,10),border_radius=5)
+        pygame.draw.rect(s,(90,155,210),(x+6,846,round((w-12)*self.tiempo/DURACION),10),border_radius=5)
+        if self.animo_activo>0:texto(s,f"ÁNIMO A TOPE · PUNTOS x2 · {self.animo_activo:.0f}s",(960,817),25,(54,139,82),True)
         self._draw_efectos(s)
         if self.pausa:self.rects=menu_pausa(s,["Continuar","Reiniciar","Salir"],self.sel,cursor=mouse)
         if self.final:
             balance="equilibrado" if abs(self.negatividad-self.positividad)<=UMBRAL_BALANCE else "desbalanceado"
-            pantalla_final(s,"PERFIL DE ÁNIMO · "+self.final,[f"Puntaje: {self.puntos}  |  Mejor racha: {self.mejor_racha}",f"Positividad {self.positividad}%  ·  Negatividad {self.negatividad}%  ·  {balance}",f"Salud mental restante: {self.salud}%", f"{self.estrellas} ESTRELLAS · equilibrio {self.porcentaje_equilibrio:.0%}"])
+            pantalla_final(s,"PERFIL DE ÁNIMO · "+self.final,[f"Puntaje: {self.puntos}  |  Mejor racha: {self.mejor_racha}",f"Positividad {self.positividad}%  ·  Negatividad {self.negatividad}%  ·  {balance}",f"Salud mental restante: {self.salud}%", f"{self.estrellas} ESTRELLAS · salud final {self.salud}%"])
 
     def run(self):
         ventana=VentanaVirtual("Emoji Catch: Balance!");clock=pygame.time.Clock();running=True
