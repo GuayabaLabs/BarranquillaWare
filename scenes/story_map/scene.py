@@ -1289,10 +1289,12 @@ class StoryMapScene(BaseState):
 
         microgame = microgame_cls(**kwargs)
         if stages and idx + 1 < len(stages):
-            # Ronda intermedia del nivel: cartel breve de ronda superada
-            microgame.outro_message = f"¡RONDA {idx + 1} SUPERADA!"
+            # Ronda intermedia del nivel: no mostrar mensaje entre minijuegos, sino cuando se completa el nivel completo
+            microgame.show_outro_banner = False
+            microgame.outro_duration = 0.35
         elif stages and idx + 1 == len(stages):
             # Última ronda que completa el nivel
+            microgame.show_outro_banner = True
             microgame.outro_message = f"¡{poi_info.get('title', 'NIVEL')} DESPEJADO!"
 
         microgame.pause_return_callback = self._return_from_microgame_pause
@@ -2666,12 +2668,12 @@ class StoryMapScene(BaseState):
         title_size = 32
         f_title = self.assets.get_font("arial rounded", title_size, bold=True)
         txt_title = f_title.render(title_text, True, (42, 26, 16))
-        max_title_w = int(cw * 0.58)
-        while txt_title.get_width() > max_title_w and title_size > 20:
+        max_title_w = int(cw * 0.48)
+        while txt_title.get_width() > max_title_w and title_size > 18:
             title_size -= 2
             f_title = self.assets.get_font("arial rounded", title_size, bold=True)
             txt_title = f_title.render(title_text, True, (42, 26, 16))
-        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2 + 18, int(ch * 0.175))))
+        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2 + 20, int(ch * 0.175))))
 
         # Subtítulo de Distrito sobre cinta de pergamino limpia
         cart_w = int(cw * 0.55)
