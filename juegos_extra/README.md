@@ -1,39 +1,74 @@
-# Juegos extra de BarranquillaWare
+# Juegos extra
 
-Dos minijuegos independientes en Pygame. Se ejecutan desde la raíz del proyecto con `python juegos_extra/emoji_catch.py` o `python juegos_extra/curramgram_go.py`. No importan el menú ni el gestor original; comparten únicamente utilidades locales de `comun.py`. Requieren las librerías ya instaladas para el proyecto.
+Dos juegos independientes en Pygame. Desde la carpeta raíz del proyecto:
+
+```powershell
+python juegos_extra/emoji_catch.py
+python juegos_extra/curramgram_go.py
+```
+
+No se importa el menú ni el gestor existente y no se requieren dependencias nuevas. Cada juego tiene su propio bloque `if __name__ == "__main__"`.
+
+## Ventana y utilidades
+
+- Lienzo virtual de **1920×1080**, salida inicial de **1280×720**, redimensionable y escalada manteniendo proporción; si sobra espacio quedan franjas del color de fondo.
+- **F11** alterna pantalla completa. Ambos juegos apuntan a 60 FPS.
+- `comun.py` contiene carga segura de recursos, fuentes, paneles, entrada, pausa y pantalla final. La función `leer_entrada()` concentra teclado y mouse.
+- ESC abre **Continuar / Reiniciar / Salir**. Al terminar se muestra el resultado; **R** reinicia.
+- Constantes de duración, dificultad, umbrales y velocidades están arriba de cada juego.
 
 ## Emoji Catch: Balance!
 
-Duración: 120 segundos. La mano morada controlada con A/D recoge elementos negativos; la mano azul con J/L recoge los positivos. Un tipo equivocado resta salud mental y puntos; dejar caer un negativo también afecta la salud. Para ganar, termina el reloj con salud positiva y con las barras de negatividad/positividad separadas por no más de 24 puntos (configurable en `emoji_catch.py`). La dificultad crece con el tiempo. No hay tope de puntaje.
+Partida de 120 segundos. La mano morada **solo** se mueve con **A/D** y recoge emojis negativos; la mano azul **solo** con **J/L** y recoge positivos. S, las flechas y las demás teclas no mueven las manos. Un error de mano resta salud y puntos; si un negativo escapa, golpea el feed y baja la salud. Se gana si queda salud y el balance final está dentro del umbral configurable; no hay límite de puntaje.
 
-ESC abre la pausa; flechas arriba/abajo y Enter eligen Continuar, Reiniciar o Salir. La pantalla final muestra el resultado y R reinicia.
+Incluye combos x2/x3, patrocinio de puntos dobles, vómito zigzagueante, enojados que aceleran, corazón roto separado, pulgar que gira, oleadas de haters/tendencia/troll, mega-hater de tres golpes, aviso de desbalance, partículas, vibración y cámara lenta en los últimos segundos.
 
 ## CurramGram Go!: Aterrizando en el Cortissoz
 
-Recorre la terminal con A/D o flechas y llega a Gate 7 antes de 120 segundos. S/flecha abajo activa sigilo; ESPACIO salta; E interactúa; mouse y clic toma una foto; P publica la última foto. ESC abre la pausa y R reinicia desde el reporte final. Los carritos descuentan cinco segundos si no saltas o te escondes.
+Recorre la terminal hacia Gate 7 antes de los 120 segundos:
 
-Investiga las seis escenas: confirma que la bolsa blanca es harina sin acusar; fotografía al tamborero desde sigilo y vuelve a Policía; advierte a la turista del pasabordo con E; respeta al joven en la banca; verifica que el hielo de la cava se derramó; y comparte la comparsa en un evento público. Publicar datos privados o chismes penaliza ciudadanía. En la puerta o al terminar el tiempo aparece el perfil con el resultado de cada decisión.
+- **A/D** o flechas izquierda/derecha: caminar.
+- **S** o flecha abajo: esconderse/agacharse.
+- **Espacio**: saltar el carrito.
+- **E**: interactuar.
+- **Mouse + clic izquierdo**: tomar foto con el visor.
+- **P**: publicar la última foto.
 
-## Recursos visuales y sonoros
+La terminal se desplaza horizontalmente y muestra tres zonas, Policía, puesto de fritos, pasajeros, comparsa, Gate 7, carrito móvil y las seis situaciones del reporte. Las fotos de lejos muestran el señuelo; al acercarse se revela el contexto. Para entregar evidencia real, fotografía al tamborero escondido y usa E junto a Policía. Apuntar durante más de un segundo a una persona vulnerable activa el aviso de privacidad. Al llegar a Gate 7 o acabar el tiempo aparece el perfil con la decisión y aprendizaje de cada escena.
 
-Los recursos se cargan con rutas relativas desde `../assets/` y en modo solo lectura. Si falta una imagen o fuente, el juego sigue con sus recursos dibujados.
+## Arte y audio reutilizados
 
-| Juego | Recursos existentes utilizados | Dibujado en Pygame por falta de alternativa en el proyecto |
-|---|---|---|
-| Emoji Catch | `fondo_concentracion_microjuego.png`, fuentes `Impact.ttf` y `ArialBold.ttf` | Emojis estilizados, manos enguantadas, barras laterales, destellos y grietas |
-| CurramGram Go | `fondo_minijuego_crossy.png`, `westcol_chibi.png`, fuentes existentes | Interior del aeropuerto, policía, viajero, sospechoso, turistas, comparsa, mobiliario, Gate 7, cámara y avisos |
+Las hojas adjuntas se guardaron dentro de este paquete para mantener todos los cambios aislados. Sus versiones originales están en `assets/hojas/`; las variantes limpiadas y los recortes están también bajo `assets/`. Los archivos del proyecto original se leen desde sus rutas relativas y no se alteran.
 
-El Cortissoz disponible (`aeropuerto_ernesto_cortissoz_mapa.png`) es una ilustración para el mapa y no representa una terminal interior; el juego no la estira para fingir un escenario. Los spritesheets disponibles son de NPC de otro minijuego y no contienen variantes direccionales adecuadas para estas seis escenas, por lo que se dibujan siluetas propias. Tampoco hay sprites de guantes ni emojis. Se encontraron fuentes y sonidos ambientales, pero no un efecto dedicado de captura/bloqueo; no se toma prestado audio temático de otro minijuego.
+| Juego | Recursos originales del proyecto | Recursos de las hojas adjuntas | Dibujado porque no había sprite equivalente |
+|---|---|---|---|
+| Emoji Catch | `assets/fondo_concentracion_microjuego.png`; `assets/fonts/Impact.ttf` y `ArialBold.ttf`; música `assets/7am_ancpg_ost_main_menu.ogg`; golpe `assets/char_audio_0_microjuego_puño.ogg`; marco/botones de `assets/recuadro_menu_pausa.png` y `assets/boton_*_menu_pausa.png` | Título, tarjetas, tubos laterales, guantes morado/azul y los doce tipos de emoji en `juegos_extra/assets/emoji/` | Balanza, relleno animado de los tubos, chispas, grietas, partículas, aura de combo y paneles de HUD dinámicos |
+| CurramGram Go | Fuentes `assets/fonts/Impact.ttf` y `ArialBold.ttf`; música `assets/7am_ancpg_ost_main_menu.ogg`; sonido `assets/char_audio_1_microjuego_puño.ogg`; marco y botones de pausa del proyecto | Cami, policía, comparsa, trabajador del carrito, grupo vendedor/letrero, tamborero, viajero, turista, pasajeros, joven, señora de la cava, globos, zonas, cabeceras, Gate y teclas desde `juegos_extra/assets/curramgram/` | Interior del terminal (ventanales, pista, aviones, columnas, palmeras, mostradores, bancas y baldosas), sombras, movimiento/idle, visor, cursor de privacidad, alertas dinámicas y cuadros de texto |
 
-## Resolución y controles compartidos
+Los NPC y emojis visibles salen de los sprites adjuntos. El fondo del aeropuerto no estaba entre los recursos originales, así que se construye en baja resolución y se escala con vecino más cercano, en lugar de reutilizar una ilustración exterior inadecuada. El chisme y los avisos dinámicos se componen con la tipografía y los colores de las piezas de la hoja. Si falta un recurso de disco, la carga devuelve `None` y el juego conserva un respaldo seguro.
 
-Ambos juegos abren a 1920×1080, 60 FPS. La entrada pasa por `leer_entrada()` para facilitar un reemplazo futuro por cámara/mano. Las constantes configurables están al inicio de cada archivo. `comun.py` centraliza carga segura de imágenes/fuentes, paneles, pausa y pantalla final.
+## Preparación y recortes de las hojas
 
-Algunas escenas se resuelven de forma breve para no interrumpir el recorrido; los aprendizajes completos aparecen en el reporte final. El personaje jugable de CurramGram usa el chibi existente como retrato fijo porque el repositorio no incluye un sprite con direcciones.
+- `assets/hojas/hoja_emoji_catch.png` y `hoja_curramgram.png` se recibieron como RGB sin alfa: el tablero de transparencia estaba pintado. `herramientas/recortar_sprites.py` aplica flood-fill conectado desde los bordes, tolerancia de color y cajas manuales en `atlas_emoji.json`/`atlas_curramgram.json`.
+- Las versiones `*_limpia.png` tienen transparencia y los recortes exportados incluyen anclajes en `assets/emoji/anclajes.json` y `assets/curramgram/anclajes.json`.
+- Se generaron 21 recortes para Emoji Catch y 45 para CurramGram, con hojas de contacto revisadas: `assets/emoji/_contacto_emoji.png` y `assets/curramgram/_contacto_curramgram.png`. El vendedor y el letrero que se solapan se conservan como un solo grupo; los píxeles ocultos por el solape no se pueden recuperar del original.
+- Las formas blancas/grises rodeadas por el contorno (guantes, pasabordo, cava) se conservaron durante la limpieza. Las barras de Emoji Catch llevan una máscara adicional en memoria para excluir el tablero residual y animar su relleno sin escribir sobre el sprite fuente.
+- CurramGram se amplía con factores enteros y vecino más cercano; Emoji Catch usa suavizado moderado para emojis y guantes.
 
-## Reparación de arte con hojas adjuntas
+## Verificación
 
-- Las hojas `assets/hojas/hoja_emoji_catch.png` y `assets/hojas/hoja_curramgram.png` llegaron como RGB sin alfa; el tablero de transparencia estaba pintado. `herramientas/recortar_sprites.py` crea variantes RGBA, detecta componentes alfa y usa las cajas manuales de `atlas_emoji.json` y `atlas_curramgram.json` para los grupos cercanos.
-- Se extrajeron 21 recursos de Emoji Catch y 45 de CurramGram, con hojas de contacto revisadas visualmente. Los contactos quedan en `assets/emoji/_contacto_emoji.png` y `assets/curramgram/_contacto_curramgram.png`; los puntos de anclaje están en `anclajes.json`.
-- El flood-fill eliminó aproximadamente 71.5% del tablero de Emoji Catch y 63.1% del de CurramGram como fondo conectado. La limpieza preservó islas de gris/blanco rodeadas por contornos: se revisaron visualmente las tarjetas, el pasabordo y la cava. El vendedor y el letrero que se solapan se exportan como `grupo_vendedor_letrero`; las partes tapadas en la hoja no se pueden reconstruir sin inventar arte.
-- CurramGram se escala con vecino más cercano en múltiplos enteros de 2. Emoji Catch permite suavizado moderado. Los archivos fuente de las hojas se conservan sin modificar.
+Prueba automática headless de teclas:
+
+```powershell
+$env:SDL_VIDEODRIVER = "dummy"
+$env:SDL_AUDIODRIVER = "dummy"
+python -m unittest juegos_extra.tests.test_controles_emoji juegos_extra.tests.test_curramgram_mecanicas -v
+```
+
+Para volver a generar las seis capturas headless (dos juegos × tres tamaños):
+
+```powershell
+python juegos_extra/herramientas/capturar_juegos.py
+```
+
+Las capturas quedan en `juegos_extra/_capturas/` con sufijos `1280x720`, `1366x768` y `1920x1080`.
