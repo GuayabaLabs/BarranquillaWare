@@ -377,9 +377,14 @@ class StoryMapScene(BaseState):
 
         from tools.map_dev_tool import get_bezier_points
 
+        import numpy as np
+
         street_surf = pygame.Surface((self.world_w, self.world_h), pygame.SRCALPHA)
 
         for edge in edges:
+            if edge.get("hidden", False):
+                continue
+
             p0 = node_map.get(edge["from"])
             p1 = node_map.get(edge["to"])
             if not p0 or not p1:
@@ -388,13 +393,29 @@ class StoryMapScene(BaseState):
             pc = (edge.get("ctrl_x", (p0["x"] + p1["x"]) // 2), edge.get("ctrl_y", (p0["y"] + p1["y"]) // 2))
             pts = get_bezier_points((p0["x"], p0["y"]), pc, (p1["x"], p1["y"]), step_px=6)
             if len(pts) > 1:
-                is_hid = edge.get("hidden", False)
-                seg_col = (130, 75, 190, max(30, alpha - 30)) if is_hid else (color[0], color[1], color[2], alpha)
-
+                seg_col = (color[0], color[1], color[2], alpha)
                 pygame.draw.lines(street_surf, (20, 25, 40, int(alpha * 0.35)), False, pts, width + 4)
                 pygame.draw.lines(street_surf, seg_col, False, pts, width)
                 for pt in pts:
                     pygame.draw.circle(street_surf, seg_col, pt, width // 2)
+
+        # Recortar del street_surf cualquier pixel cubierto por monumentos/POIs (incluso sus bases
+        # semitransparentes) para que ninguna linea vial amarilla o borde oscuro trasluzca debajo.
+        world_bounds = pygame.Rect(0, 0, self.world_w, self.world_h)
+        for key, asset, dx, dy, dw, _dh, _scol, _soff in self.POI_SPECS:
+            try:
+                rotated_surf, final_rect = self._prepare_poi_transform(asset, key, dx, dy, dw)
+            except Exception:
+                continue
+            clip_r = final_rect.clip(world_bounds)
+            if clip_r.width <= 0 or clip_r.height <= 0:
+                continue
+            ox = clip_r.x - final_rect.x
+            oy = clip_r.y - final_rect.y
+            poi_a = pygame.surfarray.pixels_alpha(rotated_surf)[ox : ox + clip_r.width, oy : oy + clip_r.height]
+            st_a = pygame.surfarray.pixels_alpha(street_surf)[clip_r.x : clip_r.right, clip_r.y : clip_r.bottom]
+            st_a[poi_a >= 6] = 0
+            del poi_a, st_a
 
         self.world_map.blit(street_surf, (0, 0))
 
@@ -404,6 +425,38 @@ class StoryMapScene(BaseState):
         if 0 <= edge_idx < len(edges):
             return bool(edges[edge_idx].get("hidden", False))
         return False
+
+    def _prepare_poi_transform(
+        self,
+        asset_filename: str,
+        poi_key: str,
+        default_x: int,
+        default_y: int,
+        default_w: int,
+    ) -> Tuple[pygame.Surface, pygame.Rect]:
+        """Carga, recorta, escala y rota un POI preservando su centro configurado."""
+        surf = self.assets.load_surface(asset_filename, has_alpha=True)
+        mask = pygame.mask.from_surface(surf)
+        rects = mask.get_bounding_rects()
+        tight_surf = surf.subsurface(rects[0]) if rects else surf
+
+        cfg = self.dev_tool.get_poi_config(poi_key) if hasattr(self, "dev_tool") else {}
+        target_w = max(40, cfg.get("width", default_w))
+        target_h = max(20, int(tight_surf.get_height() * (target_w / float(tight_surf.get_width()))))
+        scaled_surf = pygame.transform.smoothscale(tight_surf, (target_w, target_h))
+
+        angle = float(cfg.get("angle", 0.0))
+        if abs(angle) > 0.01:
+            rotated_surf = pygame.transform.rotate(scaled_surf, -angle)
+        else:
+            rotated_surf = scaled_surf
+
+        base_x = cfg.get("x", default_x)
+        base_y = cfg.get("y", default_y)
+        cx = base_x + target_w // 2
+        cy = base_y + target_h // 2
+        final_rect = rotated_surf.get_rect(center=(cx, cy))
+        return rotated_surf, final_rect
 
     def _stamp_poi(
         self,
@@ -419,29 +472,9 @@ class StoryMapScene(BaseState):
         Escala, rota y estampa un POI sobre el mapa mundial preservando su centro geométrico,
         generando silueta de sombra proyectada rápida con pygame.mask.
         """
-        surf = self.assets.load_surface(asset_filename, has_alpha=True)
-        mask = pygame.mask.from_surface(surf)
-        rects = mask.get_bounding_rects()
-        tight_surf = surf.subsurface(rects[0]) if rects else surf
-
-        cfg = self.dev_tool.get_poi_config(poi_key) if hasattr(self, "dev_tool") else {}
-        target_w = max(40, cfg.get("width", default_w))
-        target_h = max(20, int(tight_surf.get_height() * (target_w / float(tight_surf.get_width()))))
-        scaled_surf = pygame.transform.smoothscale(tight_surf, (target_w, target_h))
-
-        # Rotación (ángulo en grados: positivo = sentido horario)
-        angle = float(cfg.get("angle", 0.0))
-        if abs(angle) > 0.01:
-            rotated_surf = pygame.transform.rotate(scaled_surf, -angle)
-        else:
-            rotated_surf = scaled_surf
-
-        # Anclaje y preservación del centro
-        base_x = cfg.get("x", default_x)
-        base_y = cfg.get("y", default_y)
-        cx = base_x + target_w // 2
-        cy = base_y + target_h // 2
-        final_rect = rotated_surf.get_rect(center=(cx, cy))
+        rotated_surf, final_rect = self._prepare_poi_transform(
+            asset_filename, poi_key, default_x, default_y, default_w
+        )
 
         # Sombra proyectada con silueta rápida basada en máscara nativa SDL
         try:
@@ -478,142 +511,39 @@ class StoryMapScene(BaseState):
 
     def _repair_quadrant_seams(self) -> None:
         """
-        Maquilla y repara a nivel de pixel las discontinuidades en las costuras de los cuadrantes:
-        - Spot 1 (Calle diagonal Y=941): realinea los faroles cortados y suaviza el asfalto.
-        - Spot 2 (Cruce de los 4 cuadrantes X=1671, Y=941): florece la copa del guayacan rosado unificando las 4 esquinas.
-        - Spot 3 (Glorieta este Y=941, X=2567): conecta y endereza el farol de la glorieta.
+        Aplica el shader sutil de papel acuarela / pergamino arrugado y viñeta cálida
+        para cohesionar toda la lámina base sin difuminado ancho ni deformación en runtime
+        (las costuras de los cuadrantes ya están reparadas de forma limpia en los PNG base).
         """
-        qh = self.quad_h
-        qw = self.quad_w
+        import numpy as np
 
-        def _draw_cozy_street_lamp(surf: pygame.Surface, cx: int, cy: int) -> None:
-            # 1. Sombra eliptica en el suelo
-            shadow = pygame.Surface((24, 10), pygame.SRCALPHA)
-            pygame.draw.ellipse(shadow, (20, 25, 35, 90), (0, 0, 24, 10))
-            surf.blit(shadow, (cx - 12, cy - 5))
+        arr = pygame.surfarray.pixels3d(self.world_map).astype(np.float32)
 
-            # 2. Base redonda del poste
-            pygame.draw.ellipse(surf, (15, 18, 24), (cx - 7, cy - 6, 14, 8))
-            pygame.draw.ellipse(surf, (35, 42, 54), (cx - 5, cy - 5, 10, 5))
+        # Shader sutil de papel acuarela / pergamino arrugado y viñeta cálida unificadora
+        w, h = self.world_w, self.world_h
+        rng = np.random.default_rng(42)
+        grain = rng.normal(0.0, 2.8, size=(w, h, 1)).astype(np.float32)
 
-            # 3. Poste de hierro forjado vertical
-            pole_h = 36
-            pole_top_y = cy - pole_h
-            pygame.draw.rect(surf, (15, 18, 24), (cx - 3, pole_top_y, 6, pole_h))
-            pygame.draw.line(surf, (45, 55, 70), (cx - 1, pole_top_y), (cx - 1, cy - 2), 2)
-            pygame.draw.rect(surf, (15, 18, 24), (cx - 4, cy - 18, 8, 3))
-            pygame.draw.rect(surf, (45, 55, 70), (cx - 3, cy - 17, 6, 1))
+        xs = np.linspace(0.0, 1.0, w, dtype=np.float32)[:, None, None]
+        ys = np.linspace(0.0, 1.0, h, dtype=np.float32)[None, :, None]
+        # Pliegues orgánicos muy suaves tipo mapa ilustrado
+        creases = (
+            np.sin(xs * 24.0 + ys * 13.0) * 2.4
+            + np.cos(xs * 11.0 - ys * 21.0) * 2.0
+        )
 
-            # 4. Soporte / Mensula de la linterna
-            pygame.draw.polygon(surf, (15, 18, 24), [
-                (cx - 6, pole_top_y),
-                (cx + 6, pole_top_y),
-                (cx + 4, pole_top_y + 3),
-                (cx - 4, pole_top_y + 3)
-            ])
+        # Leve viñeta cálida en los márgenes exteriores del mapa
+        edge_x = np.minimum(xs * (w / 55.0), (1.0 - xs) * (w / 55.0))
+        edge_y = np.minimum(ys * (h / 55.0), (1.0 - ys) * (h / 55.0))
+        edge_mask = np.clip(1.0 - np.minimum(edge_x, edge_y), 0.0, 1.0)
 
-            # 5. Linterna de cristal amarillo luminoso
-            lantern_h = 20
-            lantern_top_y = pole_top_y - lantern_h
-            glow = pygame.Surface((32, 32), pygame.SRCALPHA)
-            pygame.draw.circle(glow, (255, 230, 100, 55), (16, 16), 15)
-            surf.blit(glow, (cx - 16, lantern_top_y - 4))
+        arr += grain + creases
+        # Tinte cálido sepia muy sutil en bordes exteriores
+        arr[:, :, 0] -= edge_mask[:, :, 0] * 10.0
+        arr[:, :, 1] -= edge_mask[:, :, 0] * 14.0
+        arr[:, :, 2] -= edge_mask[:, :, 0] * 22.0
 
-            # Carcasa de cristal amarillo
-            pygame.draw.polygon(surf, (15, 18, 24), [
-                (cx - 9, lantern_top_y),
-                (cx + 9, lantern_top_y),
-                (cx + 6, pole_top_y),
-                (cx - 6, pole_top_y)
-            ])
-            pygame.draw.polygon(surf, (255, 225, 40), [
-                (cx - 7, lantern_top_y + 2),
-                (cx + 7, lantern_top_y + 2),
-                (cx + 4, pole_top_y - 1),
-                (cx - 4, pole_top_y - 1)
-            ])
-            pygame.draw.polygon(surf, (255, 250, 150), [
-                (cx - 3, lantern_top_y + 4),
-                (cx + 3, lantern_top_y + 4),
-                (cx + 1, pole_top_y - 3),
-                (cx - 1, pole_top_y - 3)
-            ])
-
-            # 6. Techo conico azul/cian
-            roof_top_y = lantern_top_y - 10
-            pygame.draw.polygon(surf, (15, 18, 24), [
-                (cx - 10, lantern_top_y + 1),
-                (cx + 10, lantern_top_y + 1),
-                (cx, roof_top_y - 2)
-            ])
-            pygame.draw.polygon(surf, (30, 95, 140), [
-                (cx - 8, lantern_top_y),
-                (cx + 8, lantern_top_y),
-                (cx, roof_top_y)
-            ])
-            pygame.draw.polygon(surf, (60, 160, 210), [
-                (cx - 3, lantern_top_y),
-                (cx + 1, lantern_top_y),
-                (cx, roof_top_y + 2)
-            ])
-            pygame.draw.line(surf, (15, 18, 24), (cx, roof_top_y - 2), (cx, roof_top_y - 7), 2)
-            pygame.draw.circle(surf, (15, 18, 24), (cx, roof_top_y - 7), 2)
-
-        # 1. Spot 1: Faroles y asfalto en la avenida diagonal (Y = qh = 941)
-        # Suavizado del escalon de asfalto y lineas de carril
-        for y in range(qh - 2, qh + 3):
-            for x in range(1142, 1230):
-                c_top = self.world_map.get_at((x, qh - 3))
-                c_bot = self.world_map.get_at((x, qh + 3))
-                blend = ((c_top[0] + c_bot[0]) // 2, (c_top[1] + c_bot[1]) // 2, (c_top[2] + c_bot[2]) // 2)
-                self.world_map.set_at((x, y), blend)
-
-        # Linea divisoria central amarilla continua
-        pygame.draw.line(self.world_map, (250, 220, 30), (1178, qh - 6), (1188, qh + 6), 3)
-
-        # Farol izquierdo Spot 1 (alineado con linterna en 1071 y base en 1078)
-        _draw_cozy_street_lamp(self.world_map, 1076, 966)
-        # Farol derecho Spot 1 (alineado con linterna en 1269 y base en 1279)
-        _draw_cozy_street_lamp(self.world_map, 1278, 969)
-
-        # 2. Spot 2: Arbol Guayacan Rosa y Follaje verde en el cruce de los 4 cuadrantes (qw, qh)
-        green_foliage = [
-            (qw - 18, qh - 38, 22, (55, 150, 40)),
-            (qw + 18, qh - 40, 20, (65, 165, 45)),
-            (qw, qh - 48, 24, (50, 140, 35)),
-            (qw - 2, qh - 28, 26, (70, 175, 50)),
-        ]
-        for gx, gy, gr, _ in green_foliage:
-            pygame.draw.circle(self.world_map, (25, 45, 20), (gx, gy), gr + 3)
-        for gx, gy, gr, gcol in green_foliage:
-            pygame.draw.circle(self.world_map, gcol, (gx, gy), gr)
-            pygame.draw.circle(self.world_map, (min(255, gcol[0] + 30), min(255, gcol[1] + 30), min(255, gcol[2] + 20)), (gx - 3, gy - 3), int(gr * 0.55))
-
-        petals = [
-            (qw - 16, qh - 6, 20, (245, 115, 185)),
-            (qw + 18, qh - 8, 22, (255, 135, 200)),
-            (qw - 4, qh + 8, 24, (235, 100, 175)),
-            (qw + 12, qh + 12, 19, (248, 125, 190)),
-            (qw - 22, qh + 2, 18, (225, 85, 165)),
-            (qw + 4, qh - 2, 16, (255, 175, 220)),
-            (qw - 6, qh - 14, 18, (255, 145, 205)),
-            (qw + 22, qh + 2, 16, (240, 110, 180)),
-            (qw, qh + 2, 18, (255, 190, 230))
-        ]
-        for px, py, r, _ in petals:
-            pygame.draw.circle(self.world_map, (35, 25, 45), (px, py), r + 2)
-        for px, py, r, col in petals:
-            pygame.draw.circle(self.world_map, col, (px, py), r)
-            pygame.draw.circle(self.world_map, (min(255, col[0] + 35), min(255, col[1] + 35), min(255, col[2] + 35)), (px - 3, py - 3), int(r * 0.55))
-
-        # Tronco central y raices
-        pygame.draw.line(self.world_map, (25, 15, 10), (qw - 1, qh + 18), (qw + 1, qh + 46), 7)
-        pygame.draw.line(self.world_map, (95, 45, 25), (qw - 1, qh + 18), (qw + 1, qh + 46), 4)
-        pygame.draw.line(self.world_map, (25, 15, 10), (qw, qh + 44), (qw - 8, qh + 50), 4)
-        pygame.draw.line(self.world_map, (25, 15, 10), (qw, qh + 44), (qw + 9, qh + 50), 4)
-
-        # 3. Spot 3: Farol en la glorieta este (X=2567, Y=941)
-        _draw_cozy_street_lamp(self.world_map, 2567, 967)
+        pygame.surfarray.pixels3d(self.world_map)[:] = np.clip(arr, 0, 255).astype(np.uint8)
 
     def _init_poi_effects(self) -> None:
         """Inicializa el registro y efectos interactivos de todos los puntos de interés clave."""
@@ -774,7 +704,10 @@ class StoryMapScene(BaseState):
                 })
 
     def _init_weather_shaders(self) -> None:
-        """Pre-genera los overlays de atmósfera para el ciclo Día / Atardecer / Noche / Lluvia."""
+        """Pre-genera los overlays de atmósfera, halos nocturnos, motas y UI compacta de clima."""
+        import numpy as np
+        import random
+
         # Overlays optimizados a tamaño de pantalla (1920x1080)
         self.weather_overlays = {
             "day": None,
@@ -782,14 +715,74 @@ class StoryMapScene(BaseState):
             "night": pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA),
             "rain": pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA),
         }
-        # Atardecer cálido ambarino (Golden Hour del Malecón)
-        self.weather_overlays["sunset"].fill((255, 138, 48, 52))
+
+        # Atardecer cálido con gradiente vertical (Golden Hour del Malecón)
+        sunset_surf = self.weather_overlays["sunset"]
+        t_y = np.linspace(0.0, 1.0, self.screen_h, dtype=np.float32)
+        rgb = pygame.surfarray.pixels3d(sunset_surf)
+        alpha = pygame.surfarray.pixels_alpha(sunset_surf)
+        rgb[:, :, 0] = 255
+        rgb[:, :, 1] = np.clip(115 + 65 * t_y, 0, 255).astype(np.uint8)[None, :]
+        rgb[:, :, 2] = np.clip(40 + 48 * t_y, 0, 255).astype(np.uint8)[None, :]
+        alpha[:, :] = np.clip(74 - 38 * t_y, 0, 255).astype(np.uint8)[None, :]
+        del rgb, alpha
 
         # Noche caribeña azul medianoche
-        self.weather_overlays["night"].fill((18, 28, 68, 118))
+        self.weather_overlays["night"].fill((16, 26, 66, 122))
 
         # Lluvia tropical fresca
-        self.weather_overlays["rain"].fill((55, 82, 115, 65))
+        self.weather_overlays["rain"].fill((48, 76, 112, 68))
+
+        # Halo radial cálido para faros y POIs en modo nocturno / atardecer
+        halo_size = 260
+        self.night_lamp_halo = pygame.Surface((halo_size, halo_size), pygame.SRCALPHA)
+        hc = halo_size // 2
+        for r in range(hc, 6, -6):
+            frac = 1.0 - (r / float(hc))
+            a = int(68 * (frac ** 1.8))
+            pygame.draw.circle(self.night_lamp_halo, (255, 215, 115, a), (hc, hc), r)
+
+        # Luciérnagas nocturnas sobre zonas verdes/ciénaga y brisa diurna
+        self.fireflies = [
+            {
+                "x": random.uniform(180, self.world_w - 180),
+                "y": random.uniform(180, self.world_h - 180),
+                "phase": random.uniform(0, math.pi * 2),
+                "speed": random.uniform(0.8, 1.8),
+                "radius": random.uniform(16.0, 34.0),
+            }
+            for _ in range(28)
+        ]
+        self.breeze_motes = [
+            {
+                "x": random.uniform(0, self.screen_w),
+                "y": random.uniform(0, self.screen_h),
+                "vx": random.uniform(14.0, 28.0),
+                "vy": random.uniform(-6.0, 6.0),
+                "phase": random.uniform(0, math.pi * 2),
+                "size": random.randint(2, 4),
+            }
+            for _ in range(22)
+        ]
+        self.rain_ripples = [
+            {
+                "x": random.uniform(40, self.screen_w - 40),
+                "y": random.uniform(120, self.screen_h - 40),
+                "life": random.uniform(0.0, 1.0),
+                "speed": random.uniform(1.1, 1.8),
+            }
+            for _ in range(18)
+        ]
+
+        # Píldora discreta para consultar y cambiar clima (sin solapar SocialHUD ni menú)
+        self.weather_pill_rect = pygame.Rect(1608, 42, 178, 46)
+        self.weather_font = self.assets.get_font("arial rounded", 16, bold=True)
+        self.weather_meta = {
+            "day": ("SOL CARIBE", (252, 240, 198), (165, 110, 28), (245, 190, 60)),
+            "sunset": ("ATARDECER", (255, 224, 196), (175, 78, 36), (245, 130, 65)),
+            "night": ("NOCHE", (215, 226, 255), (42, 58, 128), (110, 145, 235)),
+            "rain": ("LLUVIA", (216, 236, 252), (48, 92, 138), (95, 165, 220)),
+        }
 
     def _init_rain_particles(self) -> None:
         """Inicializa partículas livianas de lluvia tropical caribeña en pantalla."""
@@ -1152,15 +1145,17 @@ class StoryMapScene(BaseState):
         """Inicializa la tarjeta modal de misión / microjuego con assets 100% ilustrados (cero formas de código)."""
         self.quest_card_open: bool = False
         self.quest_card_anim_t: float = 0.0
-        self.quest_card_w: int = 880
-        self.quest_card_h: int = 1030
+        # Proporción nativa exacta 725:965 (0.7513) y posición bajo el SocialHUD superior
+        self.quest_card_w: int = 660
+        self.quest_card_h: int = 878
+        self.quest_card_center_y: int = self.screen_h // 2 + 48
         self.tex_quest_card = self.assets.load_surface("recuadro_mision_nivel.png")
 
         # Tipografía redondeada caribeña de alta legibilidad
-        self.font_quest_title = self.assets.get_font("arial rounded", 34, bold=True)
-        self.font_quest_sub = self.assets.get_font("arial rounded", 18, bold=True)
-        self.font_quest_body = self.assets.get_font("arial rounded", 21, bold=True)
-        self.font_quest_btn = self.assets.get_font("arial rounded", 24, bold=True)
+        self.font_quest_title = self.assets.get_font("arial rounded", 28, bold=True)
+        self.font_quest_sub = self.assets.get_font("arial rounded", 16, bold=True)
+        self.font_quest_body = self.assets.get_font("arial rounded", 19, bold=True)
+        self.font_quest_btn = self.assets.get_font("arial rounded", 21, bold=True)
 
         # Texturas ilustradas de apoyo (cartucho de pergamino, separador y sellos de cera)
         self.tex_quest_cartridge = self.assets.load_surface("cinta_distrito_modal.png")
@@ -1171,7 +1166,7 @@ class StoryMapScene(BaseState):
 
         # Botón '¡A JUGAR!' ilustrado en acuarela caribeña pura (cero florecitas en las esquinas)
         raw_play_surf = self.assets.load_surface("boton_jugar_modal.png")
-        btn_play_w = 380
+        btn_play_w = 320
         if raw_play_surf:
             aspect = raw_play_surf.get_height() / max(1, raw_play_surf.get_width())
             btn_play_h = int(btn_play_w * aspect)
@@ -1179,23 +1174,23 @@ class StoryMapScene(BaseState):
         else:
             play_surf = pygame.Surface((btn_play_w, 95), pygame.SRCALPHA)
 
-        play_cy = self.screen_h // 2 - self.quest_card_h // 2 + int(self.quest_card_h * 0.825)
+        play_cy = self.quest_card_center_y - self.quest_card_h // 2 + int(self.quest_card_h * 0.775)
         self.btn_quest_play = UIButton(
             center_pos=(self.screen_w // 2, play_cy),
             normal_sprite=play_surf,
             on_click=self._launch_microgame
         )
 
-        # Botón de cierre 'X' ilustrado: medallón acuarela encajado concéntricamente en el sello de cera superior derecho
+        # Botón de cierre 'X' ilustrado: <= resolución nativa (68x68) para máxima nitidez en el sello de cera
         raw_close_surf = self.assets.load_surface("boton_cerrar_modal.png")
-        close_size = 90
+        close_size = 64
         if raw_close_surf:
             close_surf = pygame.transform.smoothscale(raw_close_surf, (close_size, close_size))
         else:
             close_surf = pygame.Surface((close_size, close_size), pygame.SRCALPHA)
 
-        close_cx = self.screen_w // 2 - self.quest_card_w // 2 + int(self.quest_card_w * 0.887)
-        close_cy = self.screen_h // 2 - self.quest_card_h // 2 + int(self.quest_card_h * 0.117)
+        close_cx = self.screen_w // 2 - self.quest_card_w // 2 + int(self.quest_card_w * 0.893)
+        close_cy = self.quest_card_center_y - self.quest_card_h // 2 + int(self.quest_card_h * 0.112)
 
         self.btn_quest_close = UIButton(
             center_pos=(close_cx, close_cy),
@@ -1468,15 +1463,30 @@ class StoryMapScene(BaseState):
             self.state_machine.pop_state()
         self._on_calibrate_pointer()
 
+    def _apply_weather_feedback(self) -> None:
+        """Muestra feedback temático breve al cambiar el clima del mapa."""
+        msgs = {
+            "day": "Clima: Sol Caribe — Brisa luminosa sobre Barranquilla",
+            "sunset": "Clima: Atardecer — Luz dorada sobre el Malecon y el Rio",
+            "night": "Clima: Noche Currambera — Misiones iluminadas y luciernagas",
+            "rain": "Clima: Lluvia Tropical — Brisa fresca en la ciudad",
+        }
+        self.toast_msg = msgs.get(self.current_weather, f"Clima: {self.current_weather}")
+        self.toast_timer = 2.4
+        if hasattr(self, "audio") and hasattr(self.audio, "play_hover"):
+            self.audio.play_hover()
+
     def set_weather(self, weather_name: str) -> None:
         """Cambia el clima actual del mapa ('day', 'sunset', 'night', 'rain')."""
         if weather_name in self.weather_modes:
             self.current_weather = weather_name
+            self._apply_weather_feedback()
 
     def cycle_weather(self) -> str:
         """Rota de forma cíclica entre los climas disponibles."""
         idx = (self.weather_modes.index(self.current_weather) + 1) % len(self.weather_modes)
         self.current_weather = self.weather_modes[idx]
+        self._apply_weather_feedback()
         return self.current_weather
 
     def save_current_state(self) -> None:
@@ -2087,6 +2097,16 @@ class StoryMapScene(BaseState):
         if consumed and event.type != pygame.MOUSEMOTION:
             return
 
+        # Píldora interactiva de Clima (entre Logros y Menú)
+        if (
+            event.type == pygame.MOUSEBUTTONDOWN
+            and event.button == 1
+            and hasattr(self, "weather_pill_rect")
+            and self.weather_pill_rect.collidepoint(event.pos)
+        ):
+            self.cycle_weather()
+            return
+
         # Conmutadores interactivos de Clima, Acción de Misión y Navegación D-Pad
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_1:
@@ -2313,7 +2333,7 @@ class StoryMapScene(BaseState):
             if cloud["x"] > self.world_w + 250:
                 cloud["x"] = -350.0
 
-        # Lluvia tropical caribeña
+        # Partículas ambientales según el clima activo
         if self.current_weather == "rain":
             for drop in self.rain_drops:
                 drop["y"] += drop["speed"] * dt
@@ -2321,6 +2341,16 @@ class StoryMapScene(BaseState):
                 if drop["y"] > self.screen_h + 30:
                     drop["y"] = -30
                     drop["x"] = (drop["x"] + self.screen_w) % self.screen_w
+            for rip in getattr(self, "rain_ripples", []):
+                rip["life"] += dt * rip["speed"]
+                if rip["life"] >= 1.0:
+                    rip["life"] = 0.0
+                    rip["x"] = (rip["x"] + 317.0) % (self.screen_w - 80) + 40
+                    rip["y"] = (rip["y"] + 193.0) % (self.screen_h - 160) + 120
+        elif self.current_weather in ("day", "sunset"):
+            for mote in getattr(self, "breeze_motes", []):
+                mote["x"] = (mote["x"] + mote["vx"] * dt) % self.screen_w
+                mote["y"] = (mote["y"] + (mote["vy"] + math.sin(self.timer * 1.4 + mote["phase"]) * 8.0) * dt) % self.screen_h
 
         # Animación cinemática suave al ingresar
         if self.cinematic_timer < self.cinematic_duration:
@@ -2405,18 +2435,69 @@ class StoryMapScene(BaseState):
         if overlay is not None:
             surface.blit(overlay, (0, 0))
 
-        # 5. Trazas de lluvia tropical caribeña en pantalla si el clima es 'rain'
-        if self.current_weather == "rain":
+        # 5. Efectos atmosféricos útiles y reactivos según el clima activo
+        if self.current_weather == "night":
+            # Halos de farol cálido sobre los POIs jugables (guía visual nocturna) y el avatar
+            if hasattr(self, "night_lamp_halo"):
+                for p_key in STORY_PLAYABLE_POIS:
+                    p_info = self.poi_registry.get(p_key)
+                    if not p_info:
+                        continue
+                    pr = p_info["rect"]
+                    hx = pr.centerx - cam_x
+                    hy = pr.centery - cam_y
+                    if -200 < hx < self.screen_w + 200 and -200 < hy < self.screen_h + 200:
+                        is_done = p_info["microgame_id"] in completed_games
+                        halo = self.night_lamp_halo.copy()
+                        pulse = 0.82 + 0.18 * math.sin(self.timer * 2.2 + pr.x * 0.01)
+                        halo.set_alpha(int((135 if is_done else 215) * pulse))
+                        surface.blit(halo, halo.get_rect(center=(hx, hy)))
+
+                px = int(self.player_pos[0] - cam_x)
+                py = int(self.player_pos[1] - cam_y)
+                if -180 < px < self.screen_w + 180 and -180 < py < self.screen_h + 180:
+                    p_halo = self.night_lamp_halo.copy()
+                    p_halo.set_alpha(150)
+                    surface.blit(p_halo, p_halo.get_rect(center=(px, py)))
+
+            # Luciérnagas suaves sobre el mapa nocturno
+            for ff in getattr(self, "fireflies", []):
+                fx = int(ff["x"] + math.sin(self.timer * ff["speed"] + ff["phase"]) * ff["radius"] - cam_x)
+                fy = int(ff["y"] + math.cos(self.timer * ff["speed"] * 0.8 + ff["phase"]) * (ff["radius"] * 0.65) - cam_y)
+                if -20 < fx < self.screen_w + 20 and -20 < fy < self.screen_h + 20:
+                    glow_a = int(120 + 115 * (0.5 + 0.5 * math.sin(self.timer * 3.2 + ff["phase"])))
+                    self._sp_surf.fill((0, 0, 0, 0))
+                    pygame.draw.circle(self._sp_surf, (255, 240, 140, glow_a // 2), (8, 8), 6)
+                    pygame.draw.circle(self._sp_surf, (255, 250, 190, glow_a), (8, 8), 2)
+                    surface.blit(self._sp_surf, (fx - 8, fy - 8))
+        elif self.current_weather == "rain":
             for drop in self.rain_drops:
                 dx1, dy1 = int(drop["x"]), int(drop["y"])
                 dx2 = dx1 - int(drop["length"] * 0.45)
                 dy2 = dy1 + int(drop["length"])
                 color = (205, 230, 255, drop["alpha"])
                 pygame.draw.line(surface, color, (dx1, dy1), (dx2, dy2), 1)
+            for rip in getattr(self, "rain_ripples", []):
+                life = rip["life"]
+                rad = int(4 + 14 * life)
+                alpha_r = int(110 * (1.0 - life))
+                if alpha_r > 4:
+                    rip_surf = pygame.Surface((rad * 2 + 4, rad + 4), pygame.SRCALPHA)
+                    pygame.draw.ellipse(rip_surf, (215, 238, 255, alpha_r), (2, 2, rad * 2, rad), 1)
+                    surface.blit(rip_surf, (int(rip["x"]) - rad - 2, int(rip["y"]) - rad // 2 - 2))
+        elif self.current_weather in ("day", "sunset"):
+            mote_col = (255, 224, 145) if self.current_weather == "sunset" else (255, 246, 195)
+            for mote in getattr(self, "breeze_motes", []):
+                alpha_m = int(75 + 55 * (0.5 + 0.5 * math.sin(self.timer * 2.0 + mote["phase"])))
+                self._sp_surf.fill((0, 0, 0, 0))
+                pygame.draw.circle(self._sp_surf, (*mote_col, alpha_m), (8, 8), mote["size"])
+                surface.blit(self._sp_surf, (int(mote["x"]) - 8, int(mote["y"]) - 8))
 
-        # 6. HUD de Redes Sociales (Seguidores, Likes, Logros)
+        # 6. HUD de Redes Sociales (Seguidores, Likes, Logros) y Píldora de Clima
         if hasattr(self, "social_hud"):
             self.social_hud.render(surface)
+        if hasattr(self, "weather_pill_rect") and self.menu_anim_t < 0.5:
+            self._render_weather_pill(surface)
 
         # 7. Barra de Navegación Lateral Izquierda (SideNavDrawer)
         if hasattr(self, "side_drawer"):
@@ -2471,7 +2552,7 @@ class StoryMapScene(BaseState):
         pygame.draw.rect(toast_surf, (245, 195, 60, int(240 * (alpha / 255.0))), (0, 0, bw, bh), width=3, border_radius=18)
         txt_surf.set_alpha(alpha)
         toast_surf.blit(txt_surf, (padding_x, padding_y))
-        rect = toast_surf.get_rect(center=(self.screen_w // 2, 85))
+        rect = toast_surf.get_rect(center=(self.screen_w // 2, 138))
         surface.blit(toast_surf, rect)
 
     def _render_drawer_menu(self, surface: pygame.Surface) -> None:
@@ -2663,94 +2744,157 @@ class StoryMapScene(BaseState):
             pygame.draw.rect(card_surf, (245, 195, 80), (0, 0, cw, ch), width=4, border_radius=28)
             pygame.draw.rect(card_surf, (45, 30, 20), (0, 0, cw, ch), width=1, border_radius=28)
 
-        # Encabezado: Título de la Locación con tamaño auto-adaptable y posición desahogada
+        # Encabezado: Título de la Locación centrado exactamente en cw // 2 con margen seguro
         title_text = poi_info["title"]
-        title_size = 32
+        title_size = 28
         f_title = self.assets.get_font("arial rounded", title_size, bold=True)
         txt_title = f_title.render(title_text, True, (42, 26, 16))
         max_title_w = int(cw * 0.48)
-        while txt_title.get_width() > max_title_w and title_size > 18:
+        while txt_title.get_width() > max_title_w and title_size > 16:
             title_size -= 2
             f_title = self.assets.get_font("arial rounded", title_size, bold=True)
             txt_title = f_title.render(title_text, True, (42, 26, 16))
-        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2 + 20, int(ch * 0.175))))
+        card_surf.blit(txt_title, txt_title.get_rect(center=(cw // 2, int(ch * 0.172))))
 
         # Subtítulo de Distrito sobre cinta de pergamino limpia
-        cart_w = int(cw * 0.55)
+        cart_w = int(cw * 0.62)
         if hasattr(self, "tex_quest_cartridge") and self.tex_quest_cartridge:
             cart_h = int(cart_w * (self.tex_quest_cartridge.get_height() / max(1, self.tex_quest_cartridge.get_width())))
             cart_scaled = pygame.transform.smoothscale(self.tex_quest_cartridge, (cart_w, cart_h))
-            cart_rect = cart_scaled.get_rect(center=(cw // 2, int(ch * 0.245)))
+            cart_rect = cart_scaled.get_rect(center=(cw // 2, int(ch * 0.248)))
             card_surf.blit(cart_scaled, cart_rect)
-            txt_dist = self.font_quest_sub.render(poi_info["district"], True, (135, 80, 25))
+            dist_size = 16
+            f_dist = self.assets.get_font("arial rounded", dist_size, bold=True)
+            txt_dist = f_dist.render(poi_info["district"], True, (135, 80, 25))
+            while txt_dist.get_width() > int(cart_w * 0.78) and dist_size > 12:
+                dist_size -= 1
+                f_dist = self.assets.get_font("arial rounded", dist_size, bold=True)
+                txt_dist = f_dist.render(poi_info["district"], True, (135, 80, 25))
             card_surf.blit(txt_dist, txt_dist.get_rect(center=cart_rect.center))
         else:
             txt_dist = self.font_quest_sub.render(poi_info["district"], True, (80, 55, 35))
-            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cw // 2, int(ch * 0.245))))
+            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cw // 2, int(ch * 0.248))))
 
         # Separador decorativo ilustrado de pincelada floral
         if hasattr(self, "tex_quest_sep") and self.tex_quest_sep:
-            sep_w = int(cw * 0.58)
+            sep_w = int(cw * 0.60)
             sep_h = int(sep_w * (self.tex_quest_sep.get_height() / max(1, self.tex_quest_sep.get_width())))
             sep_scaled = pygame.transform.smoothscale(self.tex_quest_sep, (sep_w, max(12, sep_h)))
-            card_surf.blit(sep_scaled, sep_scaled.get_rect(center=(cw // 2, int(ch * 0.308))))
+            card_surf.blit(sep_scaled, sep_scaled.get_rect(center=(cw // 2, int(ch * 0.310))))
 
         # Título del Microjuego / Rondas en terracota caribeño cálido
-        txt_m_title = self.font_quest_btn.render(poi_info["microgame_title"], True, (215, 75, 35))
-        card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.362))))
+        m_size = 21
+        f_m = self.assets.get_font("arial rounded", m_size, bold=True)
+        txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
+        while txt_m_title.get_width() > int(cw * 0.68) and m_size > 15:
+            m_size -= 1
+            f_m = self.assets.get_font("arial rounded", m_size, bold=True)
+            txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
+        card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.365))))
 
-        # Descripción de la misión con tipografía cálida, redondeada y sin caracteres rotos
-        desc_lines = poi_info["desc"]
-        curr_y = int(ch * 0.430)
-        for line in desc_lines:
+        # Descripción de la misión con word-wrap y márgenes laterales generosos dentro del marco dorado
+        max_desc_w = int(cw * 0.66)
+        wrapped_lines: List[str] = []
+        for paragraph in poi_info["desc"]:
+            words = paragraph.split()
+            current_line = ""
+            for word in words:
+                candidate = f"{current_line} {word}".strip()
+                if self.font_quest_body.size(candidate)[0] <= max_desc_w:
+                    current_line = candidate
+                else:
+                    if current_line:
+                        wrapped_lines.append(current_line)
+                    current_line = word
+            if current_line:
+                wrapped_lines.append(current_line)
+
+        curr_y = int(ch * (0.455 if len(wrapped_lines) <= 2 else 0.422))
+        line_step = 30
+        for line in wrapped_lines:
             txt_line = self.font_quest_body.render(line, True, (55, 38, 26))
             card_surf.blit(txt_line, txt_line.get_rect(center=(cw // 2, curr_y)))
-            curr_y += 44
+            curr_y += line_step
 
-        # Tarjeta de estado con sello de cera ilustrado sin colisión de texto
+        # Tarjeta de estado con sello de cera ilustrado sin colisión ni huecos vacíos
         progress = self.settings.get_story_progress()
         is_done = poi_info["microgame_id"] in progress.get("completed_microgames", [])
         status_text = "ESTADO: DESPEJADO (+100 PTS)" if is_done else "ESTADO: PENDIENTE POR DESPEJAR"
         status_col = (30, 125, 55) if is_done else (190, 95, 25)
         sello_tex = self.tex_sello_despejado if is_done else self.tex_sello_pendiente
 
-        # Cápsula ilustrada de estado utilizando cinta de pergamino elegante
-        stat_w = int(cw * 0.68)
+        stat_cy = max(int(ch * 0.615), curr_y + 38)
+        stat_w = int(cw * 0.72)
         ribbon_tex = getattr(self, "tex_quest_status_ribbon", None) or getattr(self, "tex_quest_cartridge", None)
         if ribbon_tex:
             stat_h = int(stat_w * (ribbon_tex.get_height() / max(1, ribbon_tex.get_width())))
             stat_scaled = pygame.transform.smoothscale(ribbon_tex, (stat_w, max(42, stat_h)))
-            stat_rect = stat_scaled.get_rect(center=(cw // 2, int(ch * 0.605)))
+            stat_rect = stat_scaled.get_rect(center=(cw // 2, stat_cy))
             card_surf.blit(stat_scaled, stat_rect)
 
             # Sello de cera en el lado izquierdo del cartucho
             sello_size = int(stat_h * 0.82)
             if sello_tex:
                 sello_scaled = pygame.transform.smoothscale(sello_tex, (sello_size, sello_size))
-                sello_x = stat_rect.left + 16
+                sello_x = stat_rect.left + 14
                 card_surf.blit(sello_scaled, (sello_x, stat_rect.centery - sello_size // 2))
 
-            txt_st = self.font_quest_sub.render(status_text, True, status_col)
-            text_area_left = stat_rect.left + 16 + sello_size + 8
-            text_area_right = stat_rect.right - 18
+            text_area_left = stat_rect.left + 14 + sello_size + 8
+            text_area_right = stat_rect.right - 16
+            avail_st_w = max(80, text_area_right - text_area_left)
+            st_size = 16
+            f_st = self.assets.get_font("arial rounded", st_size, bold=True)
+            txt_st = f_st.render(status_text, True, status_col)
+            while txt_st.get_width() > avail_st_w and st_size > 11:
+                st_size -= 1
+                f_st = self.assets.get_font("arial rounded", st_size, bold=True)
+                txt_st = f_st.render(status_text, True, status_col)
             card_surf.blit(txt_st, txt_st.get_rect(center=((text_area_left + text_area_right) // 2, stat_rect.centery)))
         else:
             txt_st = self.font_quest_sub.render(status_text, True, status_col)
-            card_surf.blit(txt_st, txt_st.get_rect(center=(cw // 2, int(ch * 0.605))))
+            card_surf.blit(txt_st, txt_st.get_rect(center=(cw // 2, stat_cy)))
 
-        # Renderizar en la pantalla centrado
-        card_rect = card_surf.get_rect(center=(self.screen_w // 2, self.screen_h // 2))
+        # Renderizar en la pantalla bajo el SocialHUD superior (sin cubrir Seguidores)
+        card_center_y = getattr(self, "quest_card_center_y", self.screen_h // 2 + 48)
+        card_rect = card_surf.get_rect(center=(self.screen_w // 2, card_center_y))
         surface.blit(card_surf, card_rect)
 
         # Sincronizar posición de botones con la tarjeta animada
-        # Botón Play centrado en la parte inferior
-        self.btn_quest_play.set_center((self.screen_w // 2, card_rect.top + int(ch * 0.825)))
-        # Botón Cerrar 'X' ilustrado concéntricamente en el sello circular superior derecho
-        self.btn_quest_close.set_center((card_rect.left + int(cw * 0.887), card_rect.top + int(ch * 0.117)))
+        self.btn_quest_play.set_center((self.screen_w // 2, card_rect.top + int(ch * 0.775)))
+        self.btn_quest_close.set_center((card_rect.left + int(cw * 0.893), card_rect.top + int(ch * 0.112)))
 
         # Botones de la tarjeta
         self.btn_quest_play.render(surface)
         self.btn_quest_close.render(surface)
+
+    def _render_weather_pill(self, surface: pygame.Surface) -> None:
+        """Dibuja la píldora discreta e interactiva de clima entre Logros y el menú."""
+        rect = self.weather_pill_rect
+        label, bg_col, txt_col, accent_col = self.weather_meta.get(
+            self.current_weather,
+            ("SOL CARIBE", (252, 240, 198), (165, 110, 28), (245, 190, 60)),
+        )
+        pill = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(pill, (*bg_col, 235), (0, 0, rect.width, rect.height), border_radius=23)
+        pygame.draw.rect(pill, (*accent_col, 235), (0, 0, rect.width, rect.height), width=3, border_radius=23)
+
+        # Icono minimalista acorde al clima
+        ix, iy = 24, rect.height // 2
+        if self.current_weather == "day":
+            pygame.draw.circle(pill, accent_col, (ix, iy), 8)
+        elif self.current_weather == "sunset":
+            pygame.draw.circle(pill, accent_col, (ix, iy + 2), 8)
+            pygame.draw.line(pill, txt_col, (ix - 10, iy + 5), (ix + 10, iy + 5), 2)
+        elif self.current_weather == "night":
+            pygame.draw.circle(pill, accent_col, (ix, iy), 8)
+            pygame.draw.circle(pill, bg_col, (ix + 4, iy - 2), 6)
+        else:
+            pygame.draw.circle(pill, accent_col, (ix, iy + 2), 6)
+            pygame.draw.polygon(pill, accent_col, [(ix - 6, iy + 1), (ix, iy - 9), (ix + 6, iy + 1)])
+
+        txt_surf = self.weather_font.render(label, True, txt_col)
+        pill.blit(txt_surf, txt_surf.get_rect(midleft=(40, rect.height // 2)))
+        surface.blit(pill, rect.topleft)
 
     def _render_paloma_dialog(self, surface: pygame.Surface) -> None:
         """Renderiza el cuadro de diálogo acuarela oficial (text_dialog.png) acompañado por paloma_dialog.png."""
