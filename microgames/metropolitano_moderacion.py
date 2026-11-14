@@ -36,7 +36,7 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
         self.outro_duration = 1.8
 
     def enter(self, params: Optional[dict] = None) -> None:
-        self.audio.play_bgm("JuniorCancion.mp3")
+        self.audio.play_bgm("JuniorCancion.mp3", volume_scale=0.45)
 
     def setup_game(self) -> None:
         """Inicializa estructuras del tablero 3x3, slots y assets."""
@@ -403,6 +403,8 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
     def _on_hammer_strike(self, pos: Tuple[int, int]) -> None:
         """Ejecuta el martillazo de moderación en la coordenada indicada."""
         self.hammer_swing_timer = 1.0
+        if hasattr(self.audio, "play_click"):
+            self.audio.play_click()
 
         if self.hammer_stun_timer > 0.0:
             # Martillo temporalmente aturdido por golpear a un inocente
@@ -431,6 +433,8 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
         self.bans_count += 1
         slot["banned_anim"] = 1.0  # Muestra sello BANEADO
         slot["just_banned"] = True  # Marca la casilla para que NO vuelva a salir un barra brava aquí al reaparecer
+        if hasattr(self.audio, "play_hit"):
+            self.audio.play_hit()
 
         # Game Feel: Screenshake no lineal + Hitstop
         self.trauma = min(1.0, self.trauma + 0.6)
@@ -445,6 +449,8 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
     def _handle_innocent_hit(self, slot: Dict[str, Any], pos: Tuple[int, int]) -> None:
         """Penalización: golpear a un hincha sano resta progreso (-1 gema de baneo) y aturde el martillo."""
         self.innocent_hits += 1
+        if hasattr(self.audio, "play_miss"):
+            self.audio.play_miss()
 
         # RESTAR BARRA DE PROGRESO (penalización directa por falso positivo)
         if self.bans_count > 0:

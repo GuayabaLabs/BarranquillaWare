@@ -206,10 +206,14 @@ class UninorteSprintMicrogame(BaseMicrogame):
         """Reproduce aleatoriamente una de las frases caribeñas al chocar."""
         if not self.hit_sounds:
             return
-        if hasattr(self.audio, "sound_enabled") and not self.audio.sound_enabled:
-            return
         snd = random.choice(self.hit_sounds)
-        snd.play()
+        if hasattr(self.audio, "play_sfx"):
+            self.audio.play_sfx(snd)
+        else:
+            if hasattr(self.audio, "sound_enabled") and not self.audio.sound_enabled:
+                return
+            snd.set_volume(getattr(self.audio, "sfx_volume", 0.85))
+            snd.play()
 
     def _lane_to_world_y(self, lane: int) -> float:
         # Carril 0 en Y=1980 (abajo del tramo 1), Carril 13 en Y=225 (frente al salón en tramo 2)
@@ -463,8 +467,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
             self._spawn_dust(self.player_x, self.player_visual_world_y)
 
-            if hasattr(self.audio, "play_hover"):
-                self.audio.play_hover()
+            if hasattr(self.audio, "play_jump"):
+                self.audio.play_jump()
 
     def _spawn_dust(self, x: float, world_y: float) -> None:
         for _ in range(7):

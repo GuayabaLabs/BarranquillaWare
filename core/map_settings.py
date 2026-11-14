@@ -33,8 +33,11 @@ class MapSettingsState(BaseState):
                     self._adjust(1 if event.key == pygame.K_RIGHT else -1)
                 else:
                     self._activate()
-        elif event.type == pygame.JOYHATMOTION and event.value[1] != 0:
-            self.index = (self.index - 1 if event.value[1] > 0 else self.index + 1) % len(self.items)
+        elif event.type == pygame.JOYHATMOTION:
+            if event.value[1] != 0:
+                self.index = (self.index - 1 if event.value[1] > 0 else self.index + 1) % len(self.items)
+            elif event.value[0] != 0 and self.items[self.index] in ("sound", "music", "brightness", "colorblind"):
+                self._adjust(1 if event.value[0] > 0 else -1)
         elif event.type == pygame.JOYBUTTONDOWN and event.button == 0:
             self._activate()
 
@@ -59,13 +62,9 @@ class MapSettingsState(BaseState):
     def _adjust(self, direction: int) -> None:
         item = self.items[self.index]
         if item == "music":
-            self.audio.music_volume = max(0.0, min(1.0, self.audio.music_volume + direction * 0.05))
-            self.settings.set("music_volume", round(self.audio.music_volume, 2))
-            if pygame.mixer.get_init():
-                pygame.mixer.music.set_volume(self.audio.music_volume if self.audio.music_enabled else 0.0)
+            self.audio.set_music_volume(self.audio.music_volume + direction * 0.05)
         elif item == "sound":
-            self.audio.sfx_volume = max(0.0, min(1.0, self.audio.sfx_volume + direction * 0.05))
-            self.settings.set("sfx_volume", round(self.audio.sfx_volume, 2))
+            self.audio.set_sfx_volume(self.audio.sfx_volume + direction * 0.05)
             self.audio.play_click()
         elif item == "brightness":
             value = float(self.settings.get("brightness", 1.0)) + direction * 0.05
