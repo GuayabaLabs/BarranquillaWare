@@ -229,13 +229,16 @@ def test_social_metrics_and_save_load_flow():
     assert continued_map.social_hud.pills["likes"].value_text == "70K"
     assert continued_map.social_hud.pills["logros"].value_text == "0/2"
 
-    # 6. Probar botón NUEVA PARTIDA: resetea el progreso y envía a CharacterSelectScene
+    # 6. Probar botón NUEVA PARTIDA: resetea el progreso (incluyendo trofeos/logros) y envía a CharacterSelectScene
+    settings.set("trofeosObtenidos", ["vueltaVentana"])
+    assert len(settings.get("trofeosObtenidos", [])) == 1
     mode_scene._select_mode("historia")
     assert mode_scene.story_save_modal_open is True
     mode_scene._on_new_story_clicked()
     assert mode_scene.story_save_modal_open is False
     assert settings.has_saved_story() is False
     assert settings.get_story_progress()["high_score"] == 0
+    assert settings.get("trofeosObtenidos", []) == []
     assert isinstance(sm.current_state, SlideTransitionState)
     assert sm.current_state.to_scene == mode_scene.character_select_scene
 

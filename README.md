@@ -8,6 +8,12 @@ Videojuego arcade tipo WarioWare ambientado en Barranquilla. Su tema es el uso c
 python main.py
 ```
 
+Para habilitar los controles por cámara con MediaPipe, instala la versión compatible de Protocol Buffers:
+
+```powershell
+python -m pip install -r requirements-camera.txt
+```
+
 Pruebas sin ventana:
 
 ```powershell
