@@ -1,8 +1,18 @@
+import copy
 import json
 import os
+from datetime import datetime
 from typing import Dict, Any
 
 SETTINGS_FILE = "settings.json"
+SAVE_VERSION = 1
+
+CHARACTER_DISPLAY_NAMES: Dict[str, str] = {
+    "westcol": "Westcol",
+    "char": "Alex Char",
+    "katherine": "Katherine",
+    "shakira": "Shakira",
+}
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "music_enabled": True,
@@ -17,17 +27,22 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "window_height": 1080,
     "arcade_high_score": 0,
     "story_progress": {
+        "save_version": SAVE_VERSION,
         "has_active_save": False,
         "character_id": "westcol",
         "current_node_id": 0,
         "unlocked_locations": ["uninorte"],
         "completed_microgames": [],
+        "unlocked_achievements": [],
         "high_score": 0,
         "followers": 6700000,
         "likes": 0,
         "achievements": 0,
         "last_camera_x": 835.0,
-        "last_camera_y": 470.0
+        "last_camera_y": 470.0,
+        "weather": "day",
+        "saved_at": "",
+        "save_source": "",
     }
 }
 
@@ -96,7 +111,7 @@ class SettingsManager:
 
     def __init__(self, filepath: str = SETTINGS_FILE) -> None:
         self.filepath = filepath
-        self.data: Dict[str, Any] = dict(DEFAULT_SETTINGS)
+        self.data: Dict[str, Any] = copy.deepcopy(DEFAULT_SETTINGS)
         self.load()
 
     @classmethod
@@ -105,6 +120,18 @@ class SettingsManager:
             cls._instance = SettingsManager()
         return cls._instance
 
+    def _normalize_story_progress(self, raw: Any) -> Dict[str, Any]:
+        merged = copy.deepcopy(DEFAULT_SETTINGS["story_progress"])
+        if isinstance(raw, dict):
+            merged.update(copy.deepcopy(raw))
+        if not isinstance(merged.get("unlocked_locations"), list):
+            merged["unlocked_locations"] = ["uninorte"]
+        if not isinstance(merged.get("completed_microgames"), list):
+            merged["completed_microgames"] = []
+        if not isinstance(merged.get("unlocked_achievements"), list):
+            merged["unlocked_achievements"] = []
+        return merged
+
     def load(self) -> None:
         if os.path.exists(self.filepath):
             try:
@@ -112,6 +139,9 @@ class SettingsManager:
                     loaded = json.load(f)
                     if isinstance(loaded, dict):
                         self.data.update(loaded)
+                        self.data["story_progress"] = self._normalize_story_progress(
+                            self.data.get("story_progress")
+                        )
             except Exception as e:
                 print(f"Aviso: no se pudo leer {self.filepath}, usando valores por defecto: {e}")
         else:
@@ -135,31 +165,54 @@ class SettingsManager:
         """Retorna una copia del diccionario con el progreso de Modo Historia."""
         progress = self.data.get("story_progress")
         if not isinstance(progress, dict):
-            progress = dict(DEFAULT_SETTINGS["story_progress"])
+            progress = copy.deepcopy(DEFAULT_SETTINGS["story_progress"])
             self.data["story_progress"] = progress
             self.save()
-        return dict(progress)
+        return self._normalize_story_progress(progress)
 
     def update_story_progress(self, **kwargs: Any) -> None:
         """Actualiza campos específicos del progreso de Modo Historia y persiste a disco."""
         if not isinstance(self.data.get("story_progress"), dict):
-            self.data["story_progress"] = dict(DEFAULT_SETTINGS["story_progress"])
-        self.data["story_progress"].update(kwargs)
+            self.data["story_progress"] = copy.deepcopy(DEFAULT_SETTINGS["story_progress"])
+        else:
+            self.data["story_progress"] = self._normalize_story_progress(self.data["story_progress"])
+
+        self.data["story_progress"].update(copy.deepcopy(kwargs))
+        self.data["story_progress"]["save_version"] = SAVE_VERSION
+
+        is_active = bool(self.data["story_progress"].get("has_active_save"))
+        if is_active:
+            if "saved_at" not in kwargs or not kwargs.get("saved_at"):
+                self.data["story_progress"]["saved_at"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+            if "save_source" not in kwargs and not self.data["story_progress"].get("save_source"):
+                self.data["story_progress"]["save_source"] = "auto"
+
         self.save()
 
     def reset_story_progress(self, character_id: str = "westcol") -> None:
-        """Reinicia el progreso del Modo Historia a los valores iniciales por defecto."""
+        """Reinicia el progreso del Modo Historia y logros de campaña sin tocar ajustes del jugador."""
         char_key = (character_id or "westcol").lower()
-        fresh = dict(DEFAULT_SETTINGS["story_progress"])
+        fresh = copy.deepcopy(DEFAULT_SETTINGS["story_progress"])
         fresh["character_id"] = char_key
         fresh["unlocked_locations"] = ["uninorte"]
         fresh["completed_microgames"] = []
+        fresh["unlocked_achievements"] = []
+        fresh["has_active_save"] = False
+        fresh["weather"] = "day"
+        fresh["saved_at"] = ""
+        fresh["save_source"] = ""
         metrics = compute_social_metrics(char_key, 0, 0)
         fresh["followers"] = metrics["followers"]
         fresh["likes"] = metrics["likes"]
         fresh["achievements"] = metrics["achievements"]
         self.data["story_progress"] = fresh
+        self.data["trofeosObtenidos"] = []
+        self.data.pop("achievements_progress", None)
         self.save()
+
+    def delete_story_save(self) -> None:
+        """Elimina limpiamente la partida guardada de Modo Historia conservando preferencias."""
+        self.reset_story_progress(character_id="westcol")
 
     def has_saved_story(self) -> bool:
         """Retorna True si existe una partida activa o con avances en el Modo Historia."""
@@ -173,6 +226,74 @@ class SettingsManager:
         if int(progress.get("current_node_id", 0)) != 0:
             return True
         return False
+
+    def get_story_save_summary(self) -> Dict[str, Any]:
+        """Retorna un resumen canónico y consistente de la partida guardada para UI y menús."""
+        has_save = self.has_saved_story()
+        progress = self.get_story_progress()
+        char_id = str(progress.get("character_id", "westcol")).lower()
+        char_label = CHARACTER_DISPLAY_NAMES.get(char_id, char_id.capitalize())
+        high_score = int(progress.get("high_score", 0))
+        completed_list = list(progress.get("completed_microgames", []))
+        done_set = set(completed_list)
+
+        campaign_stages = [
+            ("uninorte", "Campus Uninorte", ("uninorte_sprint", "uninorte_concentrate")),
+            ("buenavista", "C.C. Buenavista", ("buenavista_trend",)),
+            ("metropolitano", "Estadio Metropolitano", ("metropolitano_moderacion",)),
+            ("aeropuerto", "Aeropuerto Cortissoz", ("punch_alert",)),
+        ]
+        levels_cleared = 0
+        next_district = "¡Aventura Completada!"
+        found_next = False
+        for _key, title, req_ids in campaign_stages:
+            if all(req in done_set for req in req_ids):
+                levels_cleared += 1
+            elif not found_next:
+                next_district = title
+                found_next = True
+
+        metrics = compute_social_metrics(char_id, high_score, levels_cleared)
+        trofeos = self.get("trofeosObtenidos", [])
+        trophies_count = len(trofeos) if isinstance(trofeos, list) else 0
+        trophies_total = 4
+
+        saved_at = str(progress.get("saved_at", "") or "").strip()
+        if has_save and not saved_at:
+            saved_at = "Sesión anterior"
+        save_source = str(progress.get("save_source", "") or "").strip().lower()
+        save_source_label = "Guardado manual" if save_source == "manual" else "Auto-guardado"
+
+        weather = str(progress.get("weather", "day") or "day").lower()
+        weather_labels = {
+            "day": "Sol Caribe",
+            "sunset": "Atardecer",
+            "night": "Noche",
+            "rain": "Lluvia",
+        }
+
+        return {
+            "has_save": has_save,
+            "character_id": char_id,
+            "character_name": char_label,
+            "high_score": high_score,
+            "completed_microgames": completed_list,
+            "levels_cleared": levels_cleared,
+            "total_levels": len(campaign_stages),
+            "next_district": next_district,
+            "followers": metrics["followers"],
+            "likes": metrics["likes"],
+            "followers_text": metrics["followers_text"],
+            "likes_text": metrics["likes_text"],
+            "trophies_count": trophies_count,
+            "trophies_total": trophies_total,
+            "current_node_id": int(progress.get("current_node_id", 0)),
+            "weather": weather,
+            "weather_label": weather_labels.get(weather, "Sol Caribe"),
+            "saved_at": saved_at,
+            "save_source": save_source,
+            "save_source_label": save_source_label,
+        }
 
     def get_arcade_high_score(self) -> int:
         """Obtiene el récord histórico del Modo Arcade."""

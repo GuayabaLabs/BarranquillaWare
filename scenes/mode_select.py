@@ -10,6 +10,7 @@ from ui.button import UIButton
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
 from scenes.character_select import CharacterSelectScene
+from scenes.load_game import StorySaveModalPanel
 from scenes.slide_transition import SlideTransitionState
 
 class ModeSelectScene(BaseState):
@@ -48,7 +49,7 @@ class ModeSelectScene(BaseState):
         # Toast de notificación para modos en desarrollo
         self.toast_msg: Optional[str] = None
         self.toast_timer: float = 0.0
-        self.font_toast = pygame.font.SysFont("Arial Black, Impact, sans-serif", 26)
+        self.font_toast = self.assets.cargarFuenteCuento(26)
 
         # 3. Título Ilustrado Full HD
         self.title_base = self.assets.get_scaled("titulo_seleccion_modo.png", target_width=760)
@@ -149,86 +150,28 @@ class ModeSelectScene(BaseState):
         ]
 
     def _init_story_save_modal(self) -> None:
-        """Inicializa el modal cozy de 'Continuar Partida' vs 'Nueva Partida' para el Modo Historia."""
+        """Inicializa el modal acuarela de 'Continuar Partida' vs 'Nueva Partida' para el Modo Historia."""
         self.story_save_modal_open: bool = False
-        self.font_modal_title = pygame.font.SysFont("Arial Black, Impact, sans-serif", 32)
-        self.font_modal_sub = pygame.font.SysFont("Trebuchet MS, Arial", 22, bold=True)
-        self.font_modal_stat = pygame.font.SysFont("Trebuchet MS, Arial", 21, bold=True)
-        self.font_modal_btn = pygame.font.SysFont("Arial Black, Impact, sans-serif", 22)
+        self.story_save_panel = StorySaveModalPanel(
+            screen_w=self.screen_w,
+            screen_h=self.screen_h,
+            mode="confirm",
+            on_continue=self._on_continue_story_clicked,
+            on_new_game=self._on_new_story_clicked,
+            on_cancel=self._close_story_save_modal,
+        )
+        self.modal_rect = self.story_save_panel.frame_rect
+        self.btn_continue_story = self.story_save_panel.btn_continue
+        self.btn_new_story = self.story_save_panel.btn_new
+        self.btn_cancel_modal = self.story_save_panel.btn_cancel
+        self.modal_buttons: List[UIButton] = self.story_save_panel.buttons
 
-        modal_w, modal_h = 740, 440
-        self.modal_rect = pygame.Rect(
-            (self.screen_w - modal_w) // 2,
-            (self.screen_h - modal_h) // 2,
-            modal_w,
-            modal_h
-        )
-
-        btn_continue_surf = self._create_modal_btn_surface(
-            "CONTINUAR PARTIDA",
-            (58, 178, 118),
-            (38, 138, 86),
-            width=310,
-            height=66
-        )
-        btn_new_game_surf = self._create_modal_btn_surface(
-            "NUEVA PARTIDA",
-            (238, 136, 58),
-            (196, 98, 32),
-            width=310,
-            height=66
-        )
-        btn_cancel_surf = self._create_modal_btn_surface(
-            "CANCELAR",
-            (135, 118, 162),
-            (102, 86, 128),
-            width=220,
-            height=50
-        )
-
-        btn_y = self.modal_rect.bottom - 125
-        self.btn_continue_story = UIButton(
-            (self.modal_rect.centerx - 170, btn_y),
-            btn_continue_surf,
-            on_click=self._on_continue_story_clicked
-        )
-        self.btn_new_story = UIButton(
-            (self.modal_rect.centerx + 170, btn_y),
-            btn_new_game_surf,
-            on_click=self._on_new_story_clicked
-        )
-        self.btn_cancel_modal = UIButton(
-            (self.modal_rect.centerx, self.modal_rect.bottom - 48),
-            btn_cancel_surf,
-            on_click=self._close_story_save_modal
-        )
-        self.modal_buttons: List[UIButton] = [
-            self.btn_continue_story,
-            self.btn_new_story,
-            self.btn_cancel_modal
-        ]
-
-    def _create_modal_btn_surface(
-        self,
-        text: str,
-        fill_color: tuple,
-        border_color: tuple,
-        width: int = 300,
-        height: int = 64
-    ) -> pygame.Surface:
-        surf = pygame.Surface((width, height), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (25, 18, 38, 95), (3, 5, width - 6, height - 5), border_radius=20)
-        body_rect = pygame.Rect(2, 2, width - 4, height - 6)
-        pygame.draw.rect(surf, fill_color, body_rect, border_radius=20)
-        highlight_rect = pygame.Rect(8, 5, width - 16, height // 2 - 4)
-        pygame.draw.rect(surf, (255, 255, 255, 48), highlight_rect, border_radius=14)
-        pygame.draw.rect(surf, border_color, body_rect, width=3, border_radius=20)
-
-        sh_surf = self.font_modal_btn.render(text, True, (30, 22, 42))
-        txt_surf = self.font_modal_btn.render(text, True, (255, 252, 245))
-        surf.blit(sh_surf, sh_surf.get_rect(center=(width // 2 + 1, height // 2 + 1)))
-        surf.blit(txt_surf, txt_surf.get_rect(center=(width // 2, height // 2 - 1)))
-        return surf
+    def _sync_story_save_modal_refs(self) -> None:
+        self.modal_rect = self.story_save_panel.frame_rect
+        self.btn_continue_story = self.story_save_panel.btn_continue
+        self.btn_new_story = self.story_save_panel.btn_new
+        self.btn_cancel_modal = self.story_save_panel.btn_cancel
+        self.modal_buttons = self.story_save_panel.buttons
 
     def _close_story_save_modal(self) -> None:
         self.audio.play_click()
@@ -274,6 +217,8 @@ class ModeSelectScene(BaseState):
             return
 
         if mode_id == "historia" and self.settings.has_saved_story():
+            self.story_save_panel.refresh()
+            self._sync_story_save_modal_refs()
             self.story_save_modal_open = True
             return
 
@@ -451,12 +396,10 @@ class ModeSelectScene(BaseState):
             if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 self._close_story_save_modal()
                 return
-            for mbtn in self.modal_buttons:
-                consumed = mbtn.handle_event(event)
-                if consumed and event.type != pygame.MOUSEMOTION:
-                    return
+            if self.story_save_panel.handle_event(event):
+                return
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if not self.modal_rect.collidepoint(event.pos):
+                if not self.story_save_panel.frame_rect.collidepoint(event.pos):
                     self._close_story_save_modal()
             return
 
@@ -494,8 +437,7 @@ class ModeSelectScene(BaseState):
         self.juice_particles.update(dt)
 
         if self.story_save_modal_open:
-            for mbtn in self.modal_buttons:
-                mbtn.update(dt)
+            self.story_save_panel.update(dt)
         else:
             for btn in self.buttons:
                 btn.update(dt)
@@ -588,71 +530,8 @@ class ModeSelectScene(BaseState):
             self._render_story_save_modal(surface)
 
     def _render_story_save_modal(self, surface: pygame.Surface) -> None:
-        """Renderiza el modal cozy de Continuar Partida o Nueva Partida con resumen del progreso guardado."""
-        overlay = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
-        overlay.fill((22, 16, 36, 175))
-        surface.blit(overlay, (0, 0))
-
-        mx, my, mw, mh = self.modal_rect
-        panel = pygame.Surface((mw, mh), pygame.SRCALPHA)
-        # Sombra y cuerpo crema pastel con borde lavanda/dorado
-        pygame.draw.rect(panel, (18, 12, 30, 120), (6, 8, mw - 12, mh - 10), border_radius=32)
-        body_r = pygame.Rect(0, 0, mw - 6, mh - 8)
-        pygame.draw.rect(panel, (254, 246, 226), body_r, border_radius=32)
-        pygame.draw.rect(panel, (152, 114, 184), body_r, width=5, border_radius=32)
-        inner_r = body_r.inflate(-16, -16)
-        pygame.draw.rect(panel, (242, 224, 192), inner_r, width=2, border_radius=24)
-
-        # Encabezado
-        title_txt = "PARTIDA GUARDADA ENCONTRADA"
-        t_sh = self.font_modal_title.render(title_txt, True, (255, 255, 255))
-        t_fg = self.font_modal_title.render(title_txt, True, (84, 52, 112))
-        panel.blit(t_sh, t_sh.get_rect(center=(mw // 2 + 1, 52)))
-        panel.blit(t_fg, t_fg.get_rect(center=(mw // 2, 50)))
-
-        sub_txt = "¿Deseas continuar tu recorrido por Barranquilla o empezar desde cero?"
-        s_fg = self.font_modal_sub.render(sub_txt, True, (112, 86, 134))
-        panel.blit(s_fg, s_fg.get_rect(center=(mw // 2, 92)))
-
-        # Resumen de la partida guardada
-        progress = self.settings.get_story_progress()
-        char_id = str(progress.get("character_id", "westcol")).lower()
-        char_names = {
-            "westcol": "Westcol",
-            "char": "Alex Char",
-            "katherine": "Katherine",
-            "shakira": "Shakira"
-        }
-        char_label = char_names.get(char_id, char_id.capitalize())
-        high_score = int(progress.get("high_score", 0))
-        completed_list = progress.get("completed_microgames", [])
-        # Calcular niveles completados (cada nivel tiene 2 rondas, o usar achievements guardado)
-        levels_done = int(progress.get("achievements", len(completed_list) // 2))
-        metrics = compute_social_metrics(char_id, high_score, levels_done)
-
-        # Los logros cuentan los trofeos escondidos del mapa
-        from scenes.story_map_data import trofeosMapa
-        trofeosGanados = len(self.settings.get("trofeosObtenidos", []))
-
-        card_r = pygame.Rect(48, 122, mw - 102, 136)
-        pygame.draw.rect(panel, (245, 234, 208), card_r, border_radius=20)
-        pygame.draw.rect(panel, (206, 182, 146), card_r, width=2, border_radius=20)
-
-        stat_line_1 = f"Personaje: {char_label}   |   Puntos: {high_score:,}".replace(",", ".")
-        stat_line_2 = (
-            f"Seguidores: {metrics['followers_text']}   •   "
-            f"Likes: {metrics['likes_text']}   •   "
-            f"Logros: {trofeosGanados}/{len(trofeosMapa)}"
-        )
-        st1_surf = self.font_modal_stat.render(stat_line_1, True, (76, 52, 98))
-        st2_surf = self.font_modal_stat.render(stat_line_2, True, (168, 92, 42))
-        panel.blit(st1_surf, st1_surf.get_rect(center=(card_r.centerx, card_r.top + 46)))
-        panel.blit(st2_surf, st2_surf.get_rect(center=(card_r.centerx, card_r.top + 92)))
-
-        surface.blit(panel, (mx, my))
-
-        for mbtn in self.modal_buttons:
-            mbtn.render(surface)
+        """Renderiza el modal acuarela de Continuar Partida o Nueva Partida."""
+        self.story_save_panel.render(surface, draw_backdrop=True)
 
     def _render_toast(self, surface: pygame.Surface) -> None:
         if not self.toast_msg or self.toast_timer <= 0.0:
@@ -664,15 +543,15 @@ class ModeSelectScene(BaseState):
         elif (2.5 - self.toast_timer) < 0.2:
             alpha = max(0, min(255, int((2.5 - self.toast_timer) * 255 / 0.2)))
 
-        txt_surf = self.font_toast.render(self.toast_msg, True, (255, 255, 255))
-        pad_x, pad_y = 36, 14
-        bw, bh = txt_surf.get_width() + pad_x * 2, txt_surf.get_height() + pad_y * 2
-
-        toast_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
-        pygame.draw.rect(toast_surf, (20, 26, 40, int(alpha * 0.92)), (0, 0, bw, bh), border_radius=18)
-        pygame.draw.rect(toast_surf, (245, 195, 65, alpha), (0, 0, bw, bh), width=2, border_radius=18)
-        txt_surf.set_alpha(alpha)
-        toast_surf.blit(txt_surf, txt_surf.get_rect(center=(bw // 2, bh // 2)))
+        font_toast = self.assets.cargarFuenteCuento(25)
+        txt_surf = font_toast.render(self.toast_msg, True, (76, 48, 102))
+        bw = max(460, txt_surf.get_width() + 96)
+        bh = 62
+        ribbon = self.assets.load_cropped_surface("cinta_estado_modal.png")
+        toast_surf = pygame.transform.smoothscale(ribbon, (bw, bh))
+        toast_surf.blit(txt_surf, txt_surf.get_rect(center=(bw // 2, bh // 2 - 1)))
+        if alpha < 255:
+            toast_surf.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
 
         surface.blit(toast_surf, toast_surf.get_rect(center=(self.screen_w // 2, 850)))
 

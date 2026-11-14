@@ -8,6 +8,7 @@ from scenes.story_map_data import (
     STORY_SECRET_POIS,
     STORY_PLAYABLE_POIS,
     STORY_LEVEL_STAGES,
+    STORY_LEVEL_PREVIEW_META,
     PALOMA_STORY_DIALOGS,
 )
 from scenes.story_map.ui_dialogs import StoryMapUI
@@ -20,6 +21,7 @@ __all__ = [
     "STORY_SECRET_POIS",
     "STORY_PLAYABLE_POIS",
     "STORY_LEVEL_STAGES",
+    "STORY_LEVEL_PREVIEW_META",
     "PALOMA_STORY_DIALOGS",
     "StoryMapUI",
 ]

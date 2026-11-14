@@ -64,6 +64,7 @@ class MicrogamePauseState(BaseState):
         self.btn_h = 72
 
         # Cargar y pre-escalar texturas oficiales
+        self.save_feedback_timer: float = 0.0
         self.bg_box: Optional[pygame.Surface] = None
         self.button_surfs: Dict[str, pygame.Surface] = {}
         self._load_assets()
@@ -160,7 +161,14 @@ class MicrogamePauseState(BaseState):
     def _open_options(self) -> None:
         self.audio.play_click()
         if self.state_machine:
-            self.state_machine.push_state(MapSettingsState())
+            on_cal = self._on_calibrate_from_options if self.calibrate_callback else None
+            self.state_machine.push_state(MapSettingsState(on_calibrate=on_cal))
+
+    def _on_calibrate_from_options(self) -> None:
+        if self.state_machine:
+            self.state_machine.pop_state()
+        if self.calibrate_callback:
+            self.calibrate_callback()
 
     def _choose(self) -> None:
         current_id = self.items[self.selected]["id"]
@@ -182,6 +190,7 @@ class MicrogamePauseState(BaseState):
                 self.menu_callback()
         elif current_id == "save":
             self.audio.play_click()
+            self.save_feedback_timer = 3.0
             if self.save_callback:
                 self.save_callback()
         elif current_id == "calibrate":
@@ -190,7 +199,8 @@ class MicrogamePauseState(BaseState):
                 self.calibrate_callback()
 
     def update(self, dt: float) -> None:
-        pass
+        if self.save_feedback_timer > 0.0:
+            self.save_feedback_timer = max(0.0, self.save_feedback_timer - dt)
 
     def render(self, surface: pygame.Surface) -> None:
         # Ventana de pausa nueva con botones morados que se ponen rojos al pasar por encima
@@ -262,6 +272,7 @@ class MicrogamePauseState(BaseState):
             self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
             self.fuenteTituloPausa = self.assets.cargarFuenteCuento(84)
             self.fuenteBotonPausa = self.assets.cargarFuenteCuento(44)
+            self.fuenteEstadoPausa = self.assets.cargarFuenteCuento(22)
             self.fuenteAyudaPausa = self.assets.cargarFuenteCuento(28)
             self.pausaLista = True
         except Exception as e:
@@ -276,7 +287,8 @@ class MicrogamePauseState(BaseState):
         alto = self.botonMorado.get_height()
         separacion = 12
         total = len(self.items) * alto + (len(self.items) - 1) * separacion
-        arriba = 564 - total // 2
+        centro_y = 584 if self.save_callback else 564
+        arriba = centro_y - total // 2
         cajas = []
         for i in range(len(self.items)):
             caja = self.botonMorado.get_rect(midtop=(self.centroPapel, arriba + i * (alto + separacion)))
@@ -307,7 +319,17 @@ class MicrogamePauseState(BaseState):
         surface.blit(self.ventanaPausa, ventana)
 
         titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (110, 62, 150), (255, 250, 238))
-        surface.blit(titulo, titulo.get_rect(center=(ventana.left + int(ventana.width * 0.56), ventana.top + 215)))
+        surface.blit(titulo, titulo.get_rect(center=(ventana.left + int(ventana.width * 0.56), ventana.top + 205)))
+
+        if self.save_callback:
+            if self.save_feedback_timer > 0.0:
+                estado_txt = "Partida guardada — Retoma en Cargar Partida"
+                estado_col = (38, 134, 68)
+            else:
+                estado_txt = "Auto-guardado activo tras cada misión"
+                estado_col = (116, 76, 48)
+            estado_surf = self.fuenteEstadoPausa.render(estado_txt, True, estado_col)
+            surface.blit(estado_surf, estado_surf.get_rect(center=(self.centroPapel + 16, ventana.top + 266)))
 
         for i, caja in enumerate(self.cajasBotones()):
             elegido = i == self.selected

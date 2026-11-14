@@ -20,35 +20,79 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
         {
             "id": "uninorte_sprint",
             "title": "RONDA 1: CARRERA AL AULA A-203",
-            "cls": UninorteSprintMicrogame
+            "cls": UninorteSprintMicrogame,
+            "difficulty": 2,
         },
         {
             "id": "uninorte_concentrate",
             "title": "RONDA 2: ¡CONCÉNTRATE EN LA BIBLIOTECA!",
-            "cls": UninorteConcentrateMicrogame
+            "cls": UninorteConcentrateMicrogame,
+            "difficulty": 2,
         }
     ],
     "buenavista": [
         {
             "id": "buenavista_trend",
             "title": "EL TREND EN BUENAVISTA",
-            "cls": BuenavistaTrendMicrogame
+            "cls": BuenavistaTrendMicrogame,
+            "difficulty": 3,
         }
     ],
     "metropolitano": [
         {
             "id": "metropolitano_moderacion",
             "title": "¡MODERA LA BARRA BRAVA!",
-            "cls": MetropolitanoModeracionMicrogame
+            "cls": MetropolitanoModeracionMicrogame,
+            "difficulty": 3,
         }
     ],
     "aeropuerto": [
         {
             "id": "punch_alert",
             "title": "¡DESPACHA EL SPAM ANTES DE DESPEGAR!",
-            "cls": PunchAlertMicrogame
+            "cls": PunchAlertMicrogame,
+            "difficulty": 4,
         }
     ]
+}
+
+# Metadatos de previsualización (miniatura real, dificultad y etiqueta corta) para los 5 POIs jugables
+STORY_LEVEL_PREVIEW_META: Dict[str, Dict[str, Any]] = {
+    "uninorte": {
+        "difficulty": 2,
+        "max_difficulty": 5,
+        "preview_asset": "fondo_minijuego_crossy.png",
+        "crop_anchor": "top",
+        "callout_title": "CAMPUS UNINORTE",
+    },
+    "buenavista": {
+        "difficulty": 3,
+        "max_difficulty": 5,
+        "preview_asset": "fondo_piano_tiles_microjuego.png",
+        "crop_anchor": "center",
+        "callout_title": "C.C. BUENAVISTA",
+    },
+    "metropolitano": {
+        "difficulty": 3,
+        "max_difficulty": 5,
+        "preview_asset": "fondo_chat_estadio_microjuego.png",
+        "crop_anchor": "center",
+        "callout_title": "ESTADIO METROPOLITANO",
+    },
+    "aeropuerto": {
+        "difficulty": 4,
+        "max_difficulty": 5,
+        "preview_asset": "fondo_box_microjuego.png",
+        "crop_anchor": "center",
+        "callout_title": "AEROPUERTO CORTISSOZ",
+    },
+    "malecon": {
+        "difficulty": 4,
+        "max_difficulty": 5,
+        "preview_asset": "coaster_game/fondos/nivel1.jpg",
+        "crop_anchor": "center",
+        "callout_title": "GRAN MALECÓN DEL RÍO",
+    },
 }
 
 # Guion completo de Diálogos Cozy con la Paloma Guía de Curramba (Revisión Tarea 005)
