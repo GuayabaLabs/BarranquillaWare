@@ -16,6 +16,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "window_width": 1920,
     "window_height": 1080,
     "arcade_high_score": 0,
+    "trofeosObtenidos": [],
     "story_progress": {
         "has_active_save": False,
         "character_id": "westcol",
@@ -154,11 +155,13 @@ class SettingsManager:
         fresh["character_id"] = char_key
         fresh["unlocked_locations"] = ["uninorte"]
         fresh["completed_microgames"] = []
+        fresh["trofeos_obtenidos"] = []
         metrics = compute_social_metrics(char_key, 0, 0)
         fresh["followers"] = metrics["followers"]
         fresh["likes"] = metrics["likes"]
         fresh["achievements"] = metrics["achievements"]
         self.data["story_progress"] = fresh
+        self.data["trofeosObtenidos"] = []
         self.save()
 
     def has_saved_story(self) -> bool:

@@ -10,13 +10,15 @@ import time
 from typing import Optional
 
 HAVE_CAMERA = False
+CAMERA_IMPORT_ERROR = ""
 try:
     import cv2
     import mediapipe as mp
     HAVE_CAMERA = True
-except Exception:
+except Exception as exc:
     cv2 = None
     mp = None
+    CAMERA_IMPORT_ERROR = str(exc)
 
 
 class CameraGestureInput:
@@ -33,7 +35,7 @@ class CameraGestureInput:
         self.available = HAVE_CAMERA
         self.enabled = False
         self.suspended = False
-        self.error = ""
+        self.error = CAMERA_IMPORT_ERROR if not HAVE_CAMERA else ""
         self._last_start_attempt = 0.0
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -62,7 +64,11 @@ class CameraGestureInput:
         if self.enabled:
             return True
         if not HAVE_CAMERA:
-            self.error = "MediaPipe/OpenCV no están instalados"
+            self.error = (
+                f"No se pudo cargar MediaPipe/OpenCV: {CAMERA_IMPORT_ERROR}"
+                if CAMERA_IMPORT_ERROR
+                else "MediaPipe/OpenCV no están instalados"
+            )
             return False
         if self._thread and self._thread.is_alive():
             return False

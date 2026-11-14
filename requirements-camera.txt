@@ -1,0 +1,2 @@
+# MediaPipe 0.10.x still uses protobuf APIs removed in protobuf 5+.
+protobuf>=4.25.3,<5

@@ -6,6 +6,7 @@ import pygame
 
 from core.microgame import BaseMicrogame
 from core.asset_manager import AssetManager
+from core.camera_gestures import CameraGestureInput
 
 
 class MetropolitanoModeracionMicrogame(BaseMicrogame):
@@ -40,6 +41,10 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
 
     def setup_game(self) -> None:
         """Inicializa estructuras del tablero 3x3, slots y assets."""
+        self.camera_input = CameraGestureInput.get_instance()
+        if not self.camera_input.enabled:
+            self.camera_input.start()
+
         self.bans_count: int = 0
         self.innocent_hits: int = 0
 
@@ -399,6 +404,16 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
                     self._update_hammer_target_from_grid()
                     break
             self._on_hammer_strike(event.pos)
+
+        elif event.type == pygame.MOUSEMOTION:
+            # El puntero óptico del motor envía movimiento virtual igual que el mouse.
+            # Mantener sincronizados el martillo y la selección del tablero.
+            for slot in self.slots:
+                if slot["rect"].collidepoint(event.pos):
+                    self.grid_row = slot["row"]
+                    self.grid_col = slot["col"]
+                    self.hammer_target_pos = [slot["rect"].centerx, slot["rect"].centery]
+                    break
 
     def _on_hammer_strike(self, pos: Tuple[int, int]) -> None:
         """Ejecuta el martillazo de moderación en la coordenada indicada."""
