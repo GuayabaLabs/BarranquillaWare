@@ -889,19 +889,7 @@ class PunchAlertMicrogame(BaseMicrogame):
             surface.blit(x_shadow, (rx + 2, ry + 2))
             surface.blit(x_surf, (rx, ry))
 
-        # 2. Reloj Contador Gráfico Oficial (Esquina superior derecha, idéntico a Crossy Road)
-        counter_x = self.screen_w - 310
-        counter_y = 20
-        if self.spr_counter:
-            surface.blit(self.spr_counter, (counter_x, counter_y))
-            display_rect = pygame.Rect(counter_x + 77, counter_y + 18, 138, 70)
-            time_display = f"0:{int(math.ceil(self.time_left)):02d}"
-            col = (45, 45, 45) if self.time_left > 4.0 else (225, 40, 40)
-            txt_t = self.font_timer.render(time_display, True, col)
-            surface.blit(txt_t, txt_t.get_rect(center=display_rect.center))
-        else:
-            txt_t = self.font_timer.render(f"TIEMPO: {self.time_left:.1f}s", True, (40, 40, 40))
-            surface.blit(txt_t, (self.screen_w - 240, 40))
+        # 2. Reloj Contador Gráfico Oficial suprimido (se utiliza la barra de tiempo inferior)
 
     def render_game(self, surface: pygame.Surface) -> None:
         """Renderizado completo con jerarquía de capas, ondas expansivas y HUD limpio."""

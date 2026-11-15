@@ -2283,7 +2283,7 @@ class StoryMapScene(BaseState):
             return
 
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_m):
-            self._open_pause_menu()
+            self._toggle_menu()
             return
 
         # Si el menú está abierto, interacción exclusiva con el Drawer
