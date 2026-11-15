@@ -16,7 +16,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
     Microjuego de ritmo y supervivencia: «El Trend en Buenavista» (Inspirado en Piano Tiles).
     - Ubicación: Centro Comercial Buenavista, Barranquilla.
     - Duración: 30 segundos.
-    - Categoría: Supervivencia (3 corazones de vida).
+    - Categoría: Supervivencia (5 corazones de vida).
     - Controles: D/F/J/K, o botones A/B/X/Y del mando (carriles 1–4).
     - Mensaje educativo: No necesitas seguir todas las tendencias para disfrutar de las redes sociales.
     """
@@ -49,9 +49,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     def setup_game(self) -> None:
         """Inicializa recursos gráficos, recorte 4x2, geometría proporcional del celular y mapa musical."""
-        # Sistema de 3 vidas y contadores de desempeño
-        self.max_lives: int = 3
-        self.lives: int = 3
+        # Sistema de 5 vidas y contadores de desempeño
+        self.max_lives: int = 5
+        self.lives: int = 5
         self.hits_perfect: int = 0
         self.hits_good: int = 0
         self.misses_count: int = 0
@@ -114,6 +114,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
         # 5. Construir lista de eventos musicales independientes del renderizado
         self._build_musical_events()
+
+        self.iniciarPublico()
 
     def _load_background_layer(self) -> None:
         """Carga el fondo de Buenavista a resolución lógica y aplica un velo suave para destacar el celular."""
@@ -281,6 +283,13 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.heart_empty_surf = self._create_heart_surface(filled=False, size=56)
         self.mini_heart_surf = self._create_heart_surface(filled=True, size=24)
 
+        try:
+            self.heart_full_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), 56)
+            self.heart_empty_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonVacio.jpg"), 56)
+            self.mini_heart_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), 24)
+        except Exception as e:
+            print(f"[BuenavistaTrend] Aviso: no se pudieron cargar los corazones pintados: {e}")
+
     def _create_heart_surface(self, filled: bool, size: int = 56) -> pygame.Surface:
         """Genera un corazón estilizado con borde acogedor coherente con la paleta de BarranquillaWare."""
         surf = pygame.Surface((size, size), pygame.SRCALPHA)
@@ -413,6 +422,11 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             self.trauma = 0.85
         super().finish_game(won=won)
 
+        if getattr(self, "letreroResultado", None) is not None:
+            self.finLetrero = 3.0
+            self.inicioTendencias = 13.0
+            self.outro_duration = max(self.outro_duration, 17.0 if won else 13.0)
+
     def _sync_audio_clock(self, dt: float) -> None:
         """
         Sincroniza el reloj musical (`self.song_elapsed`) con el tiempo real de reproducción
@@ -462,6 +476,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
     def update_game(self, dt: float) -> None:
         if self.is_finished:
             return
+
+        self.actualizarPublico(dt)
 
         # Entrada opcional de MediaPipe: los cuatro dedos son los cuatro carriles.
         for lane in range(4):
@@ -709,6 +725,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.misses_count += 1
         self.combo = 0
 
+        self.publicoSeRie()
+
         # Efectos de fallo: pequeño destello rojizo, breve vibración visual y pérdida animada de corazón
         self.red_flash_alpha = 135.0
         self.trauma = min(1.0, self.trauma + 0.55)
@@ -805,6 +823,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         # Etiquetas discretas de controles [D] [F] [J] [K] en las 4 zonas de pulsación inferiores
         self._render_lane_key_indicators(surface, shake_x, shake_y)
 
+        self.dibujarPantallaVivo(surface, shake_x, shake_y)
+
         # ---------------------------------------------------------------------
         # CAPA 3 — Teclas descendentes con clipping estricto al interior del celular
         # ---------------------------------------------------------------------
@@ -858,6 +878,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         # Restaurar clip de pantalla completa
         surface.set_clip(prev_clip)
 
+        self.dibujarMarcoCelular(surface, shake_x, shake_y)
+
         # Partículas de likes y corazones pequeños (no ocultan los carriles)
         self._render_vfx_and_particles(surface, shake_x, shake_y)
 
@@ -865,6 +887,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         # CAPA 4 — Interfaz adicional fuera del celular (Corazones y Barra Musical)
         # ---------------------------------------------------------------------
         self._render_outer_hud(surface)
+
+        self.dibujarPublico(surface)
 
     def _render_lane_key_indicators(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         """Muestra la referencia de teclas D, F, J, K en las zonas de pulsación inferiores."""
@@ -939,7 +963,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         2. Reloj contador dinámico en la esquina superior derecha (sin el recuadro de progreso del trend).
         """
         # 1. Tres corazones en la esquina superior izquierda
-        hearts_panel_w = 248
+        hearts_panel_w = 44 + (self.max_lives - 1) * 68 + 56
         hearts_panel_h = 80
         hearts_x = 34
         hearts_y = 26
@@ -947,7 +971,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         panel_surf = pygame.Surface((hearts_panel_w, hearts_panel_h), pygame.SRCALPHA)
         pygame.draw.rect(panel_surf, (32, 18, 52, 210), (0, 0, hearts_panel_w, hearts_panel_h), border_radius=24)
         pygame.draw.rect(panel_surf, (235, 145, 210, 220), (0, 0, hearts_panel_w, hearts_panel_h), width=3, border_radius=24)
-        surface.blit(panel_surf, (hearts_x, hearts_y))
+        if not self.dibujarPanelCorazones(surface, pygame.Rect(hearts_x, hearts_y, hearts_panel_w, hearts_panel_h)):
+            surface.blit(panel_surf, (hearts_x, hearts_y))
 
         for i in range(self.max_lives):
             hx = hearts_x + 22 + i * 68
@@ -966,6 +991,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             falling_h = self.heart_full_surf.copy()
             falling_h.set_alpha(int(240 * ratio))
             surface.blit(falling_h, (int(hl["x"]), int(hl["y"])))
+
+        return
 
         # 2. Reloj contador dinámico en la esquina superior derecha
         counter_x = self.screen_w - 310
@@ -990,7 +1017,16 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         """
         super()._render_outro_banner(surface)
 
-        edu_msg = "No necesitas seguir todas las tendencias para disfrutar de las redes sociales."
+        if self.dibujarRevelacion(surface):
+            return
+
+        if not self.is_won:
+            return
+
+        if self.dibujarMensajeTendencias(surface):
+            return
+
+        edu_msg ="No necesitas seguir todas las tendencias para disfrutar de las redes sociales."
         pulse = math.sin(self.outro_timer * 6.0) * 0.5 + 0.5
         txt_edu = self.font_edu.render(edu_msg, True, (255, 248, 235))
         txt_glow = self.font_edu.render(edu_msg, True, (235, 130, 215))
@@ -1007,6 +1043,405 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             surface.blit(txt_outline, txt_outline.get_rect(center=(cx + ox, cy + oy)))
 
         surface.blit(txt_edu, txt_edu.get_rect(center=(cx, cy)))
+
+    def dibujarPanelCorazones(self, surface: pygame.Surface, caja: pygame.Rect) -> bool:
+        if getattr(self, "panelCorazones", None) is None:
+            try:
+                panel = self.assets.cargarSinFondo(os.path.join("Piano", "panelCorazones.jpg"), 600)
+                panel = pygame.transform.smoothscale_by(panel, 100 / float(panel.get_height()))
+                self.panelCorazones = self.estirarCentro(panel, caja.width + 30)
+            except Exception as e:
+                print(f"[BuenavistaTrend] Aviso: no se pudo cargar el recuadro de los corazones: {e}")
+                self.panelCorazones = False
+        if not self.panelCorazones:
+            return False
+        surface.blit(self.panelCorazones, self.panelCorazones.get_rect(center=caja.center))
+        return True
+
+    def dibujarMensajeTendencias(self, surface: pygame.Surface) -> bool:
+        if getattr(self, "letreroResultado", None) is None or not getattr(self, "finLetrero", None):
+            return False
+        if getattr(self, "bannerTendencias", None) is None:
+            self.bannerTendencias = self.crearCartel(
+                ["No necesitas seguir todas las tendencias", "para disfrutar de las redes sociales."])
+        if not self.bannerTendencias:
+            return False
+        inicio = getattr(self, "inicioTendencias", self.finLetrero)
+        if self.outro_timer < inicio:
+            return True
+        self.dibujarCartel(surface, self.bannerTendencias, inicio, self.outro_duration,
+                           (self.screen_w // 2, self.screen_h // 2))
+        return True
+
+    def iniciarPublico(self) -> None:
+        self.espectadores = 40.0
+        self.temblorContador = 0.0
+        self.vieronDeVerdad = random.randint(1, 3)
+        self.comentarios = []
+        self.comentariosEnFila = []
+        self.esperaComentario = 2.0
+        self.burlas = [
+            "jajaja", "¿Qué fue eso?", "Se le fue el paso jaja", "Clip de eso",
+            "Nooo jajaja", "Pena ajena", "Ese paso no era", "jajaja la cara",
+        ]
+        self.tibios = ["Ok", "Normal", "Meh", "Siguiente", "Ah, bueno", "Todos hacen ese trend"]
+        self.fuenteComentario = self.assets.cargarFuenteCuento(38)
+        self.fuenteEnVivo = self.assets.cargarFuenteCuento(40)
+        self.fuenteRevelacion = self.assets.cargarFuenteCuento(64)
+        self.fuenteSello = self.assets.cargarFuenteCuento(58)
+        self.avatares = self.cargarAvatares()
+        self.globosHechos = {}
+        self.bannerPublico = None
+        self.imagenRevelacion = None
+        self.sonoApagon = False
+        self.sonoSello = False
+
+    def cargarAvatares(self) -> list:
+        try:
+            hoja = self.assets.cargarSinFondo(os.path.join("Piano", "avataresPublico.jpg"), 1200)
+            globo = self.assets.cargarSinFondo(os.path.join("Piano", "globoComentario.jpg"), 900)
+            self.globoComentario = pygame.transform.smoothscale_by(globo, 80 / float(globo.get_height()))
+        except Exception as e:
+            print(f"[BuenavistaTrend] Aviso: faltan las imágenes del chat en vivo: {e}")
+            return []
+        avatares = []
+        anchoCelda = hoja.get_width() // 4
+        altoCelda = hoja.get_height() // 2
+        for fila in range(2):
+            for columna in range(4):
+                parte = hoja.subsurface((columna * anchoCelda, fila * altoCelda, anchoCelda, altoCelda))
+                cajas = pygame.mask.from_surface(parte, 60).get_bounding_rects()
+                if cajas:
+                    parte = parte.subsurface(cajas[0].unionall(cajas[1:]))
+                avatares.append(pygame.transform.smoothscale(parte, (84, 84)))
+        return avatares
+
+    def actualizarPublico(self, dt: float) -> None:
+        self.espectadores += dt * 9.0
+        self.temblorContador = max(0.0, self.temblorContador - dt)
+        for comentario in self.comentarios:
+            comentario["edad"] += dt
+        if self.comentariosEnFila:
+            self.comentariosEnFila[0][1] -= dt
+            if self.comentariosEnFila[0][1] <= 0.0:
+                self.agregarComentario(self.comentariosEnFila.pop(0)[0])
+        self.esperaComentario -= dt
+        if self.esperaComentario <= 0.0:
+            self.esperaComentario = random.uniform(2.5, 4.0)
+            self.agregarComentario(random.choice(self.tibios))
+
+    def agregarComentario(self, texto: str) -> None:
+        if not self.avatares:
+            return
+        self.comentarios.append({"texto": texto, "avatar": random.choice(self.avatares), "edad": 0.0})
+        self.comentarios = self.comentarios[-5:]
+
+    def publicoSeRie(self) -> None:
+        if not hasattr(self, "espectadores"):
+            return
+        self.espectadores += random.randint(250, 600)
+        self.temblorContador = 0.4
+        for i in range(random.randint(2, 3)):
+            self.comentariosEnFila.append([random.choice(self.burlas), 0.12 if i == 0 else 0.35])
+
+    def globoConTexto(self, texto: str) -> pygame.Surface:
+        if texto not in self.globosHechos:
+            letras = self.fuenteComentario.render(texto, True, (80, 46, 92))
+            ancho = letras.get_width() + 124
+            globo = self.estirarCentro(self.globoComentario, max(ancho, self.globoComentario.get_height() * 2))
+            globo.blit(letras, letras.get_rect(midleft=(80, globo.get_height() // 2)))
+            self.globosHechos[texto] = globo
+        return self.globosHechos[texto]
+
+    def dibujarChat(self, surface: pygame.Surface) -> None:
+        izquierda = 56
+        abajo = 950
+        for i, comentario in enumerate(reversed(self.comentarios)):
+            y = abajo - i * 100
+            entrada = min(1.0, comentario["edad"] / 0.25)
+            x = izquierda - int((1.0 - entrada) * 60)
+            globo = self.globoConTexto(comentario["texto"])
+            alfa = int(255 * entrada * (1.0 if i < 4 else 0.55))
+            globo.set_alpha(alfa)
+            surface.blit(globo, globo.get_rect(midleft=(x + 34, y)))
+            avatar = comentario["avatar"]
+            avatar.set_alpha(alfa)
+            surface.blit(avatar, avatar.get_rect(center=(x + 34, y)))
+            avatar.set_alpha(255)
+
+    def prepararPantallaVivo(self) -> bool:
+        if getattr(self, "pantallaVivo", None) is not None:
+            return bool(self.pantallaVivo)
+        try:
+            fondo = self.assets.load_surface(os.path.join("Piano", "pantallaVivo.jpg"), has_alpha=False)
+        except Exception as e:
+            print(f"[BuenavistaTrend] Aviso: falta la pantalla en vivo: {e}")
+            self.pantallaVivo = False
+            return False
+        w, h = fondo.get_size()
+        fondo = fondo.subsurface((int(w * 0.07), int(h * 0.055), int(w * 0.86), int(h * 0.89)))
+        self.cajaPantalla = self.phone_rect.inflate(-36, -36)
+        pantalla = pygame.transform.smoothscale(fondo, self.cajaPantalla.size).convert()
+        alto = self.playable_clip_rect.top - self.cajaPantalla.top
+        pantalla.fill((228, 212, 200), (0, 0, pantalla.get_width(), alto), special_flags=pygame.BLEND_RGB_MULT)
+        linea = pygame.Surface((3, self.playable_clip_rect.height), pygame.SRCALPHA)
+        linea.fill((255, 246, 230, 150))
+        for i in range(3):
+            x = (self.lane_rects[i].right + self.lane_rects[i + 1].left) // 2 - self.cajaPantalla.left
+            pantalla.blit(linea, (x - 1, alto))
+        pantalla = pantalla.convert_alpha()
+        molde = pygame.Surface(pantalla.get_size(), pygame.SRCALPHA)
+        pygame.draw.rect(molde, (255, 255, 255, 255), molde.get_rect(), border_radius=70)
+        pantalla.blit(molde, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self.pantallaVivo = pantalla
+        alto = max(24, self.hit_box_bottom_y - self.hit_box_top_y)
+        ancho = int(self.lane_rects[0].width * 0.86)
+        globo = pygame.transform.smoothscale_by(self.globoComentario, alto / float(self.globoComentario.get_height()))
+        mitad = globo.subsurface((0, 0, ancho // 2, alto))
+        capsula = pygame.Surface((ancho // 2 * 2, alto), pygame.SRCALPHA)
+        capsula.blit(mitad, (0, 0))
+        capsula.blit(pygame.transform.flip(mitad, True, False), (ancho // 2, 0))
+        self.capsulaTecla = capsula
+        self.capsulaPrendida = capsula.copy()
+        self.capsulaPrendida.fill((40, 34, 0), special_flags=pygame.BLEND_RGB_ADD)
+        self.fuenteTecla = self.assets.cargarFuenteCuento(54)
+        return True
+
+    def dibujarPantallaVivo(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        if not getattr(self, "avatares", None) or not self.prepararPantallaVivo():
+            return
+        surface.blit(self.pantallaVivo, self.cajaPantalla.move(ox, oy))
+
+        for i, letra in enumerate(self.LANE_LABELS):
+            centro = (self.lane_centers_x[i] + ox, self.hit_line_y + oy)
+            prendida = self.lane_press_timers[i] > 0.0
+            capsula = self.capsulaPrendida if prendida else self.capsulaTecla
+            surface.blit(capsula, capsula.get_rect(center=centro))
+            color = (190, 70, 40) if prendida else (92, 46, 118)
+            texto = self.textoConBorde(self.fuenteTecla, letra, color, color, 2)
+            surface.blit(texto, texto.get_rect(center=(centro[0], centro[1] - 2)))
+
+        arriba = (self.cajaPantalla.top + self.playable_clip_rect.top) // 2 + oy + 6
+        if self.cargarPastillasVivo():
+            if getattr(self, "etiquetaPintada", None) is None:
+                self.etiquetaPintada = self.armarEtiquetaEnVivo(58)
+            etiqueta = self.etiquetaPintada.get_rect(midleft=(self.cajaPantalla.left + 62 + ox, arriba))
+            surface.blit(self.etiquetaPintada, etiqueta)
+            cifra = f"{int(self.espectadores):,}".replace(",", ".")
+            temblor = int(math.sin(self.song_elapsed * 60.0) * 6 * (self.temblorContador / 0.4)) if self.temblorContador > 0 else 0
+            color = (200, 50, 60) if self.temblorContador > 0.0 else (80, 46, 92)
+            contador = self.armarContador(cifra, 58, color, self.fuenteEnVivo)
+            surface.blit(contador, contador.get_rect(midleft=(etiqueta.right + 12 + temblor, arriba)))
+            return
+        if getattr(self, "etiquetaEnVivo", None) is None:
+            self.etiquetaEnVivo = self.armarPastilla("En vivo", (80, 46, 92), self.fuenteEnVivo, 1.0)
+        etiqueta = self.etiquetaEnVivo.get_rect(midleft=(self.cajaPantalla.left + 30 + ox, arriba))
+        surface.blit(self.etiquetaEnVivo, etiqueta)
+        cifra = f"{int(self.espectadores):,}".replace(",", ".")
+        temblor = int(math.sin(self.song_elapsed * 60.0) * 6 * (self.temblorContador / 0.4)) if self.temblorContador > 0 else 0
+        color = (200, 50, 60) if self.temblorContador > 0.0 else (80, 46, 92)
+        viendo = self.armarPastilla(f"{cifra} viendo", color, self.fuenteEnVivo)
+        surface.blit(viendo, viendo.get_rect(midleft=(etiqueta.right + 14 + temblor, arriba)))
+
+    def dibujarMarcoCelular(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        if getattr(self, "marcoCelular", None) is None:
+            try:
+                marco = self.assets.cargarSinFondo(os.path.join("Piano", "marcoCelular.jpg"), 560, ((0.5, 0.5),))
+                caja = self.phone_rect.inflate(6, 6)
+                self.marcoCelular = self.armarMarco(marco, caja.width, caja.height, 1.0)
+            except Exception as e:
+                print(f"[BuenavistaTrend] Aviso: no se pudo cargar el marco del celular: {e}")
+                self.marcoCelular = False
+        if not self.marcoCelular:
+            return
+        surface.blit(self.marcoCelular, self.marcoCelular.get_rect(center=(self.phone_rect.centerx + ox + 4, self.phone_rect.centery + oy)))
+
+    def armarMarco(self, imagen: pygame.Surface, ancho: int, alto: int, grosor: float) -> pygame.Surface:
+        imagen = pygame.transform.smoothscale_by(imagen, grosor)
+        w, h = imagen.get_size()
+        c = int(w * 0.2)
+        marco = pygame.Surface((ancho, alto), pygame.SRCALPHA)
+        marco.blit(imagen, (0, 0), (0, 0, c, c))
+        marco.blit(imagen, (ancho - c, 0), (w - c, 0, c, c))
+        marco.blit(imagen, (0, alto - c), (0, h - c, c, c))
+        marco.blit(imagen, (ancho - c, alto - c), (w - c, h - c, c, c))
+        arriba = imagen.subsurface((c, 0, w - c * 2, c))
+        abajo = imagen.subsurface((c, h - c, w - c * 2, c))
+        izquierda = imagen.subsurface((0, c, c, h - c * 2))
+        derecha = imagen.subsurface((w - c, c, c, h - c * 2))
+        marco.blit(pygame.transform.smoothscale(arriba, (ancho - c * 2, c)), (c, 0))
+        marco.blit(pygame.transform.smoothscale(abajo, (ancho - c * 2, c)), (c, alto - c))
+        marco.blit(pygame.transform.smoothscale(izquierda, (c, alto - c * 2)), (0, c))
+        marco.blit(pygame.transform.smoothscale(derecha, (c, alto - c * 2)), (ancho - c, c))
+        return marco
+
+    def cargarPastillasVivo(self) -> bool:
+        if getattr(self, "pastillasVivo", None) is not None:
+            return self.pastillasVivo
+        try:
+            self.imagenEnVivo = self.assets.cargarSinFondo(os.path.join("Piano", "etiquetaEnVivo.jpg"), 600)
+            self.imagenEspectadores = self.assets.cargarSinFondo(os.path.join("Piano", "pastillaEspectadores.jpg"), 700)
+            self.imagenBotonRojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 600)
+            self.pastillasVivo = True
+        except Exception as e:
+            print(f"[BuenavistaTrend] Aviso: faltan las pastillas de la transmisión: {e}")
+            self.pastillasVivo = False
+        return self.pastillasVivo
+
+    def estirarConPunta(self, imagen: pygame.Surface, alto: int, ancho: int, puntaIzquierda: float) -> pygame.Surface:
+        imagen = pygame.transform.smoothscale_by(imagen, alto / float(imagen.get_height()))
+        w, h = imagen.get_size()
+        izquierda = min(int(h * puntaIzquierda), w // 2)
+        derecha = min(h, w // 2)
+        ancho = max(ancho, izquierda + derecha + 2)
+        resultado = pygame.Surface((ancho, h), pygame.SRCALPHA)
+        resultado.blit(imagen, (0, 0), (0, 0, izquierda, h))
+        centro = imagen.subsurface((izquierda, 0, w - izquierda - derecha, h))
+        resultado.blit(pygame.transform.smoothscale(centro, (ancho - izquierda - derecha, h)), (izquierda, 0))
+        resultado.blit(imagen, (ancho - derecha, 0), (w - derecha, 0, derecha, h))
+        return resultado
+
+    def armarEtiquetaEnVivo(self, alto: int) -> pygame.Surface:
+        letras = self.textoConBorde(self.fuenteEnVivo, "En vivo", (255, 246, 236), (110, 24, 36), 2)
+        inicio = int(alto * 0.95)
+        etiqueta = self.estirarConPunta(self.imagenEnVivo, alto, inicio + letras.get_width() + int(alto * 0.55), 0.95)
+        etiqueta.blit(letras, letras.get_rect(midleft=(inicio, alto // 2 - 2)))
+        return etiqueta
+
+    def armarContador(self, texto: str, alto: int, color, fuente, rojo: float = 0.0, ancho: int = 0) -> pygame.Surface:
+        color = [int(a + (b - a) * rojo) for a, b in zip(color, (255, 246, 236))]
+        if rojo > 0.0:
+            letras = self.textoConBorde(fuente, texto, color, (110, 24, 36), max(1, int(3 * rojo)))
+        else:
+            letras = fuente.render(texto, True, color)
+        inicio = int(alto * 1.3)
+        pastilla = self.estirarConPunta(self.imagenEspectadores, alto, max(ancho, inicio + letras.get_width() + int(alto * 0.5)), 1.3)
+        if rojo > 0.0:
+            boton = self.estirarConPunta(self.imagenBotonRojo, pastilla.get_height(), pastilla.get_width(), 1.0)
+            boton.set_alpha(int(255 * rojo))
+            pastilla.blit(boton, (0, 0))
+        if rojo >= 1.0:
+            pastilla.blit(letras, letras.get_rect(center=(pastilla.get_width() // 2, alto // 2 - 2)))
+        else:
+            zona = pastilla.get_width() - inicio - int(alto * 0.35)
+            pastilla.blit(letras, letras.get_rect(center=(inicio + zona // 2, alto // 2 - 2)))
+        return pastilla
+
+    def armarPastilla(self, texto: str, color, fuente=None, rojo: float = 0.0) -> pygame.Surface:
+        fuente = fuente or self.fuenteEnVivo
+        if rojo > 0.0:
+            color = [int(a + (b - a) * rojo) for a, b in zip(color, (255, 246, 236))]
+            letras = self.textoConBorde(fuente, texto, color, (110, 24, 36), max(1, int(3 * rojo)))
+        else:
+            letras = fuente.render(texto, True, color)
+        pastilla = self.estirarCentro(self.globoComentario, letras.get_width() + 70)
+        pastilla = pygame.transform.smoothscale_by(pastilla, letras.get_height() * 1.25 / pastilla.get_height())
+        if rojo > 0.0:
+            tinte = (255 - int(25 * rojo), 255 - int(155 * rojo), 255 - int(150 * rojo))
+            pastilla.fill(tinte, special_flags=pygame.BLEND_RGB_MULT)
+        pastilla.blit(letras, letras.get_rect(center=(pastilla.get_width() // 2, pastilla.get_height() // 2)))
+        return self.ponerBorde(pastilla, (74, 34, 62), 4)
+
+    def dibujarEnVivo(self, surface: pygame.Surface, texto: str, color, centro, fuente=None, rojo: float = 0.0) -> None:
+        pastilla = self.armarPastilla(texto, color, fuente, rojo)
+        surface.blit(pastilla, pastilla.get_rect(center=centro))
+
+    def dibujarPublico(self, surface: pygame.Surface) -> None:
+        if not hasattr(self, "espectadores") or self.is_finished or not self.avatares:
+            return
+        self.dibujarChat(surface)
+        if getattr(self, "pantallaVivo", None):
+            return
+        cifra = f"{int(self.espectadores):,}".replace(",", ".")
+        temblor = int(math.sin(self.song_elapsed * 60.0) * 6 * (self.temblorContador / 0.4)) if self.temblorContador > 0 else 0
+        color = (200, 50, 60) if self.temblorContador > 0.0 else (80, 46, 92)
+        centro = (self.phone_rect.centerx + 40 + temblor, self.phone_rect.top + int(self.phone_rect.height * 0.066))
+        self.dibujarEnVivo(surface, f"En vivo · {cifra}", color, centro)
+
+    def dibujarRevelacion(self, surface: pygame.Surface) -> bool:
+        if not hasattr(self, "espectadores") or not getattr(self, "finLetrero", None) or not self.avatares:
+            return False
+        inicio = self.finLetrero
+        fin = getattr(self, "inicioTendencias", inicio + 7.0)
+        if self.outro_timer < inicio or self.outro_timer >= fin:
+            return False
+        t = self.outro_timer - inicio
+        if self.imagenRevelacion is None:
+            try:
+                foto = self.assets.load_surface(os.path.join("Piano", "revelacionPublico.jpg"), has_alpha=False)
+                self.imagenRevelacion = pygame.transform.smoothscale(foto, (2700, 1519))
+            except Exception as e:
+                print(f"[BuenavistaTrend] Aviso: falta la imagen de la revelación: {e}")
+                self.imagenRevelacion = False
+
+        if not self.sonoApagon:
+            self.sonoApagon = True
+            if hasattr(self.audio, "play_click"):
+                self.audio.play_click()
+        if t < 0.3 and int(t * 20) % 2 == 0:
+            return True
+        surface.fill((8, 6, 12))
+
+        pregunta = "¿Y toda esa gente que te estaba mirando?"
+        if t < 2.9:
+            letras = min(len(pregunta), int(max(0.0, t - 0.4) * 24))
+            if letras > 0:
+                texto = self.textoConBorde(self.fuenteRevelacion, pregunta[:letras], (255, 247, 230), (60, 50, 70), 3)
+                if t > 2.4:
+                    texto.set_alpha(int(255 * (2.9 - t) / 0.5))
+                surface.blit(texto, texto.get_rect(midleft=(self.screen_w // 2 - self.fuenteRevelacion.size(pregunta)[0] // 2, self.screen_h // 2)))
+            return True
+
+        if self.imagenRevelacion:
+            avance = min(1.0, (t - 2.9) / 1.0)
+            recorrido = min(1.0, (t - 2.9) / (fin - inicio - 2.9))
+            recorrido = recorrido * recorrido * (3.0 - 2.0 * recorrido)
+            sobra = self.imagenRevelacion.get_width() - self.screen_w
+            surface.blit(self.imagenRevelacion, (-sobra + int(sobra * recorrido), -360))
+            if avance < 1.0:
+                radio = int(1150 * (1.0 - (1.0 - avance) ** 3))
+                telon = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+                telon.fill((8, 6, 12, 255))
+                pygame.draw.circle(telon, (0, 0, 0, 0), (self.screen_w // 2, self.screen_h // 2), radio)
+                surface.blit(telon, (0, 0))
+
+        if t >= 3.4:
+            caida = min(1.0, (t - 3.4) / 1.3)
+            cifra = int(self.espectadores + (self.vieronDeVerdad - self.espectadores) * (1.0 - (1.0 - caida) ** 3))
+            if caida < 1.0 and self.cargarPastillasVivo():
+                contador = self.armarContador(f"{cifra:,}".replace(",", "."), 96, (80, 46, 92), self.fuenteSello, caida, 520)
+                surface.blit(contador, contador.get_rect(center=(self.screen_w // 2, 120)))
+            elif caida < 1.0:
+                texto = f"En vivo · {cifra:,}".replace(",", ".")
+                self.dibujarEnVivo(surface, texto, (80, 46, 92), (self.screen_w // 2, 120), self.fuenteSello, caida)
+            else:
+                if not self.sonoSello:
+                    self.sonoSello = True
+                    if hasattr(self.audio, "play_drum"):
+                        self.audio.play_drum()
+                golpe = min(1.0, (t - 4.7) / 0.3)
+                escala = 1.0 + 0.8 * (1.0 - golpe) ** 2
+                temblor = int(math.sin(t * 70.0) * 10 * (1.0 - golpe))
+                if getattr(self, "pastillaSello", None) is None and self.cargarPastillasVivo():
+                    self.pastillaSello = self.armarContador(
+                        f"Te prestaron atención: {self.vieronDeVerdad}", 96, (80, 46, 92), self.fuenteSello, 1.0)
+                if getattr(self, "pastillaSello", None) is None:
+                    self.pastillaSello = self.armarPastilla(
+                        f"Te prestaron atención: {self.vieronDeVerdad}", (80, 46, 92), self.fuenteSello, 1.0)
+                sello = pygame.transform.smoothscale_by(self.pastillaSello, escala)
+                surface.blit(sello, sello.get_rect(center=(self.screen_w // 2 + temblor, 120)))
+
+        if t >= 4.0:
+            if self.bannerPublico is None:
+                self.bannerPublico = self.crearCartel(
+                    ["Muchos vieron tu video, pero de pasada,",
+                     "mientras saltaban entre mil videos más.",
+                     "Nadie le dio tantas vueltas a tu error como tú."])
+            if self.bannerPublico:
+                self.dibujarCartel(surface, self.bannerPublico, inicio + 4.0, fin, (self.screen_w // 2, self.screen_h - 200))
+        if fin - self.outro_timer < 0.35:
+            surface.fill([int(255 * (fin - self.outro_timer) / 0.35)] * 3, special_flags=pygame.BLEND_RGB_MULT)
+        return True
 
     def get_result_data(self) -> Dict[str, Any]:
         """Retorna métricas completas de la partida para el sistema general."""

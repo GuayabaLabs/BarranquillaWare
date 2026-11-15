@@ -26,6 +26,15 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
     - Condición de victoria: Alcanzar el 100% de la barra de enfoque antes de que se agoten los 25s.
       Si termina antes de los 25s, el jugador puede seguir reventando distracciones para sumar puntos extra.
     """
+    ensenanzaFinal = {
+        "gana": ["Terminaste porque cuidaste tu atención.",
+                 "Cada vez que algo te saca de la tarea,",
+                 "volver a concentrarte cuesta más de lo que crees."],
+        "pierde": ["Cada notificación te sacó de la tarea,",
+                   "y volver a concentrarte cuesta",
+                   "más de lo que crees."],
+    }
+
     def __init__(
         self,
         character_id: str = "westcol",
@@ -433,6 +442,7 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
         if len(self.student.attached_clouds) > prev_attached:
             self.screen_trauma = min(0.65, self.screen_trauma + 0.32)
+            self.mostrarEnsenanza()
 
         # 3. Actualizar estudiante y barra de progreso (nunca retrocede)
         self.student.update(dt)
@@ -512,14 +522,18 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         h_bg = self.font_hint.render(hint_txt, True, (45, 30, 25))
         hx = (self.screen_w - h_surf.get_width()) // 2
         hy = self.screen_h - 86
-        surface.blit(h_bg, (hx + 2, hy + 2))
-        surface.blit(h_surf, (hx, hy))
+        if getattr(self, "mostrarLeyendaControles", False):
+            surface.blit(h_bg, (hx + 2, hy + 2))
+            surface.blit(h_surf, (hx, hy))
+
+        self.dibujarEnsenanza(surface)
 
         # 9. Cursor personalizado en forma de lapicero (siempre al frente)
         has_target = len(self.cursor.get_pop_targets(self.clouds)) > 0
         self.cursor.render(surface, has_target_in_range=has_target, is_cam_controlled=bool(cam_active))
 
     def _render_top_right_timer(self, surface: pygame.Surface) -> None:
+        return
         secs = max(0, int(math.ceil(self.time_left)))
         tx = self.screen_w - 220
         ty = 28
@@ -539,6 +553,36 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             num_col = (225, 55, 55) if secs <= 5 else (65, 40, 35)
             t_surf = self.font_clock.render(f"⏱ {secs:02d}s", True, num_col)
             surface.blit(t_surf, t_surf.get_rect(center=pill.center))
+
+    def mostrarEnsenanza(self) -> None:
+        if not hasattr(self, "ensenanzas"):
+            self.ensenanzas = [
+                ["Las notificaciones están hechas para atraparte:", "tu atención es lo que las apps se quieren ganar."],
+                ["Hacer mil cosas a la vez no es rendir más:", "es hacerlas todas a medias."],
+                ["Silenciar el celular un rato", "es un regalo para tu cabeza."],
+                ["Tu atención vale oro:", "no se la regales a cualquier notificación."],
+            ]
+            self.cualEnsenanza = -1
+            self.inicioEnsenanza = -100.0
+        if self.elapsed_play_time - self.inicioEnsenanza < 6.0:
+            return
+        self.cualEnsenanza = (self.cualEnsenanza + 1) % len(self.ensenanzas)
+        self.inicioEnsenanza = self.elapsed_play_time
+
+    def dibujarEnsenanza(self, surface: pygame.Surface) -> None:
+        if not hasattr(self, "ensenanzas") or self.cualEnsenanza < 0:
+            return
+        tiempo = self.elapsed_play_time - self.inicioEnsenanza
+        if tiempo > 3.5:
+            return
+        visible = min(1.0, tiempo / 0.3, (3.5 - tiempo) / 0.5)
+        if getattr(self, "fuenteEnsenanza", None) is None:
+            self.fuenteEnsenanza = self.assets.cargarFuenteCuento(40)
+        arriba = self.progress_bar.rect.bottom + 34
+        for i, linea in enumerate(self.ensenanzas[self.cualEnsenanza]):
+            texto = self.textoConBorde(self.fuenteEnsenanza, linea, (255, 247, 230), (60, 44, 36), 3)
+            texto.set_alpha(int(255 * visible))
+            surface.blit(texto, texto.get_rect(center=(self.screen_w // 2, arriba + i * 52)))
 
     def get_result_data(self) -> Dict[str, Any]:
         """Devuelve el contrato de salida para el sistema de niveles de BarranquillaWare."""

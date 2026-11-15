@@ -141,7 +141,7 @@ class MapSettingsState(BaseState):
         # Oscurece lo de atrás multiplicando sus colores
         surface.fill((120, 112, 130), special_flags=pygame.BLEND_RGB_MULT)
 
-        tarjeta = pygame.Rect(410, 90, 1100, 900)
+        tarjeta = pygame.Rect(470, 90, 980, 900)
         coaster.tarjetaPintada(surface, tarjeta)
 
         fuenteTitulo = assets.cargarFuenteCuento(64)
@@ -150,7 +150,7 @@ class MapSettingsState(BaseState):
         fuenteAyuda = assets.cargarFuenteCuento(24)
 
         titulo = fuenteTitulo.render("Ajustes", True, cafeOscuro)
-        surface.blit(titulo, titulo.get_rect(center=(tarjeta.centerx, tarjeta.top + 112)))
+        surface.blit(titulo, titulo.get_rect(center=(tarjeta.centerx, tarjeta.top + 150)))
 
         nombresModos = {"off": "Apagado", "protanopia": "Protanopia", "deuteranopia": "Deuteranopia", "tritanopia": "Tritanopia"}
         modo = nombresModos.get(str(self.settings.get("colorblind_mode", "off")), "Apagado")
@@ -175,8 +175,8 @@ class MapSettingsState(BaseState):
         }
 
         for i, item in enumerate(self.items):
-            y = tarjeta.top + 172 + i * 82
-            fila = pygame.Rect(tarjeta.x + 110, y, tarjeta.w - 220, 70)
+            y = tarjeta.top + 210 + i * 78
+            fila = pygame.Rect(tarjeta.x + 100, y, tarjeta.w - 200, 66)
 
             # La fila elegida se marca con una mancha suave de color y un puntico coral
             if i == self.index:
@@ -192,10 +192,10 @@ class MapSettingsState(BaseState):
             surface.blit(valor, valor.get_rect(midright=(fila.right - 20, fila.centery)))
 
             if item in barras:
-                self.dibujarBarra(surface, pygame.Rect(fila.x + 290, fila.centery - 9, 300, 18), barras[item], dorado, cafeOscuro)
+                self.dibujarBarra(surface, pygame.Rect(fila.x + 270, fila.centery - 9, 250, 18), barras[item], dorado, cafeOscuro)
 
         ayuda = fuenteAyuda.render("Flechas para elegir y ajustar  ·  Enter para cambiar  ·  Esc para cerrar", True, cafe)
-        surface.blit(ayuda, ayuda.get_rect(center=(tarjeta.centerx, tarjeta.bottom - 138)))
+        surface.blit(ayuda, ayuda.get_rect(center=(tarjeta.centerx, tarjeta.bottom - 118)))
         return True
 
     def dibujarBarra(self, surface: pygame.Surface, caja: pygame.Rect, valor: float, color, tinta) -> None:

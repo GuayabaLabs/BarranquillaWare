@@ -37,7 +37,7 @@ class BaseMicrogame(BaseState):
 
         self.phase = self.PHASE_INTRO
         self.intro_timer: float = 0.0
-        self.intro_duration: float = 0.85
+        self.intro_duration: float = 1.6
         self.outro_timer: float = 0.0
         self.outro_duration: float = 1.1
 
@@ -85,6 +85,13 @@ class BaseMicrogame(BaseState):
         self.is_won = won
         self.phase = self.PHASE_OUTRO
         self.outro_timer = 0.0
+
+        if self.prepararLetreroResultado(won):
+            self.outro_duration = max(self.outro_duration, 4.0)
+
+        if getattr(self, "ensenanzaFinal", None) and getattr(self, "letreroResultado", None) is not None:
+            self.finLetrero = 3.0
+            self.outro_duration = max(self.outro_duration, 8.5)
 
         if won:
             if hasattr(self.audio, "play_win"):
@@ -162,6 +169,8 @@ class BaseMicrogame(BaseState):
 
     def _render_fuse_timer(self, surface: pygame.Surface) -> None:
         """Barra de tiempo inferior con indicador de mecha y tensión cromática."""
+        if self.dibujarBarraTiempo(surface):
+            return
         bar_w = 1100
         bar_h = 24
         bar_x = (self.screen_w - bar_w) // 2
@@ -200,6 +209,9 @@ class BaseMicrogame(BaseState):
         - Mantenimiento nítido.
         - Fade-out progresivo con alfa en el tramo final (evita corte abrupto).
         """
+        if self.dibujarPortadaInstruccion(surface):
+            return
+
         fade_start = self.intro_duration * 0.65
         if self.intro_timer > fade_start:
             alpha_ratio = max(0.0, 1.0 - (self.intro_timer - fade_start) / (self.intro_duration - fade_start))
@@ -260,6 +272,10 @@ class BaseMicrogame(BaseState):
         y contorno profundo para máxima legibilidad sobre cualquier fondo.
         """
         if not getattr(self, "show_outro_banner", True):
+            return
+
+        if self.dibujarLetreroResultado(surface):
+            self.dibujarEnsenanzaFinal(surface)
             return
 
         if getattr(self, "outro_message", None):
@@ -349,3 +365,241 @@ class BaseMicrogame(BaseState):
             shader_surf = pygame.transform.smoothscale(shader_surf, (scaled_w, scaled_h))
 
         surface.blit(shader_surf, shader_surf.get_rect(center=(self.screen_w // 2, self.screen_h // 2 + bounce_y)))
+
+    def prepararLetreroResultado(self, ganado: bool) -> bool:
+        try:
+            import os
+            from effects.juice_particles import FuegosArtificiales
+            nombre = "letreroGanaste.jpg" if ganado else "letreroPerdiste.jpg"
+            letrero = self.assets.cargarSinFondo(os.path.join("Interfaz", nombre), 1000)
+            self.letreroResultado = self.suavizarColores(letrero)
+            self.cajaLetrero = self.letreroResultado.get_rect(center=(self.screen_w // 2, self.screen_h // 2))
+            self.finLetrero = None
+            self.relojFuegos = 0.0
+            self.fuegosLogro = None
+            if ganado:
+                self.fuegosLogro = FuegosArtificiales()
+                self.fuegosLogro.lanzarAlrededor(self.cajaLetrero)
+                for i, fuego in enumerate(self.fuegosLogro.fuegos):
+                    fuego["t"] = 0.45 - i * 0.5
+            return True
+        except Exception as e:
+            print(f"Aviso: no se pudo cargar el letrero de resultado: {e}")
+            self.letreroResultado = None
+            self.fuegosLogro = None
+            return False
+
+    def dibujarLetreroResultado(self, surface: pygame.Surface) -> bool:
+        if getattr(self, "letreroResultado", None) is None:
+            return False
+
+        entrada = min(1.0, self.outro_timer / 0.55)
+        finLetrero = getattr(self, "finLetrero", None) or self.outro_duration
+        salida = min(1.0, max(0.0, (finLetrero - self.outro_timer) / 0.35))
+        visible = min(entrada, salida)
+        rebote = 1.0 + 2.7 * (entrada - 1.0) ** 3 + 1.7 * (entrada - 1.0) ** 2
+        escala = max(0.05, 0.15 + 0.85 * rebote) + 0.02 * math.sin(self.outro_timer * 3.0) * entrada
+
+        finTodo = min(1.0, max(0.0, (self.outro_duration - self.outro_timer) / 0.35))
+        oscuro = min(entrada, finTodo)
+        tono = [int(255 - (255 - c) * oscuro) for c in (150, 144, 160)]
+        surface.fill(tono, special_flags=pygame.BLEND_RGB_MULT)
+
+        if getattr(self, "fuegosLogro", None) is not None:
+            paso = self.outro_timer - getattr(self, "relojFuegos", 0.0)
+            self.relojFuegos = self.outro_timer
+            if paso > 0.0:
+                self.fuegosLogro.update(paso)
+            self.fuegosLogro.render(surface)
+
+        if visible <= 0.0:
+            return True
+
+        letrero = pygame.transform.smoothscale_by(self.letreroResultado, escala)
+        if visible < 1.0:
+            letrero.set_alpha(int(255 * visible))
+        surface.blit(letrero, letrero.get_rect(center=self.cajaLetrero.center))
+        return True
+
+    def textoConBorde(self, fuente, texto: str, color, colorBorde, grosor: int = 3) -> pygame.Surface:
+        cuerpo = fuente.render(texto, True, color)
+        borde = fuente.render(texto, True, colorBorde)
+        lienzo = pygame.Surface((cuerpo.get_width() + grosor * 2, cuerpo.get_height() + grosor * 2), pygame.SRCALPHA)
+        for grados in range(0, 360, 20):
+            dx = round(math.cos(math.radians(grados)) * grosor)
+            dy = round(math.sin(math.radians(grados)) * grosor)
+            lienzo.blit(borde, (grosor + dx, grosor + dy))
+        lienzo.blit(cuerpo, (grosor, grosor))
+        return lienzo
+
+    def textoInstruccion(self, linea: str) -> str:
+        if "[" in linea:
+            return linea
+        texto = linea.lower()
+        for i, letra in enumerate(texto):
+            if letra.isalpha():
+                texto = texto[:i] + letra.upper() + texto[i + 1:]
+                break
+        for nombre in ("Troja",):
+            texto = texto.replace(nombre.lower(), nombre)
+        return texto
+
+    def dibujarPortadaInstruccion(self, surface: pygame.Surface) -> bool:
+        if getattr(self, "portadaIntro", None) is None:
+            try:
+                import os
+                fondo = self.assets.cargarSinFondo(os.path.join("Interfaz", "fondoInstruccion.jpg"), 1150)
+                lineas = self.command_text.split("\n")
+                fuenteGrande = self.assets.cargarFuenteCuento(96)
+                fuenteChica = self.assets.cargarFuenteCuento(52)
+                textos = []
+                for i, linea in enumerate(lineas):
+                    fuente = fuenteGrande if i == 0 else fuenteChica
+                    texto = self.textoConBorde(fuente, self.textoInstruccion(linea), (255, 247, 230), (96, 56, 30), 5 if i == 0 else 3)
+                    if texto.get_width() > fondo.get_width() * 0.78:
+                        texto = pygame.transform.smoothscale_by(texto, fondo.get_width() * 0.78 / texto.get_width())
+                    textos.append(texto)
+                portada = fondo.copy()
+                alto = sum(t.get_height() for t in textos)
+                y = int(portada.get_height() * 0.6) - alto // 2
+                for texto in textos:
+                    portada.blit(texto, texto.get_rect(midtop=(portada.get_width() // 2, y)))
+                    y += texto.get_height()
+                self.portadaIntro = portada
+            except Exception as e:
+                print(f"Aviso: no se pudo cargar el fondo de la instrucción: {e}")
+                self.portadaIntro = False
+        if not self.portadaIntro:
+            return False
+
+        entrada = min(1.0, self.intro_timer / 0.45)
+        rebote = 1.0 + 2.7 * (entrada - 1.0) ** 3 + 1.7 * (entrada - 1.0) ** 2
+        escala = max(0.05, 0.3 + 0.7 * rebote)
+        inicioSalida = self.intro_duration - 0.35
+        visible = 1.0
+        if self.intro_timer > inicioSalida:
+            visible = max(0.0, 1.0 - (self.intro_timer - inicioSalida) / 0.35)
+        if visible <= 0.01:
+            return True
+        portada = pygame.transform.smoothscale_by(self.portadaIntro, escala)
+        if visible < 1.0:
+            portada.set_alpha(int(255 * visible))
+        surface.blit(portada, portada.get_rect(center=(self.screen_w // 2, self.screen_h // 2)))
+        return True
+
+    def ponerBorde(self, imagen: pygame.Surface, color, grosor: int) -> pygame.Surface:
+        conBorde = pygame.Surface((imagen.get_width() + grosor * 2, imagen.get_height() + grosor * 2), pygame.SRCALPHA)
+        silueta = pygame.mask.from_surface(imagen, 100).to_surface(setcolor=(*color, 255), unsetcolor=(0, 0, 0, 0))
+        for grados in range(0, 360, 15):
+            dx = round(math.cos(math.radians(grados)) * grosor)
+            dy = round(math.sin(math.radians(grados)) * grosor)
+            conBorde.blit(silueta, (grosor + dx, grosor + dy))
+        conBorde.blit(imagen, (grosor, grosor))
+        return conBorde
+
+    def crearCartel(self, lineas: list):
+        try:
+            import os
+            banner = self.assets.cargarSinFondo(os.path.join("Interfaz", "bannerUbicacion.jpg"), 1200)
+            altoBanner = 70 + 60 * len(lineas)
+            banner = pygame.transform.smoothscale(banner, (int(banner.get_width() * altoBanner / banner.get_height()), altoBanner))
+            fuente = self.assets.cargarFuenteCuento(46)
+            textos = [fuente.render(linea, True, (110, 68, 38)) for linea in lineas]
+            ancho = max(t.get_width() for t in textos) + banner.get_height() * 2
+            cartel = self.estirarCentro(banner, max(banner.get_width(), ancho))
+            cartel = self.ponerBorde(cartel, (128, 76, 40), 5)
+            alto = fuente.get_linesize()
+            y = cartel.get_height() // 2 - (alto * len(textos)) // 2
+            for texto in textos:
+                cartel.blit(texto, texto.get_rect(midtop=(cartel.get_width() // 2, y)))
+                y += alto
+            return cartel
+        except Exception as e:
+            print(f"Aviso: no se pudo cargar el banner del mensaje: {e}")
+            return False
+
+    def dibujarCartel(self, surface: pygame.Surface, cartel: pygame.Surface, inicio: float, fin: float, centro) -> None:
+        tiempo = self.outro_timer - inicio
+        entrada = min(1.0, tiempo / 0.45)
+        salida = min(1.0, max(0.0, (fin - self.outro_timer) / 0.35))
+        rebote = 1.0 + 2.7 * (entrada - 1.0) ** 3 + 1.7 * (entrada - 1.0) ** 2
+        escala = max(0.05, 0.2 + 0.8 * rebote)
+        dibujo = pygame.transform.smoothscale_by(cartel, escala)
+        visible = min(entrada, salida)
+        if visible < 1.0:
+            dibujo.set_alpha(int(255 * visible))
+        surface.blit(dibujo, dibujo.get_rect(center=centro))
+
+    def dibujarEnsenanzaFinal(self, surface: pygame.Surface) -> None:
+        ensenanza = getattr(self, "ensenanzaFinal", None)
+        if not ensenanza or not getattr(self, "finLetrero", None) or self.outro_timer < self.finLetrero:
+            return
+        if getattr(self, "cartelEnsenanza", None) is None:
+            self.cartelEnsenanza = self.crearCartel(ensenanza["gana" if self.is_won else "pierde"])
+        if self.cartelEnsenanza:
+            self.dibujarCartel(surface, self.cartelEnsenanza, self.finLetrero, self.outro_duration,
+                               (self.screen_w // 2, self.screen_h // 2))
+
+    def suavizarColores(self, imagen: pygame.Surface) -> pygame.Surface:
+        suave = imagen.copy()
+        gris = pygame.transform.grayscale(imagen)
+        gris.set_alpha(150)
+        suave.blit(gris, (0, 0))
+        suave.fill((40, 34, 24), special_flags=pygame.BLEND_RGB_ADD)
+        return suave
+
+    def estirarCentro(self, imagen: pygame.Surface, ancho: int) -> pygame.Surface:
+        alto = imagen.get_height()
+        punta = min(alto, imagen.get_width() // 2, ancho // 2)
+        resultado = pygame.Surface((ancho, alto), pygame.SRCALPHA)
+        resultado.blit(imagen, (0, 0), (0, 0, punta, alto))
+        centro = imagen.subsurface((punta, 0, imagen.get_width() - punta * 2, alto))
+        if ancho - punta * 2 > 0:
+            resultado.blit(pygame.transform.smoothscale(centro, (ancho - punta * 2, alto)), (punta, 0))
+        resultado.blit(imagen, (ancho - punta, 0), (imagen.get_width() - punta, 0, punta, alto))
+        return resultado
+
+    def tenir(self, imagen: pygame.Surface, color) -> pygame.Surface:
+        tenida = pygame.transform.grayscale(imagen)
+        tenida.fill(color, special_flags=pygame.BLEND_RGB_MULT)
+        tenida.fill((45, 40, 30), special_flags=pygame.BLEND_RGB_ADD)
+        return tenida
+
+    def dibujarBarraTiempo(self, surface: pygame.Surface) -> bool:
+        if getattr(self, "barraLista", None) is None:
+            try:
+                import os
+                riel = self.assets.cargarSinFondo(os.path.join("Interfaz", "barraTiempoRiel.jpg"), 300)
+                riel = pygame.transform.smoothscale(riel, (int(riel.get_width() * 60 / riel.get_height()), 60))
+                self.rielBarra = self.estirarCentro(riel, 1120)
+                relleno = self.assets.cargarSinFondo(os.path.join("Interfaz", "barraTiempoRelleno.jpg"), 300)
+                relleno = pygame.transform.smoothscale(relleno, (int(relleno.get_width() * 40 / relleno.get_height()), 40))
+                self.rellenosBarra = {
+                    "verde": relleno,
+                    "amarillo": self.tenir(relleno, (255, 205, 70)),
+                    "rojo": self.tenir(relleno, (255, 95, 80)),
+                }
+                self.barraLista = True
+            except Exception as e:
+                print(f"Aviso: no se pudo cargar la barra de tiempo: {e}")
+                self.barraLista = False
+        if not self.barraLista:
+            return False
+
+        riel = self.rielBarra.get_rect(center=(self.screen_w // 2, self.screen_h - 44))
+        surface.blit(self.rielBarra, riel)
+
+        ratio = max(0.0, min(1.0, self.time_left / self.time_limit))
+        if ratio > 0.5:
+            relleno = self.rellenosBarra["verde"]
+        elif ratio > 0.25:
+            relleno = self.rellenosBarra["amarillo"]
+        else:
+            relleno = self.rellenosBarra["rojo"]
+
+        anchoMax = riel.width - 22
+        ancho = int(anchoMax * ratio)
+        if ancho >= 8:
+            barra = self.estirarCentro(relleno, ancho)
+            surface.blit(barra, (riel.x + 11, riel.centery - barra.get_height() // 2))
+        return True

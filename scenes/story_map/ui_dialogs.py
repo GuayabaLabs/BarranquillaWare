@@ -65,13 +65,12 @@ class StoryMapUI:
         pal_y = total_y + bh - pal_h - 36 + bob_y
 
         speaker_txt = font_speaker.render(speaker, True, (92, 46, 118))
-        box_surf.blit(speaker_txt, speaker_txt.get_rect(center=(int(bw * 0.295), int(bh * 0.228))))
+        anchoFranja = int(bw * 0.23)
+        if speaker_txt.get_width() > anchoFranja:
+            speaker_txt = pygame.transform.smoothscale_by(speaker_txt, anchoFranja / float(speaker_txt.get_width()))
+        box_surf.blit(speaker_txt, speaker_txt.get_rect(center=(int(bw * 0.306), int(bh * 0.228))))
 
-        if badge:
-            badge_txt = font_badge.render(badge, True, (135, 80, 155))
-            box_surf.blit(badge_txt, (int(bw * 0.47), int(bh * 0.21)))
-
-        start_y = int(bh * 0.38)
+        start_y = int(bh * 0.43)
         line_spacing = 46
         text_center_x = int(bw * 0.49)
         first_line_min_x = int(bw * 0.145)

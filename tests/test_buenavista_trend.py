@@ -31,8 +31,8 @@ def test_buenavista_trend_assets_and_geometry():
     game = BuenavistaTrendMicrogame(character_id="westcol")
 
     assert game.time_limit == 30.0
-    assert game.lives == 3
-    assert game.max_lives == 3
+    assert game.lives == 5
+    assert game.max_lives == 5
 
     # Celular centrado al 85% de 1080 = 918 px
     assert game.phone_rect.height == int(round(1080 * 0.85))
@@ -123,7 +123,7 @@ def test_controls_hit_detection_and_anti_hold():
 
     assert first_note.state == "hit"
     assert game.hits_perfect == 1
-    assert game.lives == 3
+    assert game.lives == 5
     assert len(game.like_particles) > 0
 
     # Intentar enviar otro KEYDOWN de la misma tecla D sin haberla soltado (simula mantener pulsada)
@@ -144,7 +144,7 @@ def test_controls_hit_detection_and_anti_hold():
 
     assert second_note.state == "hit"
     assert game.hits_good == 1
-    assert game.lives == 3
+    assert game.lives == 5
 
     game.cleanup()
 
@@ -154,7 +154,7 @@ def test_miss_penalties_no_duplicate_life_loss_and_game_over():
     Valida que:
     - Una misma nota nunca produzca más de un fallo.
     - Las pulsaciones incorrectas descuenten 1 sola vida con intervalo de protección.
-    - Al perder las 3 vidas antes de los 30s se declare la derrota y se notifique al callback.
+    - Al perder las 5 vidas antes de los 30s se declare la derrota y se notifique al callback.
     """
     results = []
     game = BuenavistaTrendMicrogame(character_id="westcol", on_complete_callback=lambda w: results.append(w))
@@ -168,26 +168,32 @@ def test_miss_penalties_no_duplicate_life_loss_and_game_over():
     game.song_elapsed = note.impact_time - 0.30
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d))
     game.handle_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_d))
-    assert game.lives == 2
+    assert game.lives == 4
     assert note.penalized is True
 
     # Cuando el tiempo avanza y la nota cruza la zona de impacto, NO debe volver a restar otra vida
     game.song_elapsed = note.impact_time + 0.30
     game.update_game(0.016)
-    assert game.lives == 2
+    assert game.lives == 4
 
     # 2. Pulsar un carril incorrecto (tecla K cuando no hay nota en carril 3) tras pasar el cooldown
     game.wrong_press_cooldown = 0.0
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_k))
     game.handle_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_k))
-    assert game.lives == 1
+    assert game.lives == 3
 
     # Otra pulsación errónea inmediata dentro del intervalo de protección NO resta vida extra
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_f))
     game.handle_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_f))
-    assert game.lives == 1
+    assert game.lives == 3
 
-    # 3. Una nota atraviesa la zona de pulsación sin ser activada -> pierde la 3ra vida -> DERROTA
+    for vidasEsperadas in (2, 1):
+        game.wrong_press_cooldown = 0.0
+        game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_k))
+        game.handle_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_k))
+        assert game.lives == vidasEsperadas
+
+    # 3. Una nota atraviesa la zona de pulsación sin ser activada -> pierde la última vida -> DERROTA
     note2 = game.musical_events[1]
     note2.spawned = True
     note2.state = "falling"

@@ -28,7 +28,7 @@ def test_uninorte_concentrate_components_and_loop() -> None:
     assert game.student.is_studying is True
 
     # 2. Avanzar la fase INTRO hasta entrar en PHASE_PLAY
-    for _ in range(60):
+    for _ in range(120):
         game.update(1.0 / 60.0)
         game.render(surface)
 

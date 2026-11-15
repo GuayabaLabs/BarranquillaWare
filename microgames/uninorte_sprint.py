@@ -100,6 +100,15 @@ class UninorteSprintMicrogame(BaseMicrogame):
     - Controles: ESPACIO, FLECHA ARRIBA, W o Click izquierdo.
     - Game Feel: Screenshake no lineal cuadrático, hit-stop, partículas elásticas de pisada y animación natural.
     """
+    ensenanzaFinal = {
+        "gana": ["Llegaste a tiempo porque tus ojos",
+                 "iban en el camino y no en la pantalla.",
+                 "Ningún mensaje es más importante que tus responsabilidades."],
+        "pierde": ["Caminar mirando el celular es como",
+                   "caminar con los ojos cerrados:",
+                   "chocas, te pierdes y llegas tarde."],
+    }
+
     def __init__(
         self,
         character_id: str = "westcol",
@@ -184,6 +193,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
         # Puerta del Salón
         self.door_progress = 0.0
+
+        self.iniciarNotificaciones()
 
     def _load_pasillo_sounds(self) -> None:
         """Carga el pool de audios reactivos de choque en el pasillo."""
@@ -648,6 +659,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
             dust_col = (195, 175, 150)
             pygame.draw.circle(surface, dust_col, (int(px), int(py)), int(p["radius"] * alpha_ratio))
 
+        self.dibujarExtrasNoti(surface, cam_offset, shake_offset_x)
+
         # 4. Overlay de UI Fijo
         self._render_hud_overlay(surface)
 
@@ -792,6 +805,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
             pygame.draw.rect(surface, (255, 255, 255), ph_rect, width=3, border_radius=12)
 
     def _render_hud_overlay(self, surface: pygame.Surface) -> None:
+        return
         # ==============================================================
         # 1. CONTADOR GRÁFICO (RELOJ + DÍGITOS DENTRO DEL RECUADRO)
         # ==============================================================
@@ -808,3 +822,319 @@ class UninorteSprintMicrogame(BaseMicrogame):
         else:
             txt_t = self.font_timer.render(f"TIEMPO: {self.time_left:.1f}s", True, (40, 40, 40))
             surface.blit(txt_t, (self.screen_w - 240, 40))
+
+    def iniciarNotificaciones(self) -> None:
+        self.momentosNoti = [3.5, 10.0]
+        self.tiempoJugado = 0.0
+        self.avisoAbierto = False
+        self.tiempoAviso = 0.0
+        self.opcionAviso = 1
+        self.notiActual = ("", "")
+        self.iconoNoti = None
+        self.tiempoDistraido = 0.0
+        self.duracionDistraccion = 4.0
+        self.saltoNormal = (self.jump_duration, self.jump_recovery)
+        self.mensajeFlotante = ""
+        self.tiempoMensaje = 0.0
+
+        self.notificaciones = [
+            ("Grupo del salón", "Tienes 27 mensajes sin leer"),
+            ("Valentina", "Subió una historia nueva"),
+            ("Te etiquetaron", "Mira el video donde sales"),
+            ("Tendencias", "Todo el mundo está viendo esto"),
+        ]
+        random.shuffle(self.notificaciones)
+
+        self.frasesGlobo = [
+            "Solo reviso una cosa...",
+            "¿Y si me escribió?",
+            "Un video más y ya",
+            "¿Cuántos likes llevo?",
+            "¿Ya me contestaron?",
+            "Ahorita lo guardo",
+        ]
+        iconoPuntos = self.icon_sprites[7] if len(self.icon_sprites) > 7 else None
+        cuantos = 0
+        for z in self.zombies:
+            if iconoPuntos is not None and z.icon_sprite is iconoPuntos:
+                z.frase = self.frasesGlobo[cuantos % len(self.frasesGlobo)]
+                z.cicloGlobo = random.uniform(0.0, 5.0)
+                z.icon_sprite = None
+                cuantos += 1
+            else:
+                z.frase = None
+        self.globosHechos = {}
+
+        self.imagenesNoti = self.cargarImagenesNoti()
+
+    def cargarImagenesNoti(self) -> bool:
+        try:
+            import os
+            celular = self.assets.cargarSinFondo(os.path.join("Uninorte", "celularNotificacion.jpg"), 500)
+            self.celular = pygame.transform.smoothscale_by(celular, 640 / float(celular.get_height()))
+            self.celularMini = pygame.transform.smoothscale_by(celular, 125 / float(celular.get_height()))
+            self.globo = self.assets.cargarSinFondo(os.path.join("Uninorte", "globoPensamiento.jpg"), 210)
+            self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 300)
+            rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 300)
+            self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
+        except Exception as e:
+            print(f"[UninorteSprint] Aviso: faltan imágenes de la notificación: {e}")
+            return False
+        self.fuenteAvisoTitulo = self.assets.cargarFuenteCuento(50)
+        self.fuenteNotiApp = self.assets.cargarFuenteCuento(32)
+        self.fuenteNotiTexto = self.assets.cargarFuenteCuento(36)
+        self.fuenteBotonAviso = self.assets.cargarFuenteCuento(32)
+        self.fuenteAyudaAviso = self.assets.cargarFuenteCuento(24)
+        self.fuenteGlobo = self.assets.cargarFuenteCuento(22)
+        self.fuenteMensaje = self.assets.cargarFuenteCuento(38)
+        self.fuenteEnsenanza = self.assets.cargarFuenteCuento(46)
+        self.tunel = self.crearTunel()
+        self.ensenanzas = [
+            ["Cuando miras la pantalla,", "te pierdes lo que pasa a tu alrededor."],
+            ["Un ratico en el celular", "se vuelve un buen rato sin ver el camino."],
+            ["La notificación puede esperar.", "El camino y la gente que va contigo, no."],
+        ]
+        self.ensenanza = self.ensenanzas[0]
+        return True
+
+    def crearTunel(self) -> pygame.Surface:
+        tunel = pygame.Surface((self.screen_w, 2000), pygame.SRCALPHA)
+        oscuro = (20, 20, 22)
+        tunel.fill((*oscuro, 252))
+        centro = (self.screen_w // 2, 1000)
+        for radio in range(230, 95, -5):
+            claridad = (radio - 95) / 135.0
+            pygame.draw.circle(tunel, (*oscuro, int(252 * claridad)), centro, radio)
+        pygame.draw.circle(tunel, (*oscuro, 0), centro, 95)
+        return tunel
+
+    def update(self, dt: float) -> None:
+        if self.phase == self.PHASE_PLAY and not self.is_finished and getattr(self, "imagenesNoti", False):
+            if self.avisoAbierto:
+                self.tiempoAviso += dt
+                self.revisarGestosAviso()
+                return
+            self.tiempoJugado += dt
+            self.revisarLlegadaNoti()
+            self.actualizarDistraccion(dt)
+        if getattr(self, "tiempoMensaje", 0.0) > 0.0:
+            self.tiempoMensaje = max(0.0, self.tiempoMensaje - dt)
+        super().update(dt)
+
+    def revisarLlegadaNoti(self) -> None:
+        if not self.momentosNoti or self.tiempoJugado < self.momentosNoti[0]:
+            return
+        if self.is_jumping or self.stun_timer > 0.0 or self.freeze_frames > 0 or self.tiempoDistraido > 0.0:
+            return
+        self.momentosNoti.pop(0)
+        if self.player_lane >= self.max_lane - 1:
+            return
+        self.notiActual = self.notificaciones[len(self.momentosNoti) % len(self.notificaciones)]
+        self.iconoNoti = random.choice(self.icon_sprites) if self.icon_sprites else None
+        self.avisoAbierto = True
+        self.tiempoAviso = 0.0
+        self.opcionAviso = 1
+        if hasattr(self.audio, "play_click"):
+            self.audio.play_click()
+
+    def revisarGestosAviso(self) -> None:
+        camara = getattr(self, "camera_input", None)
+        if not camara or not camara.enabled:
+            return
+        palma = camara.consume_hand_raise()
+        puno = camara.consume_fist()
+        if self.tiempoAviso < 0.6:
+            return
+        if palma:
+            self.elegirOpcionAviso(1)
+        elif puno:
+            self.elegirOpcionAviso(0)
+
+    def elegirOpcionAviso(self, opcion: int) -> None:
+        self.avisoAbierto = False
+        if opcion == 0:
+            self.tiempoDistraido = self.duracionDistraccion
+            self.jump_duration = 0.42
+            self.jump_recovery = 0.30
+            self.mensajeFlotante = "Solo un ratico..."
+            self.ensenanza = random.choice(self.ensenanzas)
+        else:
+            self.mensajeFlotante = "¡Ojos al frente!"
+        self.tiempoMensaje = 1.6
+        if hasattr(self.audio, "play_click"):
+            self.audio.play_click()
+
+    def actualizarDistraccion(self, dt: float) -> None:
+        if self.tiempoDistraido <= 0.0:
+            return
+        self.tiempoDistraido = max(0.0, self.tiempoDistraido - dt)
+        if self.tiempoDistraido == 0.0:
+            self.jump_duration, self.jump_recovery = self.saltoNormal
+
+    def botonesAviso(self) -> list:
+        return [
+            self.botonMorado.get_rect(center=(960 - 175, 880)),
+            self.botonMorado.get_rect(center=(960 + 175, 880)),
+        ]
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if not getattr(self, "avisoAbierto", False) or self.phase != self.PHASE_PLAY:
+            super().handle_event(event)
+            return
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            super().handle_event(event)
+            return
+        if self.tiempoAviso < 0.6:
+            return
+        if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN):
+            for i, caja in enumerate(self.botonesAviso()):
+                if caja.collidepoint(event.pos):
+                    if event.type == pygame.MOUSEMOTION and self.opcionAviso != i:
+                        self.opcionAviso = i
+                        if hasattr(self.audio, "play_hover"):
+                            self.audio.play_hover()
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        self.elegirOpcionAviso(i)
+        elif event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_LEFT, pygame.K_a):
+                self.opcionAviso = 0
+            elif event.key in (pygame.K_RIGHT, pygame.K_d):
+                self.opcionAviso = 1
+            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                self.elegirOpcionAviso(self.opcionAviso)
+
+    def render(self, surface: pygame.Surface) -> None:
+        super().render(surface)
+        if getattr(self, "avisoAbierto", False) and self.phase == self.PHASE_PLAY:
+            self.dibujarAviso(surface)
+
+    def partirEnLineas(self, fuente, texto: str, anchoMax: int) -> list:
+        lineas = []
+        actual = ""
+        for palabra in texto.split():
+            prueba = (actual + " " + palabra).strip()
+            if fuente.size(prueba)[0] <= anchoMax or not actual:
+                actual = prueba
+            else:
+                lineas.append(actual)
+                actual = palabra
+        if actual:
+            lineas.append(actual)
+        return lineas
+
+    def dibujarAviso(self, surface: pygame.Surface) -> None:
+        surface.fill((104, 98, 122), special_flags=pygame.BLEND_RGB_MULT)
+
+        titulo = self.textoConBorde(self.fuenteAvisoTitulo, "¡Bzz, bzz! Te llegó una notificación", (255, 248, 236), (92, 46, 118))
+        surface.blit(titulo, titulo.get_rect(center=(960, 120)))
+
+        entrada = min(1.0, self.tiempoAviso / 0.25)
+        escala = 0.75 + 0.25 * (1.0 - (1.0 - entrada) ** 2)
+        temblor = 0
+        if self.tiempoAviso < 0.7:
+            temblor = int(math.sin(self.tiempoAviso * 70.0) * 8)
+        celular = self.celular if escala >= 0.999 else pygame.transform.smoothscale_by(self.celular, escala)
+        caja = celular.get_rect(center=(960 + temblor, 480))
+        surface.blit(celular, caja)
+
+        if escala >= 0.999:
+            tarjeta = pygame.Rect(caja.left + int(caja.width * 0.21), caja.top + int(caja.height * 0.17),
+                                  int(caja.width * 0.6), int(caja.height * 0.15))
+            app = self.fuenteNotiApp.render(self.notiActual[0], True, (92, 46, 118))
+            if app.get_width() > tarjeta.width - 70:
+                app = pygame.transform.smoothscale_by(app, (tarjeta.width - 70) / float(app.get_width()))
+            anchoFila = app.get_width()
+            if self.iconoNoti is not None:
+                anchoFila += self.iconoNoti.get_width() + 10
+            x = tarjeta.centerx - anchoFila // 2
+            if self.iconoNoti is not None:
+                surface.blit(self.iconoNoti, self.iconoNoti.get_rect(midleft=(x, tarjeta.centery)))
+                x += self.iconoNoti.get_width() + 10
+            surface.blit(app, app.get_rect(midleft=(x, tarjeta.centery)))
+
+            y = tarjeta.bottom + 34
+            for linea in self.partirEnLineas(self.fuenteNotiTexto, self.notiActual[1], int(caja.width * 0.66)):
+                texto = self.fuenteNotiTexto.render(linea, True, (90, 64, 52))
+                surface.blit(texto, texto.get_rect(midtop=(caja.centerx, y)))
+                y += texto.get_height() + 2
+
+        etiquetas = ["Revisar", "Seguir el rumbo"]
+        for i, boton in enumerate(self.botonesAviso()):
+            elegido = i == self.opcionAviso
+            imagen = self.botonRojo if elegido else self.botonMorado
+            surface.blit(imagen, imagen.get_rect(center=boton.center))
+            contorno = (120, 26, 34) if elegido else (70, 30, 110)
+            texto = self.textoConBorde(self.fuenteBotonAviso, etiquetas[i], (255, 248, 236), contorno)
+            surface.blit(texto, texto.get_rect(center=(boton.centerx, boton.centery - 3)))
+
+        ayuda = "Flechas para elegir y Enter para aceptar"
+        camara = getattr(self, "camera_input", None)
+        if camara and camara.enabled:
+            ayuda += "  ·  Palma: seguir  ·  Puño: revisar"
+        texto = self.textoConBorde(self.fuenteAyudaAviso, ayuda, (255, 248, 236), (70, 50, 40))
+        surface.blit(texto, texto.get_rect(center=(960, 975)))
+
+    def globoConFrase(self, frase: str, volteado: bool) -> pygame.Surface:
+        clave = (frase, volteado)
+        if clave not in self.globosHechos:
+            globo = pygame.transform.flip(self.globo, True, False) if volteado else self.globo.copy()
+            w, h = globo.get_size()
+            lineas = self.partirEnLineas(self.fuenteGlobo, frase, int(w * 0.66))
+            alto = self.fuenteGlobo.get_linesize()
+            y = int(h * 0.38) - (len(lineas) * alto) // 2
+            for linea in lineas:
+                texto = self.fuenteGlobo.render(linea, True, (80, 46, 92))
+                globo.blit(texto, texto.get_rect(midtop=(w // 2, y)))
+                y += alto
+            self.globosHechos[clave] = globo
+        return self.globosHechos[clave]
+
+    def dibujarExtrasNoti(self, surface: pygame.Surface, cam_offset: int, shake_x: int) -> None:
+        if not getattr(self, "imagenesNoti", False):
+            return
+
+        for z in self.zombies:
+            frase = getattr(z, "frase", None)
+            if not frase:
+                continue
+            centroX = z.x + shake_x + z.width / 2.0
+            if centroX < 420 or centroX > self.screen_w - 420:
+                continue
+            sy = z.world_y - cam_offset
+            if sy < 120 or sy > self.screen_h:
+                continue
+            fase = (self.tiempoJugado + z.cicloGlobo) % 5.0
+            if fase > 3.0:
+                continue
+            globo = self.globoConFrase(frase, z.direction < 0)
+            crecer = min(1.0, fase / 0.2)
+            if crecer < 1.0:
+                globo = pygame.transform.smoothscale_by(globo, 0.6 + 0.4 * crecer)
+            if fase > 2.7:
+                globo = globo.copy()
+                globo.set_alpha(int(255 * (3.0 - fase) / 0.3))
+            colita = 0.8 if z.direction < 0 else 0.2
+            surface.blit(globo, globo.get_rect(bottomleft=(int(centroX - globo.get_width() * colita), int(sy + 6))))
+
+        if self.tiempoDistraido > 0.0:
+            fuerza = min(1.0, (self.duracionDistraccion - self.tiempoDistraido) / 0.3, self.tiempoDistraido / 0.5)
+            yJugador = int(self.player_visual_world_y - cam_offset - 30)
+            self.tunel.set_alpha(int(255 * fuerza))
+            surface.blit(self.tunel, (shake_x, yJugador - 1000))
+
+            vaiven = math.sin(self.tiempoJugado * 6.0) * 4
+            celular = self.celularMini.get_rect(midleft=(int(self.player_x + shake_x + 40), int(yJugador - 60 + vaiven)))
+            surface.blit(self.celularMini, celular)
+
+            arriba = max(150, yJugador - 420)
+            for i, linea in enumerate(self.ensenanza):
+                texto = self.textoConBorde(self.fuenteEnsenanza, linea, (255, 244, 220), (48, 48, 50))
+                texto.set_alpha(int(255 * fuerza))
+                surface.blit(texto, texto.get_rect(center=(self.screen_w // 2 + shake_x, arriba + i * 62)))
+
+        if self.tiempoMensaje > 0.0 and self.mensajeFlotante:
+            subida = (1.6 - self.tiempoMensaje) * 40
+            texto = self.textoConBorde(self.fuenteMensaje, self.mensajeFlotante, (255, 248, 236), (92, 46, 118))
+            texto.set_alpha(int(255 * min(1.0, self.tiempoMensaje / 0.4)))
+            yJugador = self.player_visual_world_y - cam_offset
+            surface.blit(texto, texto.get_rect(center=(int(self.player_x + shake_x), int(yJugador - 160 - subida))))

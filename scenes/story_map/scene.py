@@ -135,6 +135,7 @@ class StoryMapScene(BaseState):
         self.toast_msg: Optional[str] = None
         self.toast_timer: float = 0.0
         self.font_toast = pygame.font.SysFont("Arial Black, Impact, sans-serif", 24)
+        self.font_toast = self.assets.cargarFuenteCuento(34)
         self._init_rain_particles()
 
         # 7. Sistema de Punto de Interés Clave (Uninorte Key Location Effects)
@@ -967,6 +968,9 @@ class StoryMapScene(BaseState):
         self.font_paloma_badge = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 16, bold=True)
         self.font_paloma_body = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 23, bold=True)
         self.font_paloma_hint = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 16, bold=True)
+        self.font_paloma_badge = self.assets.cargarFuenteCuento(22)
+        self.font_paloma_body = self.assets.cargarFuenteCuento(29)
+        self.font_paloma_hint = self.assets.cargarFuenteCuento(21)
 
         # Botones de la pantalla de Victoria
         def make_vic_btn(text: str, bg_col, b_col) -> pygame.Surface:
@@ -1196,13 +1200,13 @@ class StoryMapScene(BaseState):
 
         # Los niveles principales y secretos configurados en el mapa son jugables.
         if poi_name not in STORY_PLAYABLE_POIS:
-            self.toast_msg = f"📍 {title} — PUNTO PANORÁMICO DE CURRAMBA"
+            self.toast_msg = f"{title} — PUNTO PANORÁMICO DE CURRAMBA"
             self.toast_timer = 2.5
             if hasattr(self.audio, "play_hover"):
                 self.audio.play_hover()
             return
 
-        self.toast_msg = f"📍 {title} — LA PALOMA TE ESPERA"
+        self.toast_msg = f"{title} — LA PALOMA TE ESPERA"
         self.toast_timer = 2.5
         if hasattr(self.audio, "play_click"):
             self.audio.play_click()
@@ -1359,7 +1363,7 @@ class StoryMapScene(BaseState):
                 self.state_machine.change_state(self)
 
             # Toast celebratorio oficial de nivel completado
-            self.toast_msg = f"🎉 ¡{poi_info.get('title', 'NIVEL')} DESPEJADO CON ÉXITO!"
+            self.toast_msg = f"¡{poi_info.get('title', 'NIVEL')} DESPEJADO CON ÉXITO!"
             self.toast_timer = 4.0
 
             # Verificar si se completaron los 4 niveles principales de la Historia
@@ -2005,7 +2009,7 @@ class StoryMapScene(BaseState):
             if self.quest_card_open:
                 self._close_quest_card()
                 return
-            self._open_pause_menu()
+            self._toggle_menu()
             return
 
         # Si la tarjeta de misión está abierta, interacción con la tarjeta
@@ -2433,6 +2437,8 @@ class StoryMapScene(BaseState):
 
     def _render_toast(self, surface: pygame.Surface) -> None:
         """Dibuja un banner / toast animado centrado en la parte superior."""
+        if self.dibujarLetrero(surface):
+            return
         alpha = min(255, int(255 * (self.toast_timer / 0.5))) if self.toast_timer < 0.5 else 255
         txt_surf = self.font_toast.render(self.toast_msg, True, (255, 255, 255))
         padding_x, padding_y = 36, 16
@@ -2445,6 +2451,31 @@ class StoryMapScene(BaseState):
         toast_surf.blit(txt_surf, (padding_x, padding_y))
         rect = toast_surf.get_rect(center=(self.screen_w // 2, 85))
         surface.blit(toast_surf, rect)
+
+    def dibujarLetrero(self, surface: pygame.Surface) -> bool:
+        try:
+            banner = self.assets.cargarSinFondo(os.path.join("Interfaz", "bannerUbicacion.jpg"), 520)
+        except Exception:
+            return False
+
+        alfa = min(255, int(255 * (self.toast_timer / 0.5))) if self.toast_timer < 0.5 else 255
+        texto = self.font_toast.render(self.toast_msg, True, (110, 68, 38))
+        alto = banner.get_height()
+        ancho = max(banner.get_width(), texto.get_width() + alto * 2)
+
+        punta = alto
+        letrero = pygame.Surface((ancho, alto), pygame.SRCALPHA)
+        letrero.blit(banner, (0, 0), (0, 0, punta, alto))
+        centro = banner.subsurface((punta, 0, banner.get_width() - punta * 2, alto))
+        letrero.blit(pygame.transform.smoothscale(centro, (ancho - punta * 2, alto)), (punta, 0))
+        letrero.blit(banner, (ancho - punta, 0), (banner.get_width() - punta, 0, punta, alto))
+        letrero.blit(texto, texto.get_rect(center=(ancho // 2, alto // 2)))
+        letrero = self.ponerContorno(letrero, (128, 76, 40), 4)
+
+        if alfa < 255:
+            letrero.set_alpha(alfa)
+        surface.blit(letrero, letrero.get_rect(center=(self.screen_w // 2, 85)))
+        return True
 
     def _render_drawer_menu(self, surface: pygame.Surface) -> None:
         """Renderiza el panel lateral desplegable de opciones y guardado."""
@@ -2538,20 +2569,20 @@ class StoryMapScene(BaseState):
             self.centroPapelMenu = int(self.drawer_w * 0.508)
             ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), self.drawer_w)
             self.ventanaMenuMapa = pygame.transform.smoothscale(ventana, (self.drawer_w, alto))
-            morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 300)
+            morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 250)
             rojo = pygame.transform.smoothscale(
-                self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 300), morado.get_size())
-            self.fuenteTituloMenu = self.assets.cargarFuenteCuento(44)
+                self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 250), morado.get_size())
+            self.fuenteTituloMenu = self.assets.cargarFuenteCuento(50)
             self.fuenteTextoMenu = self.assets.cargarFuenteCuento(22)
-            fuenteBoton = self.assets.cargarFuenteCuento(36)
+            fuenteBoton = self.assets.cargarFuenteCuento(31)
 
             # Cada botón guarda su versión morada y la roja que se ve al pasar el mouse
             botones = [
-                (self.btn_resume, "Reanudar", 360),
-                (self.btn_save_game, "Guardar partida", 448),
-                (self.btn_calibrate_pointer, "Calibrar lápiz", 624),
-                (self.btn_settings, "Ajustes", 712),
-                (self.btn_exit_map, "Salir al menú", 800),
+                (self.btn_resume, "Reanudar", 458),
+                (self.btn_save_game, "Guardar partida", 532),
+                (self.btn_calibrate_pointer, "Calibrar lápiz", 672),
+                (self.btn_settings, "Ajustes", 746),
+                (self.btn_exit_map, "Salir al menú", 820),
             ]
             self.botonesMenuMapa = []
             for boton, texto, y in botones:
@@ -2565,10 +2596,10 @@ class StoryMapScene(BaseState):
                 self.botonesMenuMapa.append((boton, versiones[0], versiones[1]))
 
             # Los botones de música y sonido quedan entre guardar y calibrar
-            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 60, 536)
-            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 60, 536)
-            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu + 60, 536)
-            self.btn_drawer_sound.rect.center = (self.centroPapelMenu + 60, 536)
+            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 55, 602)
+            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 55, 602)
+            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu + 55, 602)
+            self.btn_drawer_sound.rect.center = (self.centroPapelMenu + 55, 602)
 
             # Botón nuevo para abrir el menú
             botonMenu = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMenu.jpg"), 76)
@@ -2592,15 +2623,15 @@ class StoryMapScene(BaseState):
 
         cafe = (110, 68, 38)
         titulo = self.textoConContorno(self.fuenteTituloMenu, "Modo historia", (110, 62, 150), (255, 250, 238))
-        panel.blit(titulo, titulo.get_rect(center=(int(self.drawer_w * 0.56), 200)))
+        panel.blit(titulo, titulo.get_rect(center=(self.centroPapelMenu, 322)))
         explorando = self.fuenteTextoMenu.render(f"Explorando con {self.character_id.capitalize()}", True, cafe)
-        panel.blit(explorando, explorando.get_rect(center=(int(self.drawer_w * 0.56), 248)))
+        panel.blit(explorando, explorando.get_rect(center=(self.centroPapelMenu, 372)))
 
         if self.save_feedback_timer > 0.0:
             aviso = self.fuenteTextoMenu.render("Partida guardada", True, (56, 146, 76))
         else:
             aviso = self.fuenteTextoMenu.render("Guardado automático", True, (150, 118, 90))
-        panel.blit(aviso, aviso.get_rect(center=(int(self.drawer_w * 0.56), 284)))
+        panel.blit(aviso, aviso.get_rect(center=(self.centroPapelMenu, 402)))
 
         # Morado normal y rojo cuando el mouse está encima
         for boton, morado, rojo in self.botonesMenuMapa:

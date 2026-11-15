@@ -420,6 +420,9 @@ class ProgressBar:
         ratio = max(0.0, min(1.0, self.progress / 100.0))
         fill_w = int(self.track_w * ratio)
 
+        if self.dibujarRellenoPintado(surface, fill_w, is_studying):
+            return
+
         if fill_w > 0:
             if self.completed:
                 col_main = (60, 225, 115)
@@ -438,6 +441,44 @@ class ProgressBar:
             hi_rect = pygame.Rect(self.track_x + 4, self.track_y + 3, max(0, fill_w - 8), max(4, self.track_h // 3))
             pygame.draw.rect(surface, col_hi, hi_rect, border_radius=max(3, radius // 2))
             pygame.draw.rect(surface, (45, 130, 70), fill_rect, width=2, border_radius=radius)
+
+    def dibujarRellenoPintado(self, surface: pygame.Surface, ancho: int, estudiando: bool) -> bool:
+        if getattr(self, "rellenoPintado", None) is None:
+            try:
+                import os
+                from core.asset_manager import AssetManager
+                relleno = AssetManager.get_instance().cargarSinFondo(os.path.join("Interfaz", "barraTiempoRelleno.jpg"), 300)
+                alto = self.track_h
+                self.rellenoPintado = pygame.transform.smoothscale(
+                    relleno, (int(relleno.get_width() * alto / relleno.get_height()), alto))
+                self.rellenoApagado = pygame.transform.grayscale(self.rellenoPintado)
+            except Exception as e:
+                print(f"Aviso: no se pudo cargar el relleno de la barra de enfoque: {e}")
+                self.rellenoPintado = False
+        if not self.rellenoPintado:
+            return False
+        if ancho < 8:
+            return True
+        if getattr(self, "barraCompleta", None) is None:
+            self.barraCompleta = self.armarBarra(self.rellenoPintado, self.track_w)
+            self.barraCompletaApagada = self.armarBarra(self.rellenoApagado, self.track_w)
+        barra = self.barraCompleta if estudiando or self.completed else self.barraCompletaApagada
+        alto = barra.get_height()
+        punta = min(alto // 2, ancho // 2)
+        surface.blit(barra, (self.track_x, self.track_y), (0, 0, ancho - punta, alto))
+        surface.blit(barra, (self.track_x + ancho - punta, self.track_y), (self.track_w - punta, 0, punta, alto))
+        return True
+
+    def armarBarra(self, relleno: pygame.Surface, ancho: int) -> pygame.Surface:
+        alto = relleno.get_height()
+        punta = min(alto, relleno.get_width() // 2, ancho // 2)
+        barra = pygame.Surface((ancho, alto), pygame.SRCALPHA)
+        barra.blit(relleno, (0, 0), (0, 0, punta, alto))
+        centro = relleno.subsurface((punta, 0, relleno.get_width() - punta * 2, alto))
+        if ancho - punta * 2 > 0:
+            barra.blit(pygame.transform.smoothscale(centro, (ancho - punta * 2, alto)), (punta, 0))
+        barra.blit(relleno, (ancho - punta, 0), (relleno.get_width() - punta, 0, punta, alto))
+        return barra
 
 
 class ScoreManager:

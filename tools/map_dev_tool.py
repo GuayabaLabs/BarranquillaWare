@@ -424,6 +424,9 @@ class MapDevTool:
             self.toast_timer = 1.5
             return True
 
+        if not self.enabled:
+            return False
+
         # Click botón toggle superior
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.toggle_rect.collidepoint(event.pos):
@@ -878,6 +881,9 @@ class MapDevTool:
         """Renderiza la interfaz DevTool, bounding boxes, shader de calles, red vial, curvas Bézier y manijas."""
         self.last_poi_rects = poi_rects
         cam_x, cam_y = camera_pos
+
+        if not self.enabled:
+            return
 
         btn_col = (45, 160, 90) if self.enabled else (40, 50, 70)
         pygame.draw.rect(surface, btn_col, self.toggle_rect, border_radius=8)

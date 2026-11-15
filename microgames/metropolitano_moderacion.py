@@ -33,7 +33,7 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
             time_limit=self.TOTAL_DURATION,
             on_complete_callback=on_complete_callback
         )
-        self.intro_duration = 1.0
+        self.intro_duration = 1.6
         self.outro_duration = 1.8
 
     def enter(self, params: Optional[dict] = None) -> None:
