@@ -94,6 +94,8 @@ class MaleconRuedaMicrogame(BaseMicrogame):
         else:
             self.won_game = False
             self.trigger_screenshake(7.0, 0.15)
+            if hasattr(self.audio, "play_miss"):
+                self.audio.play_miss()
             self.evaluate(False, delay=1.0, message="¡A DESTIEMPO!")
 
     def _spawn_fireworks(self) -> None:

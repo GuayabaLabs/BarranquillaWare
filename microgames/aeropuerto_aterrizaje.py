@@ -119,6 +119,8 @@ class AeropuertoAterrizajeMicrogame(BaseMicrogame):
         else:
             self.touchdown_success = False
             self.trigger_screenshake(10.0, 0.2)
+            if hasattr(self.audio, "play_miss"):
+                self.audio.play_miss()
             self.evaluate(False, delay=1.0, message="¡FUERA DE PISTA!")
 
     def _spawn_tire_smoke(self) -> None:

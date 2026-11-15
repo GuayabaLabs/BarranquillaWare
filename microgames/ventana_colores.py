@@ -109,6 +109,8 @@ class VentanaColoresMicrogame(BaseMicrogame):
         else:
             self.is_correct = False
             self.trigger_screenshake(8.0, 0.15)
+            if hasattr(self.audio, "play_miss"):
+                self.audio.play_miss()
             self.evaluate(False, delay=1.0, message="¡COLOR INCORRECTO!")
 
     def _spawn_prism_sparkles(self) -> None:

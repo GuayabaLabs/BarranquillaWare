@@ -354,6 +354,8 @@ class BuenavistaCineMicrogame(BaseMicrogame):
         action = self.OFFENSE_ACTIONS[chosen.index % len(self.OFFENSE_ACTIONS)]
         chosen.start_offense(action, duration)
         self.flash_screen_alpha = 0.35
+        if hasattr(self.audio, "play_pigeon"):
+            self.audio.play_pigeon()
 
     def _on_player_shhed(self) -> None:
         """El jugador emitió un 'SHHH' o pulsó espacio: apaciguar al infractor activo."""
@@ -364,10 +366,14 @@ class BuenavistaCineMicrogame(BaseMicrogame):
             target = active_offenders[0]
             target.pacify()
             self.pacified_count += 1
+            if hasattr(self.audio, "play_hit"):
+                self.audio.play_hit()
 
     def _apply_strike(self, reason: str) -> None:
         self.strikes += 1
         self.flash_screen_alpha = 0.65
+        if hasattr(self.audio, "play_miss"):
+            self.audio.play_miss()
         if self.strikes >= self.max_strikes:
             self.cleanup()
             self.finish_game(won=False)
@@ -390,6 +396,8 @@ class BuenavistaCineMicrogame(BaseMicrogame):
                         spec.pacify()
                         self.pacified_count += 1
                         self.last_shh_visual_pulse = 1.0
+                        if hasattr(self.audio, "play_hit"):
+                            self.audio.play_hit()
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # El cursor MediaPipe permite apuntar y pellizcar sobre la butaca infractora.
@@ -398,6 +406,8 @@ class BuenavistaCineMicrogame(BaseMicrogame):
                     spec.pacify()
                     self.pacified_count += 1
                     self.last_shh_visual_pulse = 1.0
+                    if hasattr(self.audio, "play_hit"):
+                        self.audio.play_hit()
                     break
 
     def render_game(self, surface: pygame.Surface) -> None:

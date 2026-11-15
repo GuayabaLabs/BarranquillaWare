@@ -40,6 +40,7 @@ class TrojaBaileMicrogame(BaseMicrogame):
         self.dancer_center = (960, 680)
         self.dance_bob = 0.0
         self.camera_steer = 0.0
+        self._sfx_cooldown: float = 0.0
 
         # Sprite del personaje
         self.player_sprite = None
@@ -78,14 +79,23 @@ class TrojaBaileMicrogame(BaseMicrogame):
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_LEFT, pygame.K_a):
                 self.angular_vel -= self.push_power * 0.4
+                if self._sfx_cooldown <= 0.0 and hasattr(self.audio, "play_click"):
+                    self.audio.play_click()
+                    self._sfx_cooldown = 0.18
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 self.angular_vel += self.push_power * 0.4
+                if self._sfx_cooldown <= 0.0 and hasattr(self.audio, "play_click"):
+                    self.audio.play_click()
+                    self._sfx_cooldown = 0.18
         elif event.type == pygame.MOUSEMOTION:
             # La posición horizontal del índice MediaPipe inclina el equilibrio.
             dx = event.pos[0] - self.dancer_center[0]
             self.camera_steer = -1.0 if dx < -55 else 1.0 if dx > 55 else 0.0
 
     def update_game(self, dt: float) -> None:
+        if self._sfx_cooldown > 0.0:
+            self._sfx_cooldown = max(0.0, self._sfx_cooldown - dt)
+
         # 1. Entrada continua por teclado o mouse
         keys = pygame.key.get_pressed()
         correction = 0.0
@@ -115,6 +125,12 @@ class TrojaBaileMicrogame(BaseMicrogame):
 
         # Rebote rítmico del cuerpo bailando
         self.dance_bob = math.sin(self.time_left * 12.0) * 12.0
+
+        # Aviso sonoro sutil con rate-limit cuando la inclinación entra en zona peligrosa
+        if abs(self.angle) > self.max_safe_angle * 0.68 and self._sfx_cooldown <= 0.0:
+            if hasattr(self.audio, "play_miss"):
+                self.audio.play_miss()
+            self._sfx_cooldown = 0.45
 
         # 3. Comprobar caída
         if abs(self.angle) > self.max_safe_angle:

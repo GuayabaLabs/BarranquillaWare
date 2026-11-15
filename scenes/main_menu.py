@@ -11,6 +11,7 @@ from ui.button import UIButton
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
 from scenes.mode_select import ModeSelectScene
+from scenes.load_game import LoadGameScene, render_outlined_text
 from scenes.slide_transition import SlideTransitionState
 
 MODAL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
@@ -46,7 +47,7 @@ MODAL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "lines": [
             "Récord Modo Arcade: {arcade_best} microjuegos consecutivos",
             "Puntaje Modo Historia: {story_score} pts",
-            "Minijuegos Despejados: {completed_count} / 6",
+            "Minijuegos Despejados: {completed_count} / 4",
             "Explorador Activo: {active_char}",
             "Tasa de Completitud: {completion_pct}%",
             "",
@@ -76,9 +77,9 @@ class MainMenuScene(BaseState):
         self.background = pygame.transform.smoothscale(raw_bg, (self.screen_w, self.screen_h))
 
         # 2. Título en 1080p
-        self.title_base = self.assets.get_scaled("titulo_main_menu.png", target_width=990)
+        self.title_base = self.assets.get_scaled("titulo_main_menu.png", target_width=880)
         self.title_center_x = self.screen_w // 2
-        self.title_center_y = 228
+        self.title_center_y = 182
         self.timer: float = 0.0
 
         # 3. Partículas GL y Juice
@@ -91,16 +92,24 @@ class MainMenuScene(BaseState):
         # 5. Botones en 1080p
         self._init_buttons()
 
-        # 6. Modales y Tipografía 1080p
+        # 6. Modales acuarela y Tipografía 1080p
         self.active_modal: Optional[str] = None
         self.modal_alpha: float = 0.0
-        self.font_title = pygame.font.SysFont("Arial Black, Impact, sans-serif", 44)
-        self.font_body = pygame.font.SysFont("Arial, sans-serif", 28, bold=True)
+        self.font_title = self.assets.cargarFuenteCuento(36)
+        self.font_body = self.assets.cargarFuenteCuento(27)
+        self._modal_frame = self.assets.get_scaled("recuadro_partida_guardada.png", target_width=1020)
+        self._modal_inner = self.assets.get_scaled("tarjeta_slot_partida.png", target_width=760)
+        self._modal_close_surf = self.assets.get_scaled("boton_cerrar_modal.png", target_width=56)
 
-        # 7. Precarga Cálida de Selección de Modo (Warm Scene Pre-instancing)
+        # 7. Precarga Cálida de Selección de Modo y Cargar Partida
         self.mode_select_scene = ModeSelectScene(
             on_back_callback=self._return_from_mode_select,
             on_main_menu_callback=self._return_from_mode_select,
+        )
+        self.load_game_scene = LoadGameScene(
+            on_continue_story=self._continue_story_from_load,
+            on_new_story=self._new_story_from_load,
+            on_back=self._return_from_load_game,
         )
 
     def _init_iguana(self) -> None:
@@ -126,20 +135,29 @@ class MainMenuScene(BaseState):
         self.iguana_squash_vel: float = 0.0
         self.iguana_curiosity: float = 0.0
 
+    def _scale_button_tight(self, filename: str, target_width: int) -> pygame.Surface:
+        """Recorta halos transparentes residuales (alpha<=20) y escala preservando proporción."""
+        cropped = self.assets.load_cropped_surface(filename, alpha_threshold=20)
+        orig_w, orig_h = cropped.get_size()
+        target_height = max(1, int(round(orig_h * (target_width / max(1, orig_w)))))
+        return pygame.transform.smoothscale(cropped, (target_width, target_height))
+
     def _init_buttons(self) -> None:
         audio_frames = self.assets.get_audio_button_frames(target_size=86)
         music_on, music_off, sound_on, sound_off = audio_frames[0], audio_frames[1], audio_frames[2], audio_frames[3]
 
-        btn_jugar_surf = self.assets.get_scaled("boton_jugar_main_menu.png", target_width=638)
-        btn_opciones_surf = self.assets.get_scaled("boton_opciones_main_menu.png", target_width=495)
-        btn_estadisticas_surf = self.assets.get_scaled("boton_estad", target_width=495)
-        btn_salir_surf = self.assets.get_scaled("boton_salir_main_menu.png", target_width=495)
+        btn_jugar_surf = self._scale_button_tight("boton_jugar_main_menu.png", target_width=496)
+        btn_cargar_surf = self._scale_button_tight("boton_cargar_partida_main_menu.png", target_width=364)
+        btn_opciones_surf = self._scale_button_tight("boton_opciones_main_menu.png", target_width=366)
+        btn_estadisticas_surf = self._scale_button_tight("boton_estadísticas_main_menu.png", target_width=366)
+        btn_salir_surf = self._scale_button_tight("boton_salir_main_menu.png", target_width=366)
 
-        centers_y = [518, 652, 788, 922]
+        centers_y = [414, 544, 666, 784, 902]
         self.btn_jugar = UIButton((self.screen_w // 2, centers_y[0]), btn_jugar_surf, on_click=self._on_play_clicked)
-        self.btn_opciones = UIButton((self.screen_w // 2, centers_y[1]), btn_opciones_surf, on_click=self._on_open_settings)
-        self.btn_estadisticas = UIButton((self.screen_w // 2, centers_y[2]), btn_estadisticas_surf, on_click=lambda: self._open_modal("estadisticas"))
-        self.btn_salir = UIButton((self.screen_w // 2, centers_y[3]), btn_salir_surf, on_click=self._on_exit_clicked)
+        self.btn_cargar = UIButton((self.screen_w // 2, centers_y[1]), btn_cargar_surf, on_click=self._on_load_game_clicked)
+        self.btn_opciones = UIButton((self.screen_w // 2, centers_y[2]), btn_opciones_surf, on_click=self._on_open_settings)
+        self.btn_estadisticas = UIButton((self.screen_w // 2, centers_y[3]), btn_estadisticas_surf, on_click=lambda: self._open_modal("estadisticas"))
+        self.btn_salir = UIButton((self.screen_w // 2, centers_y[4]), btn_salir_surf, on_click=self._on_exit_clicked)
 
         self.btn_music = UIButton(
             center_pos=(1710, 78),
@@ -161,6 +179,7 @@ class MainMenuScene(BaseState):
 
         self.buttons: List[UIButton] = [
             self.btn_jugar,
+            self.btn_cargar,
             self.btn_opciones,
             self.btn_estadisticas,
             self.btn_salir,
@@ -224,6 +243,68 @@ class MainMenuScene(BaseState):
             duration=0.65
         )
         self.state_machine.change_state(trans_to_mode)
+
+    def _on_load_game_clicked(self) -> None:
+        if not self.state_machine:
+            return
+
+        self.audio.play_click()
+        self.load_game_scene.enter()
+        trans_to_load = SlideTransitionState(
+            from_scene=self,
+            to_scene=self.load_game_scene,
+            direction="left",
+            duration=0.55
+        )
+        self.state_machine.change_state(trans_to_load)
+
+    def _return_from_load_game(self, from_scene: Optional[BaseState] = None) -> None:
+        if not self.state_machine:
+            return
+
+        self.audio.play_bgm("7am_ancpg_ost_main_menu.ogg")
+        self.sync_audio_buttons()
+        trans = SlideTransitionState(
+            from_scene=from_scene or self.load_game_scene,
+            to_scene=self,
+            direction="right",
+            duration=0.55
+        )
+        self.state_machine.change_state(trans)
+
+    def _continue_story_from_load(self, character_id: str) -> None:
+        if not self.state_machine:
+            return
+
+        from scenes.story_map import StoryMapScene
+        story_map = StoryMapScene(
+            character_id=character_id,
+            on_back_callback=lambda: self._return_from_mode_select(self.state_machine.current_state if self.state_machine else None),
+            on_main_menu_callback=self._return_from_mode_select,
+        )
+        trans = SlideTransitionState(
+            from_scene=self.load_game_scene,
+            to_scene=story_map,
+            direction="left",
+            duration=0.65
+        )
+        self.state_machine.change_state(trans)
+
+    def _new_story_from_load(self) -> None:
+        if not self.state_machine:
+            return
+
+        if self.mode_select_scene.state_machine is None:
+            self.mode_select_scene.state_machine = self.state_machine
+        setattr(self.mode_select_scene.character_select_scene, "chosen_mode", "historia")
+        self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
+        trans = SlideTransitionState(
+            from_scene=self.load_game_scene,
+            to_scene=self.mode_select_scene.character_select_scene,
+            direction="left",
+            duration=0.65
+        )
+        self.state_machine.change_state(trans)
 
     def _on_exit_clicked(self) -> None:
         pygame.event.post(pygame.event.Event(pygame.QUIT))
@@ -353,41 +434,55 @@ class MainMenuScene(BaseState):
 
         overlay = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
         alpha = int(min(180, self.modal_alpha * 0.7))
-        overlay.fill((8, 16, 30, alpha))
+        overlay.fill((18, 12, 32, alpha))
         surface.blit(overlay, (0, 0))
 
-        card_w, card_h = 870, 540
-        card_rect = pygame.Rect((self.screen_w - card_w) // 2, (self.screen_h - card_h) // 2, card_w, card_h)
+        frame_rect = self._modal_frame.get_rect(center=(self.screen_w // 2, self.screen_h // 2))
+        surface.blit(self._modal_frame, frame_rect.topleft)
 
-        card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
-        pygame.draw.rect(card_surf, (0, 0, 0, 75), (0, 12, card_w, card_h - 12), border_radius=36)
-        pygame.draw.rect(card_surf, (255, 253, 246, 248), (0, 0, card_w, card_h - 12), border_radius=36)
-        pygame.draw.rect(card_surf, (245, 160, 40, 255), (0, 0, card_w, card_h - 12), width=6, border_radius=36)
-        surface.blit(card_surf, card_rect.topleft)
+        inner_rect = self._modal_inner.get_rect(center=(frame_rect.centerx, frame_rect.centery + 54))
+        surface.blit(self._modal_inner, inner_rect.topleft)
 
-        t_render = self.font_title.render(modal_info["title"], True, modal_info["color"])
-        t_pos = t_render.get_rect(center=(self.screen_w // 2, card_rect.top + 65))
+        close_rect = self._modal_close_surf.get_rect(center=(frame_rect.right - 92, frame_rect.top + 88))
+        surface.blit(self._modal_close_surf, close_rect.topleft)
+
+        t_render = render_outlined_text(
+            self.font_title,
+            modal_info["title"],
+            (92, 50, 126),
+            (255, 250, 240),
+            thickness=2,
+        )
+        t_pos = t_render.get_rect(center=(frame_rect.centerx + 36, frame_rect.top + 132))
         surface.blit(t_render, t_pos)
 
         music_status = "ACTIVADA" if self.audio.music_enabled else "MUTED"
         sfx_status = "ACTIVADO" if self.audio.sound_enabled else "MUTED"
 
         settings = SettingsManager.get_instance()
-        story = settings.get_story_progress()
-        completed_count = len(story.get("completed_microgames", []))
+        summary = settings.get_story_save_summary()
         arcade_best = settings.get_arcade_high_score()
-        story_score = story.get("high_score", 0)
-        active_char = story.get("character_id", "westcol").capitalize()
-        completion_pct = int((completed_count / 6.0) * 100)
+        story_score = summary["high_score"]
+        completed_count = summary["levels_cleared"]
+        active_char = summary["character_name"] if summary["has_save"] else "Ninguno"
+        completion_pct = int((completed_count / 4.0) * 100)
 
-        cur_y = card_rect.top + 155
+        cur_y = inner_rect.top + 64
         for line in modal_info["lines"]:
             if not line:
-                cur_y += 15
+                cur_y += 12
                 continue
 
-            formatted_line = line.format(music_status=music_status, sfx_status=sfx_status, arcade_best=arcade_best, story_score=story_score, completed_count=completed_count, active_char=active_char, completion_pct=completion_pct)
-            color = (75, 75, 75) if not formatted_line.startswith("(") else (145, 145, 145)
+            formatted_line = line.format(
+                music_status=music_status,
+                sfx_status=sfx_status,
+                arcade_best=arcade_best,
+                story_score=story_score,
+                completed_count=completed_count,
+                active_char=active_char,
+                completion_pct=completion_pct,
+            )
+            color = (74, 48, 34) if not formatted_line.startswith("(") else (130, 96, 72)
             line_surf = self.font_body.render(formatted_line, True, color)
-            surface.blit(line_surf, line_surf.get_rect(center=(self.screen_w // 2, cur_y)))
+            surface.blit(line_surf, line_surf.get_rect(center=(frame_rect.centerx, cur_y)))
             cur_y += 42
