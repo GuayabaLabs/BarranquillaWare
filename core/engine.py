@@ -22,6 +22,11 @@ class Engine:
     FPS: int = 60
 
     def __init__(self, title: str = "BarranquillaWare", enable_gl: bool = True) -> None:
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=2048)
+        except Exception:
+            pass
         pygame.init()
         pygame.font.init()
 

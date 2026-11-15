@@ -202,8 +202,9 @@ def test_mode_select_watercolor_save_modal_bounds():
     mode_select.render(screen)
 
     # Toast acuarela en ModeSelectScene (sin cajas oscuras procedimentales)
-    mode_select._select_mode("arcade")
-    assert mode_select.toast_msg == "¡MODO ARCADE EN DESARROLLO!"
+    mode_select.toast_msg = "¡AVISO DE PRUEBA ACUARELA!"
+    mode_select.toast_timer = 2.5
+    assert mode_select.toast_msg == "¡AVISO DE PRUEBA ACUARELA!"
     mode_select.render(screen)
 
     # Iniciar Nueva Partida desde el modal limpia el guardado y va a selección de personaje

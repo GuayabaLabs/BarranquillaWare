@@ -234,6 +234,33 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
             ]
         ],
         "voice_clip_prefix": "paloma_aeropuerto"
+    },
+    "malecon": {
+        "level_badge": "GRAN MALECÓN DEL RÍO - MODO COASTER",
+        "speaker": "PALOMA DE CURRAMBA",
+        "pre_pages": [
+            [
+                "¡Llegamos al Gran Malecón, frente a la brisa del Magdalena!",
+                "Aquí cambiamos el scroll automático por lápiz, papel y creatividad con tus propias manos."
+            ],
+            [
+                "Traza una montaña rusa firme frente al río y recoge las estrellas doradas,",
+                "demostrando que crear con tus manos vale mucho más que mirar una pantalla."
+            ]
+        ],
+        "post_win_pages": [
+            [
+                "¡Qué trazo tan bacano, llave! La brisa del río y esa vía hecha a mano",
+                "valen mil veces más que cualquier feed infinito. ¡Sigue creando en el mundo real!"
+            ]
+        ],
+        "post_lose_pages": [
+            [
+                "¡Uy, esa pendiente nos sacudió duro! Pero en el papel siempre se puede borrar",
+                "y volver a diseñar con calma lejos de las pantallas. ¡Inténtalo otra vez!"
+            ]
+        ],
+        "voice_clip_prefix": "paloma_malecon"
     }
 }
 
