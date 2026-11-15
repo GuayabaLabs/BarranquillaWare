@@ -48,7 +48,7 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         )
 
     def enter(self, params: Optional[dict] = None) -> None:
-        self.audio.play_bgm("concentracionMusic.mp3")
+        self.audio.play_bgm("concentracionMusic.mp3", volume_scale=0.65)
 
     def setup_game(self) -> None:
         self.camera_input = CameraGestureInput.get_instance()
@@ -100,6 +100,7 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         self.spawn_timer: float = 0.55
         self.watercolor_particles: List[Dict[str, Any]] = []
         self.screen_trauma: float = 0.0
+        self._attach_sfx_cooldown: float = 0.0
 
     def _load_pencil_cursor_sprite(self, target_w: int = 84) -> pygame.Surface:
         """Carga y procesa el sprite oficial del Lapicero de BarranquillaWare ('puntero_lapiz.png')."""
@@ -361,6 +362,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         else:
             # Golpe en vacío
             self.score_manager.register_pop(0, (self.cursor.x, self.cursor.y))
+            if hasattr(self.audio, "play_miss"):
+                self.audio.play_miss()
 
     def handle_game_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.MOUSEMOTION:
@@ -440,9 +443,16 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             c.update(dt, self.student)
         self.clouds = [c for c in self.clouds if c.state != Distraction.STATE_DEAD]
 
+        if self._attach_sfx_cooldown > 0.0:
+            self._attach_sfx_cooldown = max(0.0, self._attach_sfx_cooldown - dt)
+
         if len(self.student.attached_clouds) > prev_attached:
             self.screen_trauma = min(0.65, self.screen_trauma + 0.32)
             self.mostrarEnsenanza()
+            if self._attach_sfx_cooldown <= 0.0:
+                if hasattr(self.audio, "play_miss"):
+                    self.audio.play_miss()
+                self._attach_sfx_cooldown = 0.35
 
         # 3. Actualizar estudiante y barra de progreso (nunca retrocede)
         self.student.update(dt)

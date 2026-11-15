@@ -214,9 +214,12 @@ class PunchAlertMicrogame(BaseMicrogame):
 
         self.last_voice_idx = idx
         snd = self.punch_voices[idx]
-        vol = getattr(self.audio, "sfx_volume", 0.85)
-        snd.set_volume(vol)
-        snd.play()
+        if hasattr(self.audio, "play_sfx"):
+            self.audio.play_sfx(snd)
+        else:
+            vol = getattr(self.audio, "sfx_volume", 0.85)
+            snd.set_volume(vol)
+            snd.play()
 
     def _init_punch_sounds(self) -> None:
         """Genera efectos de sonido procedurales de soporte para el bateo y notificaciones."""
@@ -235,7 +238,7 @@ class PunchAlertMicrogame(BaseMicrogame):
             t_hit = np.linspace(0, dur_hit, int(sr * dur_hit), False)
             noise = np.random.uniform(-1.0, 1.0, len(t_hit)) * np.exp(-t_hit * 45.0)
             tone = np.sin(2 * np.pi * np.geomspace(220, 680, len(t_hit)) * t_hit) * np.exp(-t_hit * 18.0)
-            wave_hit = np.clip((noise * 0.55 + tone * 0.65) * 0.45, -1.0, 1.0)
+            wave_hit = np.clip((noise * 0.55 + tone * 0.65) * 0.85, -1.0, 1.0)
             arr_hit = (wave_hit * 32767).astype(np.int16)
             self.snd_hit = pygame.sndarray.make_sound(np.column_stack((arr_hit, arr_hit)))
 
@@ -243,7 +246,7 @@ class PunchAlertMicrogame(BaseMicrogame):
             dur_whiff = 0.08
             t_w = np.linspace(0, dur_whiff, int(sr * dur_whiff), False)
             freq_w = np.geomspace(340, 140, len(t_w))
-            wave_w = np.sin(2 * np.pi * freq_w * t_w) * np.sin(np.pi * t_w / dur_whiff) * 0.28
+            wave_w = np.clip(np.sin(2 * np.pi * freq_w * t_w) * np.sin(np.pi * t_w / dur_whiff) * 0.78, -1.0, 1.0)
             arr_w = (wave_w * 32767).astype(np.int16)
             self.snd_whiff = pygame.sndarray.make_sound(np.column_stack((arr_w, arr_w)))
 
@@ -252,7 +255,7 @@ class PunchAlertMicrogame(BaseMicrogame):
             t_s = np.linspace(0, dur_safe, int(sr * dur_safe), False)
             freq_s = np.where(t_s < dur_safe * 0.5, 587.33, 880.0)
             env_s = np.exp(-t_s * 12.0)
-            wave_s = np.sin(2 * np.pi * freq_s * t_s) * env_s * 0.35
+            wave_s = np.clip(np.sin(2 * np.pi * freq_s * t_s) * env_s * 0.82, -1.0, 1.0)
             arr_s = (wave_s * 32767).astype(np.int16)
             self.snd_safe = pygame.sndarray.make_sound(np.column_stack((arr_s, arr_s)))
 
@@ -261,7 +264,7 @@ class PunchAlertMicrogame(BaseMicrogame):
             t_st = np.linspace(0, dur_st, int(sr * dur_st), False)
             buzz = np.sign(np.sin(2 * np.pi * 115.0 * t_st)) * 0.5 + np.sin(2 * np.pi * 170.0 * t_st) * 0.5
             env_st = np.where((t_st < 0.10) | (t_st > 0.13), 1.0, 0.1) * np.exp(-t_st * 4.0)
-            wave_st = np.clip(buzz * env_st * 0.38, -1.0, 1.0)
+            wave_st = np.clip(buzz * env_st * 0.82, -1.0, 1.0)
             arr_st = (wave_st * 32767).astype(np.int16)
             self.snd_strike = pygame.sndarray.make_sound(np.column_stack((arr_st, arr_st)))
         except Exception:
@@ -269,6 +272,9 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def _play_sfx(self, snd: Optional[pygame.mixer.Sound]) -> None:
         if snd is None:
+            return
+        if hasattr(self.audio, "play_sfx"):
+            self.audio.play_sfx(snd)
             return
         if hasattr(self.audio, "sound_enabled") and not self.audio.sound_enabled:
             return

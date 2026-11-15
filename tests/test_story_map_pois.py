@@ -186,24 +186,24 @@ def test_social_metrics_and_save_load_flow():
     scene_kat = StoryMapScene(character_id="katherine")
     assert scene_kat.social_hud.pills["seguidores"].value_text == "250"
     assert scene_kat.social_hud.pills["likes"].value_text == "0"
-    assert scene_kat.social_hud.pills["logros"].value_text == "0/2"
+    assert scene_kat.social_hud.pills["logros"].value_text == "0/4"
 
     scene_char = StoryMapScene(character_id="char")
     assert scene_char.social_hud.pills["seguidores"].value_text == "810K"
     assert scene_char.social_hud.pills["likes"].value_text == "0"
-    assert scene_char.social_hud.pills["logros"].value_text == "0/2"
+    assert scene_char.social_hud.pills["logros"].value_text == "0/4"
 
-    # 3. Superar Uninorte (2 rondas) con Alex Char incrementa Seguidores y Likes; los Logros siguen en 0/2
+    # 3. Superar Uninorte (2 rondas) con Alex Char incrementa Seguidores y Likes; despejar el nivel desbloquea logro (1/4)
     scene_char.active_poi = "uninorte"
     scene_char.current_level_stage_idx = 0
     scene_char._on_microgame_complete(True)  # Ronda 1 (+250 pts)
     assert scene_char.social_hud.pills["likes"].value_text != "0"
-    assert scene_char.social_hud.pills["logros"].value_text == "0/2"
+    assert scene_char.social_hud.pills["logros"].value_text == "0/4"
 
-    scene_char._on_microgame_complete(True)  # Ronda 2 (Nivel 1 completado: 2 rondas -> 840K seguidores, 70K likes)
+    scene_char._on_microgame_complete(True)  # Ronda 2 (Nivel 1 completado: 2 rondas -> 840K seguidores, 70K likes, 1/4 logros)
     assert scene_char.social_hud.pills["seguidores"].value_text == "840K"
     assert scene_char.social_hud.pills["likes"].value_text == "70K"
-    assert scene_char.social_hud.pills["logros"].value_text == "0/2"
+    assert scene_char.social_hud.pills["logros"].value_text == "1/4"
     assert settings.has_saved_story() is True
 
     # 4. Probar ModeSelectScene: al seleccionar Modo Historia con partida guardada se abre el modal
@@ -227,7 +227,7 @@ def test_social_metrics_and_save_load_flow():
     assert continued_map.character_id == "char"
     assert continued_map.social_hud.pills["seguidores"].value_text == "840K"
     assert continued_map.social_hud.pills["likes"].value_text == "70K"
-    assert continued_map.social_hud.pills["logros"].value_text == "0/2"
+    assert continued_map.social_hud.pills["logros"].value_text == "1/4"
 
     # 6. Probar botón NUEVA PARTIDA: resetea el progreso (incluyendo trofeos/logros) y envía a CharacterSelectScene
     settings.set("trofeosObtenidos", ["vueltaVentana"])

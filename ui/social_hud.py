@@ -1,6 +1,6 @@
 import math
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 import pygame
 
 class SocialPill:
@@ -28,12 +28,18 @@ class SocialPill:
         self.height = height
         self.value_text = value_text
         self.pulse_timer: float = 0.0
+        self.is_hovered: bool = False
+        self.hover_scale: float = 1.0
 
         # Tipografías cálidas y legibles alineadas bajo el título de cada cápsula
         self.font_val = pygame.font.SysFont("Trebuchet MS, Arial Black, sans-serif", 22, bold=True)
 
         # Cargar sprite oficial
         self.sprite = self._load_sprite()
+
+    @property
+    def rect(self) -> pygame.Rect:
+        return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def _load_sprite(self) -> pygame.Surface:
         """Carga y reescala la textura oficial de la cápsula usando el AssetManager cacheado."""
@@ -64,9 +70,18 @@ class SocialPill:
     def update(self, dt: float) -> None:
         if self.pulse_timer > 0.0:
             self.pulse_timer = max(0.0, self.pulse_timer - dt)
+        target_scale = 1.045 if self.is_hovered else 1.0
+        self.hover_scale += (target_scale - self.hover_scale) * min(1.0, dt * 16.0)
 
     def render(self, surface: pygame.Surface) -> None:
-        surface.blit(self.sprite, (self.x, self.y))
+        if abs(self.hover_scale - 1.0) > 0.003:
+            sw = max(1, int(round(self.width * self.hover_scale)))
+            sh = max(1, int(round(self.height * self.hover_scale)))
+            scaled = pygame.transform.smoothscale(self.sprite, (sw, sh))
+            rect = scaled.get_rect(center=(self.x + self.width // 2, self.y + self.height // 2))
+            surface.blit(scaled, rect.topleft)
+        else:
+            surface.blit(self.sprite, (self.x, self.y))
 
         # Renderizar métrica en el área libre inferior derecha (debajo de Seguidores / Likes / Logros)
         if self.value_text:
@@ -100,9 +115,15 @@ class SocialHUD:
     Contenedor del conjunto de cápsulas oficiales de red social en la barra superior.
     Ubicación calibrada según el mockup de referencia de BarranquillaWare (resolución 1920x1080).
     """
-    def __init__(self, screen_w: int = 1920, screen_h: int = 1080) -> None:
+    def __init__(
+        self,
+        screen_w: int = 1920,
+        screen_h: int = 1080,
+        on_logros_click: Optional[Callable[[], None]] = None
+    ) -> None:
         self.screen_w = screen_w
         self.screen_h = screen_h
+        self.on_logros_click = on_logros_click
 
         pill_w = 258
         pill_h = 86
@@ -146,6 +167,26 @@ class SocialHUD:
         self.set_metric("likes", metrics["likes_text"])
         self.set_metric("logros", metrics["achievements_text"])
         return metrics
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        """Permite interactuar con la píldora de Logros para abrir la sección de trofeos."""
+        pill = self.pills.get("logros")
+        if event.type == pygame.MOUSEMOTION and pill is not None:
+            pill_rect = pygame.Rect(pill.x, pill.y, pill.width, pill.height)
+            was_hovered = pill.is_hovered
+            pill.is_hovered = pill_rect.collidepoint(event.pos)
+            if pill.is_hovered and not was_hovered:
+                from core.audio_manager import AudioManager
+                AudioManager.get_instance().play_hover()
+            return False
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if pill:
+                pill_rect = pygame.Rect(pill.x, pill.y, pill.width, pill.height)
+                if pill_rect.collidepoint(event.pos):
+                    if self.on_logros_click:
+                        self.on_logros_click()
+                    return True
+        return False
 
     def update(self, dt: float) -> None:
         for pill in self.pills.values():

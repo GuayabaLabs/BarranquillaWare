@@ -23,21 +23,79 @@ semillasTrofeo = (
 )
 
 
+def _flood_fill_fondo(fondo: np.ndarray, semillas) -> np.ndarray:
+    """Flood-fill scanline conectado únicamente a los bordes/semillas en numpy puro."""
+    from collections import deque
+
+    h, w = fondo.shape
+    visitado = np.zeros((h, w), dtype=bool)
+    cola = deque()
+    for sx, sy in semillas:
+        if 0 <= sx < w and 0 <= sy < h and fondo[sy, sx] and not visitado[sy, sx]:
+            cola.append((sx, sy))
+
+    while cola:
+        x, y = cola.popleft()
+        if visitado[y, x] or not fondo[y, x]:
+            continue
+        fila = fondo[y]
+        vis_fila = visitado[y]
+        x0 = x
+        while x0 > 0 and fila[x0 - 1] and not vis_fila[x0 - 1]:
+            x0 -= 1
+        x1 = x
+        while x1 + 1 < w and fila[x1 + 1] and not vis_fila[x1 + 1]:
+            x1 += 1
+        vis_fila[x0:x1 + 1] = True
+        for ny in (y - 1, y + 1):
+            if 0 <= ny < h:
+                nfila = fondo[ny]
+                nvis = visitado[ny]
+                en_tramo = False
+                for nx in range(x0, x1 + 1):
+                    if nfila[nx] and not nvis[nx]:
+                        if not en_tramo:
+                            cola.append((nx, ny))
+                            en_tramo = True
+                    else:
+                        en_tramo = False
+    return visitado
+
+
 def borrarFondo(foto, fondo, borde, semillas=((0, 0),)):
-    # Borra el fondo que está conectado con la orilla de la imagen (o con otro punto de semillas)
-    # y recorta lo que sobra. fondo es una tabla de verdadero/falso que dice qué píxeles parecen fondo
-    marca = fondo.astype(np.uint8).T.copy()
-    h, w = marca.shape
-    for punto in semillas:
-        if marca[punto[1], punto[0]] == 1:
-            cv2.floodFill(marca, np.zeros((h + 2, w + 2), np.uint8), punto, 2)
-    dibujo = (marca != 2).astype(np.uint8) * 255
-    dibujo = cv2.erode(dibujo, np.ones((borde, borde), np.uint8))   # quita el filito claro de la orilla
-    dibujo = cv2.GaussianBlur(dibujo, (borde, borde), 0)
+    # Borra el fondo conectado con la orilla de la imagen (o con puntos semillas)
+    # usando flood-fill conectado en numpy y suavizado de contorno sin perforar interiores.
+    if foto.get_masks()[3] == 0:
+        foto = foto.convert_alpha()
+    fondo_hw = np.asarray(fondo, dtype=bool).T
+    visitado = _flood_fill_fondo(fondo_hw, semillas)
+    dibujo = (~visitado).astype(np.float32) * 255.0
+
+    # Erosión 3x3 opcional (quita el filito claro de la orilla) + suavizado 3x3
+    if borde >= 3:
+        pad = np.pad(dibujo, 1, mode="edge")
+        h, w = dibujo.shape
+        dibujo = np.minimum.reduce([
+            pad[dy:dy + h, dx:dx + w]
+            for dy in range(3)
+            for dx in range(3)
+        ])
+
+    pad = np.pad(dibujo, 1, mode="edge")
+    h, w = dibujo.shape
+    dibujo = (
+        1.0 * pad[0:h, 0:w] + 2.0 * pad[0:h, 1:w + 1] + 1.0 * pad[0:h, 2:w + 2] +
+        2.0 * pad[1:h + 1, 0:w] + 4.0 * pad[1:h + 1, 1:w + 1] + 2.0 * pad[1:h + 1, 2:w + 2] +
+        1.0 * pad[2:h + 2, 0:w] + 2.0 * pad[2:h + 2, 1:w + 1] + 1.0 * pad[2:h + 2, 2:w + 2]
+    ) / 16.0
+    alfa_u8 = np.clip(dibujo, 0, 255).astype(np.uint8)
+
     alfa = pygame.surfarray.pixels_alpha(foto)
-    alfa[:] = dibujo.T
+    alfa[:] = alfa_u8.T
     del alfa
-    ys, xs = np.nonzero(dibujo)
+    ys, xs = np.nonzero(alfa_u8 > 10)
+    if len(xs) == 0 or len(ys) == 0:
+        return foto.copy()
     caja = pygame.Rect(int(xs.min()), int(ys.min()), int(xs.max() - xs.min()) + 1, int(ys.max() - ys.min()) + 1)
     return foto.subsurface(caja).copy()
 
@@ -52,21 +110,26 @@ def achicar(img, lado):
 
 
 def quitarBlanco(foto, semillasExtra=()):
-    # Borra el fondo blanco de una imagen; si ya trae transparencia, solo se recorta.
-    # Se empieza a borrar desde las cuatro esquinas y desde los puntos extra que se le pasen
+    # Borra el fondo blanco conectado a los 4 bordes exteriores (y semillasExtra);
+    # si ya trae transparencia, solo se recorta.
+    if foto.get_width() == 0 or foto.get_height() == 0:
+        return foto.copy()
     if foto.get_at((0, 0)).a < 250:
-        return foto.subsurface(foto.get_bounding_rect(min_alpha=10)).copy()
-    if cv2 is None:
-        mancha = pygame.mask.from_threshold(foto, (255, 255, 255, 255), (26, 26, 26, 255))
-        mancha.invert()
-        foto = mancha.to_surface(setsurface=foto, unsetcolor=(0, 0, 0, 0))
-        return foto.subsurface(foto.get_bounding_rect(min_alpha=10)).copy()
+        rect = foto.get_bounding_rect(min_alpha=10)
+        return foto.subsurface(rect).copy() if rect.width > 0 and rect.height > 0 else foto.copy()
     w, h = foto.get_size()
-    semillas = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+    semillas = []
+    for x in range(w):
+        semillas.append((x, 0))
+        semillas.append((x, h - 1))
+    for y in range(h):
+        semillas.append((0, y))
+        semillas.append((w - 1, y))
     for fx, fy in semillasExtra:
         semillas.append((int(fx * w), int(fy * h)))
     rgb = pygame.surfarray.array3d(foto).astype(np.int16)
-    return borrarFondo(foto, ((rgb.max(axis=2) - rgb.min(axis=2)) <= 20) & (rgb.min(axis=2) >= 225), 3, semillas)
+    fondo = ((rgb.max(axis=2) - rgb.min(axis=2)) <= 20) & (rgb.min(axis=2) >= 225)
+    return borrarFondo(foto, fondo, 3, semillas)
 
 
 class AssetManager:

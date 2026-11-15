@@ -130,6 +130,8 @@ class BatallaFloresBossMicrogame(BaseMicrogame):
                 if subphase == 3 and not self.player_is_jumping:
                     self.player_is_jumping = True
                     self.player_jump_vy = -680.0
+                    if hasattr(self.audio, "play_jump"):
+                        self.audio.play_jump()
                 elif subphase == 2:
                     self._check_rhythm_hit()
 
@@ -148,6 +150,8 @@ class BatallaFloresBossMicrogame(BaseMicrogame):
             if subphase == 3 and not self.player_is_jumping:
                 self.player_is_jumping = True
                 self.player_jump_vy = -680.0
+                if hasattr(self.audio, "play_jump"):
+                    self.audio.play_jump()
             elif subphase == 2:
                 self._check_rhythm_hit()
 
@@ -180,6 +184,8 @@ class BatallaFloresBossMicrogame(BaseMicrogame):
             self.rhythm_feedback_text = "¡A DESTIEMPO!"
             self.rhythm_feedback_color = (255, 100, 100)
             self.rhythm_feedback_timer = 0.5
+            if hasattr(self.audio, "play_miss"):
+                self.audio.play_miss()
 
     def update_game(self, dt: float) -> None:
         if self.hit_stop > 0.0:
@@ -256,6 +262,8 @@ class BatallaFloresBossMicrogame(BaseMicrogame):
                     self.player_health = max(0, self.player_health - 1)
                     self.screen_shake = 12.0
                     self.hit_stop = 0.06
+                    if hasattr(self.audio, "play_miss"):
+                        self.audio.play_miss()
                     self.projectiles.remove(p)
                     if self.player_health <= 0:
                         self.finish_game(False)
@@ -284,6 +292,8 @@ class BatallaFloresBossMicrogame(BaseMicrogame):
                     note["radius"] -= note["speed"] * dt
                     if note["radius"] < 65.0:
                         note["missed"] = True
+                        if hasattr(self.audio, "play_miss"):
+                            self.audio.play_miss()
 
             if self.rhythm_drum_pulse > 0.0:
                 self.rhythm_drum_pulse = max(0.0, self.rhythm_drum_pulse - dt * 3.5)
