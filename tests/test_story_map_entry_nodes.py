@@ -64,5 +64,67 @@ class TestStoryMapEntryNodes(unittest.TestCase):
                 )
 
 
+
+class _PalmCam:
+    enabled = True
+
+    def __init__(self, x, y, palm=True, fist=False):
+        self.pos, self.palm, self.fist = (x, y), palm, fist
+
+    def is_hand_present(self):
+        return True
+
+    def get_position(self):
+        return self.pos
+
+    def is_open_palm(self):
+        return self.palm
+
+    def consume_fist(self):
+        had, self.fist = self.fist, False
+        return had
+
+
+class TestStoryMapCameraWalk(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        pygame.init()
+        pygame.display.set_mode((1920, 1080))
+        SettingsManager.get_instance().reset_story_progress()
+        cls.scene = StoryMapScene(character_id="shakira")
+
+    def test_open_palm_walks_one_node_and_fist_enters(self):
+        scene = self.scene
+        _, _, node_map, adj, _ = scene._get_street_graph()
+        start = scene._get_poi_target_node("metropolitano")
+        nd = node_map[start]
+        scene.player_node_id, scene.player_pos, scene.player_is_moving = start, (float(nd["x"]), float(nd["y"])), False
+        scene.quest_card_open = scene.paloma_dialog_open = scene.menu_open = False
+
+        # Mano quieta en el centro o con el índice (sin palma): no camina.
+        scene.update_camera_walk(_PalmCam(0.5, 0.5), 1.0)
+        scene.update_camera_walk(_PalmCam(0.95, 0.5, palm=False), 1.0)
+        self.assertFalse(scene.player_is_moving)
+
+        # Puño sobre el nodo amarillo: entra al nivel.
+        scene.update_camera_walk(_PalmCam(0.5, 0.5, palm=False, fist=True), 0.016)
+        self.assertEqual(scene.active_poi, "metropolitano")
+        scene.quest_card_open = scene.paloma_dialog_open = False
+
+        # Palma abierta hacia un lado, sostenida: inicia viaje a un nodo vecino.
+        moved = False
+        for cam in (_PalmCam(0.95, 0.5), _PalmCam(0.05, 0.5), _PalmCam(0.5, 0.95), _PalmCam(0.5, 0.05)):
+            scene.player_is_moving = False
+            scene._cam_walk_t = 0.0
+            scene.update_camera_walk(cam, 0.2)
+            self.assertFalse(scene.player_is_moving, "no debe avanzar antes de sostener la palma")
+            scene.update_camera_walk(cam, 0.3)
+            if scene.player_is_moving:
+                moved = True
+                break
+        self.assertTrue(moved)
+        self.assertFalse(StoryMapScene.CAMERA_DWELL_CLICK)
+
+
 if __name__ == "__main__":
     unittest.main()

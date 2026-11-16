@@ -6,6 +6,8 @@ import pygame
 from core.microgame import BaseMicrogame
 
 class Fritanga84Microgame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"accion": pygame.K_SPACE}
     """
     Microjuego Folclórico 7: 'La Fritanga de la 84' (Calle 84 con Cra 51B).
     - Consigna: ¡VOLTEA LA AREPA!

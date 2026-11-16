@@ -7,6 +7,8 @@ from core import input_state
 from core.microgame import BaseMicrogame
 
 class MallorquinPhotoMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"eje_x": (pygame.K_LEFT, pygame.K_RIGHT), "eje_y": (pygame.K_UP, pygame.K_DOWN), "accion": pygame.K_SPACE}
     """
     Microjuego 3: '¡Fotografía al Flamenco!' (Ecorreserva Ciénaga de Mallorquín).
     - Consigna: ¡FOTOGRAFÍA AL FLAMENCO!

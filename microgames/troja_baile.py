@@ -7,6 +7,8 @@ from core import input_state
 from core.microgame import BaseMicrogame
 
 class TrojaBaileMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"eje_x": (pygame.K_LEFT, pygame.K_RIGHT)}
     """
     Microjuego Folclórico 8: 'Salsa y Cumbia en La Troja' (Calle 74 con Cra 44).
     - Consigna: ¡MANTÉN EL EQUILIBRIO!

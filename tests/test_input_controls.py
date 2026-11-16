@@ -114,3 +114,80 @@ def test_camera_pencil_drawn_on_top_and_not_stealing_gestures():
     engine.state_machine.change_state(CamGame())
     engine._update_camera_cursor_interaction(0.016)
     assert engine.camera_input.clicks == 1, "el motor robó el pellizco del microjuego"
+
+
+class _FakeGestureCam:
+    enabled = True
+
+    def __init__(self, x=0.5, y=0.5, fist=False, finger=None):
+        self.pos = (x, y)
+        self.fist = fist
+        self.finger = finger
+        self.present = True
+
+    def is_hand_present(self):
+        return self.present
+
+    def get_position(self):
+        return self.pos
+
+    def consume_fist(self):
+        had, self.fist = self.fist, False
+        return had
+
+    def consume_click(self):
+        return False
+
+    def consume_finger(self, i):
+        if self.finger == i:
+            self.finger = None
+            return True
+        return False
+
+
+def test_camera_gestures_drive_keyboard_only_microgames():
+    from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
+    from microgames.fritanga_84 import Fritanga84Microgame
+    from microgames.ventana_colores import VentanaColoresMicrogame
+
+    pygame.init()
+    pygame.display.set_mode((1920, 1080))
+    input_state.clear()
+
+    def capture(game):
+        seen = []
+        original = game.handle_game_event
+        game.handle_game_event = lambda e: (seen.append((e.type, e.key)), original(e))
+        game.phase = BaseMicrogame.PHASE_PLAY
+        return seen
+
+    # Mano a la izquierda -> flecha izquierda sostenida; al volver al centro se suelta.
+    plane = AeropuertoAterrizajeMicrogame()
+    seen = capture(plane)
+    cam = _FakeGestureCam(x=0.1)
+    plane.update_camera_actions(cam)
+    assert (pygame.KEYDOWN, pygame.K_LEFT) in seen
+    assert input_state.get_pressed()[pygame.K_LEFT]
+    cam.pos = (0.5, 0.5)
+    plane.update_camera_actions(cam)
+    assert (pygame.KEYUP, pygame.K_LEFT) in seen
+    assert not input_state.get_pressed()[pygame.K_LEFT]
+
+    # Puño -> Espacio (acción) en un juego de un solo botón.
+    arepa = Fritanga84Microgame()
+    seen = capture(arepa)
+    arepa.update_camera_actions(_FakeGestureCam(fist=True))
+    assert (pygame.KEYDOWN, pygame.K_SPACE) in seen
+
+    # Doblar el dedo medio -> tecla 2 (amarillo) en Ventana al Mundo.
+    ventana = VentanaColoresMicrogame()
+    seen = capture(ventana)
+    ventana.update_camera_actions(_FakeGestureCam(finger=1))
+    assert (pygame.KEYDOWN, pygame.K_2) in seen
+
+    # Si la mano desaparece, nada queda presionado.
+    cam = _FakeGestureCam(x=0.95)
+    plane.update_camera_actions(cam)
+    cam.present = False
+    plane.update_camera_actions(cam)
+    assert not input_state.VIRTUAL_KEYS

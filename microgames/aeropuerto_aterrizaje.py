@@ -7,6 +7,8 @@ from core import input_state
 from core.microgame import BaseMicrogame
 
 class AeropuertoAterrizajeMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"eje_x": (pygame.K_LEFT, pygame.K_RIGHT)}
     """
     Microjuego 6: '¡Aterriza en la Pista!' (Aeropuerto Internacional Ernesto Cortissoz).
     - Consigna: ¡ATERRIZA EN LA PISTA!

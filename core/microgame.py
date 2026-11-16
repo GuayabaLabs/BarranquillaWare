@@ -29,6 +29,15 @@ class BaseMicrogame(BaseState):
     # Barra de tiempo acuarela: (centro_x, centro_y, ancho). None = abajo, centrada y ancha.
     TIME_BAR_LAYOUT: Optional[tuple] = None
 
+    # Control por movimiento genérico: traduce gestos de la cámara a las teclas que el juego ya usa.
+    #   "accion": tecla que se pulsa al cerrar el puño o pellizcar.
+    #   "eje_x":  (izquierda, derecha) sostenidas según la mano esté a un lado u otro de la pantalla.
+    #   "eje_y":  (arriba, abajo) sostenidas según la altura de la mano.
+    #   "dedos":  teclas para doblar índice, medio, anular y meñique (como un piano).
+    # Lo llama core.engine en cada frame; si se define, el lapicero de menú se apaga en el juego.
+    CAMERA_ACTIONS: Dict[str, object] = {}
+    CAMERA_DEADZONE: float = 0.12  # Zona muerta alrededor del centro para los ejes
+
     def __init__(
         self,
         command_text: str = "¡CORRE!",
@@ -77,6 +86,56 @@ class BaseMicrogame(BaseState):
     def setup_game(self) -> None:
         """Inicializa variables específicas del microjuego individual."""
         pass
+
+    def update_camera_actions(self, camera) -> None:
+        """Convierte gestos en teclas virtuales según CAMERA_ACTIONS (solo en la fase de juego)."""
+        from core import input_state
+
+        acciones = self.CAMERA_ACTIONS
+        held = getattr(self, "_camera_held", None)
+        if held is None:
+            held = self._camera_held = set()
+
+        activo = bool(acciones) and self.phase == self.PHASE_PLAY and not self.is_finished
+        presente = activo and camera is not None and camera.enabled and camera.is_hand_present()
+
+        deseadas = set()
+        if presente:
+            x, y = camera.get_position()
+            dz = self.CAMERA_DEADZONE
+            for eje, valor in (("eje_x", x), ("eje_y", y)):
+                teclas = acciones.get(eje)
+                if not teclas:
+                    continue
+                if valor < 0.5 - dz:
+                    deseadas.add(teclas[0])
+                elif valor > 0.5 + dz:
+                    deseadas.add(teclas[1])
+
+        def evento(tipo, tecla):
+            datos = {"key": tecla, "mod": 0, "scancode": 0, "camera_gesture": True}
+            if tipo == pygame.KEYDOWN:
+                datos["unicode"] = " " if tecla == pygame.K_SPACE else ""
+            self.handle_game_event(pygame.event.Event(tipo, datos))
+
+        for tecla in held - deseadas:
+            input_state.VIRTUAL_KEYS.discard(tecla)
+            evento(pygame.KEYUP, tecla)
+        for tecla in deseadas - held:
+            input_state.VIRTUAL_KEYS.add(tecla)
+            evento(pygame.KEYDOWN, tecla)
+        self._camera_held = deseadas
+
+        if not presente:
+            return
+        tecla_accion = acciones.get("accion")
+        if tecla_accion is not None and (camera.consume_fist() or camera.consume_click()):
+            evento(pygame.KEYDOWN, tecla_accion)
+            evento(pygame.KEYUP, tecla_accion)
+        for i, tecla in enumerate(acciones.get("dedos", ()) or ()):
+            if camera.consume_finger(i):
+                evento(pygame.KEYDOWN, tecla)
+                evento(pygame.KEYUP, tecla)
 
     def trigger_screenshake(self, intensity: float = 10.0, duration: float = 0.2) -> None:
         """Activa sacudida de pantalla."""

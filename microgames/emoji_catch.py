@@ -41,6 +41,15 @@ class _IntegratedEmojiCatch(_emoji.EmojiCatch):
 
 
 class EmojiCatchMicrogame(BaseMicrogame):
+    # Mismo cierre que los minijuegos del mapa: letrero Ganaste/Perdiste + enseñanza.
+    ensenanzaFinal = {
+        "gana": ["Tu feed no se controla solo:",
+                 "bloquear el odio y buscar lo positivo",
+                 "también es cuidar tu salud mental."],
+        "pierde": ["Dejar pasar todo el odio del feed",
+                   "desgasta tu salud mental.",
+                   "Bloquea, silencia y busca balance."],
+    }
     CAMERA_POINTER = False  # Lee las manos directamente
     # Mando: X/B mueven la mano azul (J/L). El D-pad/stick ya llega como flechas.
     GAMEPAD_BUTTON_KEYS = {2: pygame.K_j, 1: pygame.K_l}
@@ -54,11 +63,10 @@ class EmojiCatchMicrogame(BaseMicrogame):
     ) -> None:
         self.character_id = character_id
         super().__init__(
-            command_text="¡ATRAPA Y BALANCEA!",
+            command_text="¡ATRAPA Y BALANCEA!\n[A/D] morada · [J/L] azul",
             time_limit=_emoji.DURACION,
             on_complete_callback=on_complete_callback,
         )
-        self.outro_duration = 6.0  # Deja leer el perfil de ánimo final
 
     def _snapshot(self) -> dict:
         g = self.game
@@ -115,4 +123,9 @@ class EmojiCatchMicrogame(BaseMicrogame):
         super().update(dt)
 
     def render_game(self, surface: pygame.Surface) -> None:
-        self.game.draw(surface)
+        # Al terminar se usan el letrero y la enseñanza comunes en vez del panel propio.
+        final, self.game.final = self.game.final, "" if self.is_finished else self.game.final
+        try:
+            self.game.draw(surface)
+        finally:
+            self.game.final = final

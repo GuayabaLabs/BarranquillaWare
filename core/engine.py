@@ -400,12 +400,19 @@ class Engine:
             surface.blit(scaled, (0, 0))
 
     def _camera_pointer_allowed(self) -> bool:
-        """El lapicero se apaga en microjuegos que leen la cámara directamente."""
+        """El lapicero se apaga en microjuegos que leen la cámara directamente o por gestos."""
         current = self.state_machine.current_state
+        if getattr(current, "CAMERA_ACTIONS", None):
+            return False
         return bool(getattr(current, "CAMERA_POINTER", True))
 
     def _update_camera_cursor_interaction(self, dt: float) -> None:
         """Actualiza el lapicero óptico MediaPipe y simula eventos de MOUSEMOTION y MOUSEBUTTONDOWN por Hover o Gesto."""
+        current = self.state_machine.current_state
+        if getattr(current, "CAMERA_ACTIONS", None) and hasattr(current, "update_camera_actions"):
+            current.update_camera_actions(getattr(self, "camera_input", None))
+        if hasattr(current, "update_camera_walk"):
+            current.update_camera_walk(getattr(self, "camera_input", None), dt)
         if (
             not getattr(self, "camera_input", None)
             or not self.camera_input.enabled
@@ -442,8 +449,12 @@ class Engine:
         if self.cam_click_cooldown > 0.0:
             self.cam_click_cooldown = max(0.0, self.cam_click_cooldown - dt)
 
-        # Confirmación por Hover completado (0.7s) o por Gesto de Pellizco
-        hover_triggered = self.cam_hover_time >= self.cam_hover_duration and self.cam_click_cooldown <= 0.0
+        # Confirmación por Hover completado (0.7s) o por Gesto de Pellizco.
+        # Estados como el mapa desactivan el clic por permanencia (CAMERA_DWELL_CLICK = False).
+        dwell_ok = bool(getattr(self.state_machine.current_state, "CAMERA_DWELL_CLICK", True))
+        if not dwell_ok:
+            self.cam_hover_time = 0.0
+        hover_triggered = dwell_ok and self.cam_hover_time >= self.cam_hover_duration and self.cam_click_cooldown <= 0.0
         gesture_triggered = self.camera_input.consume_click() and self.cam_click_cooldown <= 0.0
 
         if hover_triggered or gesture_triggered:

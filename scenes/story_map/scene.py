@@ -86,6 +86,13 @@ class StoryMapScene(BaseState):
     _CACHED_WORLD_MAP: Optional[pygame.Surface] = None
     _CACHED_BASE_WORLD_MAP: Optional[pygame.Surface] = None
     ENTRY_PROXIMITY_RADIUS: float = 120.0
+    # Cámara en el mapa: sin clic por permanencia (evita caminar sin querer); se usa pellizco,
+    # palma abierta hacia un lado para avanzar un nodo y puño para entrar al nivel.
+    CAMERA_DWELL_CLICK: bool = False
+    CAMERA_WALK_DEADZONE: float = 0.16
+    CAMERA_WALK_HOLD: float = 0.35  # Segundos sosteniendo la palma antes de avanzar
+    CAMERA_WALK_REPEAT: float = 0.65
+
     # Nodo amarillo de entrada de cada nivel jugable (ids de config/map_poi_layout.json).
     POI_ENTRY_NODES: Dict[str, int] = {
         "uninorte": 71,
@@ -2450,6 +2457,42 @@ class StoryMapScene(BaseState):
                             return
         elif event.type == pygame.MOUSEMOTION:
             self.camera.update_drag(event.pos)
+
+    def _camera_map_blocked(self) -> bool:
+        return bool(
+            self.menu_open
+            or self.quest_card_open
+            or getattr(self, "paloma_dialog_open", False)
+            or self.show_victory_modal
+            or self.show_intro_dialog
+            or (hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado())
+            or (hasattr(self, "side_drawer") and self.side_drawer.is_blocking())
+        )
+
+    def update_camera_walk(self, camera, dt: float) -> None:
+        """Palma abierta desplazada del centro = avanzar un nodo en esa dirección; puño = entrar."""
+        self._cam_walk_t = getattr(self, "_cam_walk_t", 0.0)
+        if camera is None or not camera.enabled or not camera.is_hand_present() or self._camera_map_blocked():
+            self._cam_walk_t = 0.0
+            return
+        if camera.consume_fist():
+            active_poi = self._get_active_entry_poi()
+            if active_poi:
+                self._enter_playable_poi_from_proximity(active_poi)
+                return
+        if not camera.is_open_palm():
+            self._cam_walk_t = 0.0
+            return
+        x, y = camera.get_position()
+        dx, dy = x - 0.5, y - 0.5
+        if max(abs(dx), abs(dy)) < self.CAMERA_WALK_DEADZONE:
+            self._cam_walk_t = 0.0
+            return
+        direction = (1.0 if dx > 0 else -1.0, 0.0) if abs(dx) >= abs(dy) else (0.0, 1.0 if dy > 0 else -1.0)
+        self._cam_walk_t += dt
+        if self._cam_walk_t >= self.CAMERA_WALK_HOLD and not self.player_is_moving:
+            if self._handle_dpad_move(direction):
+                self._cam_walk_t = self.CAMERA_WALK_HOLD - self.CAMERA_WALK_REPEAT
 
     def update(self, dt: float) -> None:
         self.timer += dt

@@ -162,6 +162,11 @@ class CameraGestureInput:
         with self._lock:
             return self.hand_x, self.hand_y
 
+    def is_open_palm(self) -> bool:
+        """Palma abierta (cuatro dedos extendidos) de la mano principal."""
+        with self._lock:
+            return bool(self.hand_detected and self.open_palm)
+
     def get_hands(self) -> list:
         """Posiciones (x, y) normalizadas de hasta dos manos; la primera es la mano principal."""
         with self._lock:

@@ -41,6 +41,15 @@ class _IntegratedCurramGram(_curram.CurramGramGo):
 
 
 class CurramGramGoMicrogame(BaseMicrogame):
+    # Mismo cierre que los minijuegos del mapa: letrero Ganaste/Perdiste + enseñanza.
+    ensenanzaFinal = {
+        "gana": ["Antes de publicar: confirma lo que ves,",
+                 "protege los datos y la imagen de otros",
+                 "y deja que la autoridad haga justicia, no tus redes."],
+        "pierde": ["Un chisme, una foto privada o un escrache",
+                   "se vuelven virales en segundos.",
+                   "Verifica y respeta antes de publicar."],
+    }
     # Mando: X avisar (E), Y publicar (P), B foto (F). A=Espacio (saltar / empezar).
     GAMEPAD_BUTTON_KEYS = {2: pygame.K_e, 3: pygame.K_p, 1: PHOTO_KEY}
     TIME_BAR_LAYOUT = (1690, 56, 400)
@@ -52,11 +61,10 @@ class CurramGramGoMicrogame(BaseMicrogame):
     ) -> None:
         self.character_id = character_id
         super().__init__(
-            command_text="¡LLEGA A LA PUERTA 7!",
+            command_text="¡LLEGA A LA PUERTA 7!\n[A/D] caminar · [E] avisar · [P] publicar",
             time_limit=_curram.DURACION,
             on_complete_callback=on_complete_callback,
         )
-        self.outro_duration = 7.0  # Deja leer el perfil con los fenómenos de redes
 
     def setup_game(self) -> None:
         self.game = _IntegratedCurramGram()
@@ -132,4 +140,12 @@ class CurramGramGoMicrogame(BaseMicrogame):
         super().update(dt)
 
     def render_game(self, surface: pygame.Surface) -> None:
-        self.game.draw(surface, self.mouse)
+        # Al terminar se usan el letrero y la enseñanza comunes en vez del panel propio.
+        final, self.game.final = self.game.final, None if self.is_finished else self.game.final
+        # Durante la portada común no se dibuja el panel propio de inicio.
+        inicio, self.game.inicio = self.game.inicio, self.game.inicio and self.phase == self.PHASE_PLAY
+        try:
+            self.game.draw(surface, self.mouse)
+        finally:
+            self.game.final = final
+            self.game.inicio = inicio
