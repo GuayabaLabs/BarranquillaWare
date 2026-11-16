@@ -109,6 +109,15 @@ def achicar(img, lado):
     return pygame.transform.smoothscale(img, (round(img.get_width() * esc), round(img.get_height() * esc)))
 
 
+def desenfoque_suave(imagen):
+    """Desenfoca usando pygame-ce o una alternativa compatible con pygame."""
+    if hasattr(pygame.transform, "box_blur"):
+        return pygame.transform.box_blur(imagen, 1)
+    ancho, alto = imagen.get_size()
+    reducido = pygame.transform.smoothscale(imagen, (max(1, ancho // 2), max(1, alto // 2)))
+    return pygame.transform.smoothscale(reducido, (ancho, alto))
+
+
 def bordeSuave(imagen, color, grosor=2):
     import math
     ancho, alto = imagen.get_size()
@@ -122,7 +131,7 @@ def bordeSuave(imagen, color, grosor=2):
             dx = round(math.cos(math.radians(grados)) * anillo)
             dy = round(math.sin(math.radians(grados)) * anillo)
             lienzo.blit(silueta, (margen + dx, margen + dy))
-    lienzo = pygame.transform.box_blur(lienzo, 1)
+    lienzo = desenfoque_suave(lienzo)
     lienzo.blit(imagen, (margen, margen))
     return lienzo
 
