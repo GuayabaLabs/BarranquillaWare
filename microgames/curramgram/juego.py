@@ -31,6 +31,20 @@ CASOS=[
 ]
 NPC_SPRITES=("hombre_gorra","turista_pasaporte","joven_llorando","senora_cava","bailarina_comparsa","tamborero")
 
+# Arte acuarela (assets/curramgram/acuarela_*.png, importado con tools/importar_arte_curramgram.py).
+# Si existe, reemplaza al pixel art: nombre en el juego -> archivo acuarela.
+PERSONAJES_ACUARELA={"policia":"acuarela_policia","hombre_gorra":"acuarela_viajero","turista_pasaporte":"acuarela_turista",
+ "joven_llorando":"acuarela_joven","tamborero":"acuarela_tamborero","senora_cava":"acuarela_senora",
+ "bailarina_comparsa":"acuarela_comparsa","trabajador_carrito":"acuarela_trabajador"}
+# Altura en pantalla (px) de cada figura acuarela; por defecto ALTURA_PERSONAJE_PX.
+ALTURAS_ACUARELA={"tamborero":125,"senora_cava":150,"bailarina_comparsa":205,
+ "acuarela_cami_quieta":175,"acuarela_cami_camina_1":170,"acuarela_cami_camina_2":168,"acuarela_cami_camina_3":170,
+ "acuarela_cami_camina_4":168,"acuarela_cami_agachada":130,"acuarela_cami_saltando":185,"acuarela_cami_foto":178}
+# Decoración acuarela sobre el fondo: (archivo, x en el mundo, alto en px).
+PROPS_ACUARELA=(("caseta_policia",70,235),("mostrador_checkin",640,150),("puesto_butifarras",1940,230),
+ ("pilar_palmera",1460,290),("pilar_palmera",3040,290),("banca_espera",3560,105),("banca_espera",4400,105),("banca_espera",5700,105))
+REFUGIOS=(2240,3840,4660,5440)
+
 class CurramGramGo:
  # Ajustes para cuando el juego corre dentro de BarranquillaWare (microgames/curramgram_go.py).
  CONTROLES_Y=958
@@ -40,13 +54,25 @@ class CurramGramGo:
   self.sprites={}
   nombres={"titulo","barranquilla","aeropuerto","gates_1_10","hud_pildora","zona_1","zona_2","zona_3","puerta_embarque","icono_camara","reloj_grande","policia","bailarina_comparsa","trabajador_carrito","grupo_vendedor_letrero","cami","tamborero","hombre_gorra","turista_pasaporte","pasajero_sentado_1","joven_llorando","senor_sentado","senora_cava","globito_clickbait","dialogo_toma_foto","dialogo_salto","dialogo_confirma","dialogo_privacidad","dialogo_respeto","dialogo_pelea","dialogo_hielo","cartel_policia","cartel_comparsa","alerta","tecla_s_sigilo","tecla_flash","tecla_a","tecla_d","tecla_s","tecla_space","tecla_e","tecla_camara","tecla_p","gate_7","letrero_butifarras"}
   for name in nombres:self.sprites[name]=cargar_sprite(f"{name}.png","curramgram")
-  self.animacion=Animacion(RAIZ/"assets/curramgram/animaciones.json")
+  carpeta=RAIZ/"assets/curramgram"
+  self.acuarela=(carpeta/"acuarela_cami_quieta.png").is_file() and (carpeta/"animaciones_acuarela.json").is_file()
+  self.animacion=Animacion(carpeta/("animaciones_acuarela.json" if self.acuarela else "animaciones.json"))
   for name in self.animacion.defs:
    for frame in self.animacion.defs[name]["frames"]:
     self.sprites[frame]=cargar_sprite(f"{frame}.png","curramgram")
-  try:self.anclajes=json.loads((RAIZ/"assets/curramgram/anclajes.json").read_text(encoding="utf-8"))["curramgram"]
+  try:self.anclajes=json.loads((carpeta/"anclajes.json").read_text(encoding="utf-8"))["curramgram"]
   except (OSError,ValueError):self.anclajes={}
-  self.anclajes.update(json.loads((RAIZ/"assets/curramgram/anclajes_cami.json").read_text(encoding="utf-8")))
+  self.anclajes.update(json.loads((carpeta/"anclajes_cami.json").read_text(encoding="utf-8")))
+  self.props={}
+  if self.acuarela:
+   # Personajes y props acuarela: el ancla es el centro de los pies (abajo al centro del recorte).
+   for nombre,archivo in PERSONAJES_ACUARELA.items():
+    if (carpeta/f"{archivo}.png").is_file():self.sprites[nombre]=cargar_sprite(f"{archivo}.png","curramgram");self.anclajes.pop(nombre,None)
+   for archivo,_,alto in PROPS_ACUARELA+(("pilar_palmera",0,290),("puerta_7",0,120),("sello_pasaporte",0,46)):
+    if (carpeta/f"{archivo}.png").is_file() and (archivo,alto) not in self.props:
+     img=cargar_sprite(f"{archivo}.png","curramgram");self.props[(archivo,alto)]=pygame.transform.smoothscale_by(img,alto/img.get_height())
+   if (carpeta/"logo_curramgram.png").is_file():
+    logo=cargar_sprite("logo_curramgram.png","curramgram");self.sprites["titulo"]=pygame.transform.smoothscale_by(logo,170/logo.get_height())
   self._normalizar_personajes()
   self.sprites_flip={n:pygame.transform.flip(self.sprites[n],True,False) for n in self.personajes if self.sprites.get(n)}
   self.fondo_proyecto=cargar_imagen("fondo_minijuego_crossy.png",(ANCHO,ALTO),alpha=False)
@@ -62,9 +88,10 @@ class CurramGramGo:
   for nombre in self.personajes:
    img=self.sprites.get(nombre)
    if img is None:continue
-   factor=factor_cami if nombre in frames else ALTURA_PERSONAJE_PX/max(1,img.get_height())
+   if self.acuarela:factor=ALTURAS_ACUARELA.get(nombre,ALTURA_PERSONAJE_PX)/max(1,img.get_height())
+   else:factor=factor_cami if nombre in frames else ALTURA_PERSONAJE_PX/max(1,img.get_height())
    size=(max(1,round(img.get_width()*factor)),max(1,round(img.get_height()*factor)))
-   self.sprites[nombre]=pygame.transform.scale(img,size)
+   self.sprites[nombre]=pygame.transform.smoothscale(img,size) if self.acuarela else pygame.transform.scale(img,size)
    anchor=self.anclajes.get(nombre,{}).get("anchor",[img.get_width()//2,img.get_height()])
    self.anclajes[nombre]={**self.anclajes.get(nombre,{}),"anchor":[round(anchor[0]*factor),round(anchor[1]*factor)]}
 
@@ -338,8 +365,9 @@ class CurramGramGo:
 
  def _draw_prop_personajes(self,s):
   cam=self._camara();ground=PISO
+  if self.acuarela:self._dibujar_props(s,cam,ground)
   self._sprite_en(s,"policia",180-cam,ground,1,bob=int(math.sin(self.elapsed*1.8)*2))
-  self._sprite_en(s,"grupo_vendedor_letrero",1940-cam,ground,2)
+  if not self.acuarela:self._sprite_en(s,"grupo_vendedor_letrero",1940-cam,ground,2)
   for i,(x,nombre) in enumerate(zip(PUNTOS,NPC_SPRITES)):
    sx=x-cam
    if not -230<sx<ANCHO+230:continue
@@ -368,11 +396,11 @@ class CurramGramGo:
      pygame.draw.ellipse(s,ojo,(sx-12,cy-8,24,16));pygame.draw.circle(s,(255,255,255),(int(sx),cy),4)
     texto_con_contorno(s,etiqueta,(sx,cy+34),22,ui.CREMA,ui.TINTA,centro=True,grosor=2)
   # Refugios marcados y teclas de sigilo junto a los pilares existentes.
-  for wx in (2240,3840,4660,5440,PUNTOS[5]-105):
+  for wx in REFUGIOS+(PUNTOS[5]-105,):
    sx=wx-cam
    if -50<sx<ANCHO+50:
     pygame.draw.ellipse(s,(95,183,122),(sx-42,ground-7,84,18),3)
-    key=self.sprites.get("tecla_s_sigilo")
+    key=ui.tecla("S",40) if self.acuarela else self.sprites.get("tecla_s_sigilo")
     if key:s.blit(key,key.get_rect(center=(sx,ground-28)))
   if self.carrito:
    sx=self.carrito["x"]-cam
@@ -384,15 +412,34 @@ class CurramGramGo:
   # Puerta del mundo, además del indicador pequeño del HUD.
   door_x=PUERTA_X-cam
   if -160<door_x<ANCHO+160:
-   self._blit_escalado(s,"puerta_embarque",(int(door_x-70),ground-190),1)
+   cartel7=self.props.get(("puerta_7",120))
+   if cartel7 is not None:
+    pygame.draw.rect(s,(120,92,78),(int(door_x-6),ground-170,12,170),border_radius=4)
+    s.blit(cartel7,cartel7.get_rect(midbottom=(int(door_x),ground-160)))
+   else:self._blit_escalado(s,"puerta_embarque",(int(door_x-70),ground-190),1)
    ui.aviso(s,"E para abordar",(door_x,ground-215),240,56,None,26)
   self._dibujar_sellos(s,cam)
+
+ def _dibujar_props(self,s,cam,ground):
+  """Decoración acuarela: caseta, mostrador, puesto, pilares-escondite y bancas."""
+  for archivo,wx,alto in PROPS_ACUARELA:
+   img=self.props.get((archivo,alto))
+   sx=wx-cam
+   if img is not None and -img.get_width()<sx<ANCHO+img.get_width():s.blit(img,img.get_rect(midbottom=(int(sx),ground+6)))
+  pilar=self.props.get(("pilar_palmera",290))
+  if pilar is not None:
+   for wx in REFUGIOS:
+    sx=wx-cam
+    if -150<sx<ANCHO+150:s.blit(pilar,pilar.get_rect(midbottom=(int(sx),ground+6)))
 
  def _dibujar_sellos(self,s,cam):
   for i,sello in enumerate(self.sellos):
    if sello["recogido"]:continue
    sx=sello["x"]-cam;sy=sello["y"]
    if not -30<sx<ANCHO+30:continue
+   sello=self.props.get(("sello_pasaporte",46))
+   if sello is not None:
+    flota=int(math.sin(self.elapsed*3+i)*4);s.blit(sello,sello.get_rect(center=(int(sx),int(sy)+flota)));continue
    # Insignia pixel art nueva (no hay un sello equivalente en las hojas).
    pygame.draw.rect(s,(67,166,110),(int(sx-13),int(sy-13),26,26))
    pygame.draw.rect(s,(227,245,212),(int(sx-8),int(sy-8),16,16))
@@ -413,7 +460,7 @@ class CurramGramGo:
    ax,ay=self.anclajes.get(frame,{}).get("anchor",[img.get_width()//2,img.get_height()])
    s.blit(rendered,(int(sx-ax),int(ground-ay-jump_y+bob)))
   if self.ocultando and self.en_escondite:
-   key=self.sprites.get("tecla_s_sigilo")
+   key=ui.tecla("S",44) if self.acuarela else self.sprites.get("tecla_s_sigilo")
    if key:s.blit(key,key.get_rect(center=(int(sx),ground-207)))
   if self.flash_timer>0:
    flash=pygame.Surface((110,110),pygame.SRCALPHA);flash.fill((255,255,230,150));s.blit(flash,(int(sx-55),ground-225))
@@ -430,12 +477,13 @@ class CurramGramGo:
 
  def _draw_hud(self,s):
   titulo=self._escala_entera(self.sprites.get("titulo"),1)
-  if titulo:s.blit(titulo,(32,18))
+  if titulo:s.blit(titulo,(22,6) if self.acuarela else (32,18))
   pop=1.0+max(0,self.pop_puntos)/.35*.10
   texto_con_contorno(s,f"Ciudadanía  {self.puntos}",(990,52),round(54*pop),ui.CREMA,ui.TINTA,centro=True,grosor=4)
   if self.MOSTRAR_RELOJ:texto_con_contorno(s,f"{int(self.tiempo//60)}:{int(self.tiempo%60):02}",(1780,55),38,ui.CREMA,ui.TINTA,centro=True,grosor=3)
-  texto_con_contorno(s,"Llega a la puerta 7",(42,96),32,ui.CREMA,ui.TINTA,grosor=3)
-  ui.barra(s,pygame.Rect(36,142,452,38),min(1,self.x/PUERTA_X),ui.AZUL)
+  bx=236 if self.acuarela else 36
+  texto_con_contorno(s,"Llega a la puerta 7",(bx+6,96),32,ui.CREMA,ui.TINTA,grosor=3)
+  ui.barra(s,pygame.Rect(bx,142,396 if self.acuarela else 452,38),min(1,self.x/PUERTA_X),ui.AZUL)
   # Meta de estrellas por ciudadanía, con hitos visibles.
   ui.barra(s,pygame.Rect(644,122,632,40),min(1,self.puntos/ESTRELLAS_CURRAM[-1]))
   for umbral in ESTRELLAS_CURRAM:
@@ -446,7 +494,9 @@ class CurramGramGo:
   # Botones inferiores: un sprite acuarela por acción.
   cy=self.CONTROLES_Y+41
   for k,(id_boton,_,_) in enumerate(ui.BOTONES):
-   img=ui.boton(id_boton);s.blit(img,img.get_rect(center=(210+k*300,cy)))
+   img=ui.boton(id_boton)
+   if self.acuarela:s.blit(img,img.get_rect(midbottom=(210+k*300,ALTO-4)))
+   else:s.blit(img,img.get_rect(center=(210+k*300,cy)))
   if self.evidencia:
    ui.aviso(s,"¡Corre al Policía!",(960,232),420,70,(225,143,57),36)
    ui.barra(s,pygame.Rect(810,282,300,30),self.persecucion/20,ui.ROJO)

@@ -26,7 +26,14 @@ class AnimacionCamiTest(unittest.TestCase):
    with Image.open(ROOT/'assets/curramgram'/f'{name}.png') as img:
     self.assertEqual(data['anchor'][1],img.height-1,name)
   juego=CurramGramGo()
-  self.assertEqual(juego.sprites['cami_idle'].get_height(),175)
-  self.assertTrue(all(juego.sprites[n].get_height()==175 for n in ('policia','hombre_gorra','turista_pasaporte','joven_llorando','senora_cava','bailarina_comparsa','tamborero')))
+  idle=juego.animacion.defs['idle']['frames'][0]
+  self.assertEqual(juego.sprites[idle].get_height(),175)
+  if not juego.acuarela:
+   self.assertTrue(all(juego.sprites[n].get_height()==175 for n in ('policia','hombre_gorra','turista_pasaporte','joven_llorando','senora_cava','bailarina_comparsa','tamborero')))
+  else:
+   # Arte acuarela: todos los cuadros de la animación existen y apoyan los pies en el piso (ancla abajo al centro).
+   for frames in (d['frames'] for d in juego.animacion.defs.values()):
+    for f in frames:
+     self.assertIn(f,juego.sprites,f)
 
 if __name__=='__main__':unittest.main()

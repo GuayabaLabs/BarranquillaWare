@@ -24,7 +24,7 @@ TINTA = (92, 58, 48)
 CREMA = (255, 247, 230)
 VERDE = (88, 178, 104)
 ROJO = (214, 82, 84)
-GRIS = (165, 160, 168)
+GRIS = (118, 112, 124)  # Pendiente (teñido sobre el círculo crema)
 AMARILLO = (242, 190, 64)
 AZUL = (82, 150, 210)
 
@@ -75,9 +75,24 @@ def tecla(etiqueta: str, diametro: int = 58, color: Tuple[int, int, int] = (150,
 def boton(id_boton: str, ancho: int = 270, alto: int = 88) -> pygame.Surface:
     """Sprite individual de un botón de la barra inferior (crema acuarela + tecla + texto)."""
     propio = sprite_opcional(f"boton_{id_boton}.png", "curramgram")
-    if propio is not None:
-        return _ajustar(propio, ancho, alto)
     _, letra, etiqueta = next(b for b in BOTONES if b[0] == id_boton)
+    if propio is not None:
+        # Píldora acuarela con icono (arte propio) + tecla en burbuja + texto debajo.
+        pill = _ajustar(propio, ancho - 20, alto)
+        alto_txt = int(alto * 0.42)
+        surf = pygame.Surface((ancho, pill.get_height() + alto_txt), pygame.SRCALPHA)
+        surf.blit(pill, pill.get_rect(midtop=(ancho // 2, 0)))
+        icono = tecla(letra, int(pill.get_height() * 0.52))
+        surf.blit(icono, icono.get_rect(center=(int(ancho * 0.16), pill.get_height() // 2)))
+        f = fuente(int(alto * 0.34))
+        txt, borde = f.render(etiqueta, True, CREMA), f.render(etiqueta, True, TINTA)
+        c = (ancho // 2, pill.get_height() + alto_txt // 2 - 2)
+        for dx in (-2, 0, 2):
+            for dy in (-2, 0, 2):
+                if dx or dy:
+                    surf.blit(borde, borde.get_rect(center=(c[0] + dx, c[1] + dy)))
+        surf.blit(txt, txt.get_rect(center=c))
+        return surf
     surf = pieza_interfaz("bannerUbicacion", ancho, alto).copy()
     icono = tecla(letra, int(alto * 0.7))
     surf.blit(icono, icono.get_rect(midleft=(int(alto * 0.22), alto // 2)))
@@ -152,11 +167,18 @@ def visor(s: pygame.Surface, centro, tam: int = 132) -> None:
 @lru_cache(maxsize=4)
 def capa_fondo(nombre: str, alto: int) -> Optional[pygame.Surface]:
     """Capa de fondo opcional (pared/piso) escalada al alto pedido, lista para repetirse."""
-    img = sprite_opcional(nombre, "curramgram")
-    if img is None:
+    # Los fondos se cargan tal cual (su blanco es cielo/luz, no fondo a quitar).
+    from microgames.redes_comun import RAIZ, cargar_imagen
+    if not (RAIZ / "assets" / "curramgram" / nombre).is_file():
         return None
+    img = cargar_imagen(nombre, carpeta="assets/curramgram", alpha=False)
     ancho = max(1, int(img.get_width() * alto / img.get_height()))
-    return pygame.transform.smoothscale(img, (ancho, alto))
+    img = pygame.transform.smoothscale(img, (ancho, alto))
+    # Copia + espejo: al repetirse, cada borde empalma consigo mismo y no se ve la costura.
+    doble = pygame.Surface((ancho * 2, alto))
+    doble.blit(img, (0, 0))
+    doble.blit(pygame.transform.flip(img, True, False), (ancho, 0))
+    return doble
 
 
 def repetir(s: pygame.Surface, capa: pygame.Surface, y: int, desplazamiento: float) -> None:

@@ -17,11 +17,15 @@ class CurramGramBucleTest(unittest.TestCase):
  def setUp(self):
   self.j=CurramGramGo();self.j.inicio=False
  def test_personajes_normalizados_y_piso(self):
-  self.assertEqual(self.j.sprites['cami_idle'].get_height(),ALTURA_PERSONAJE_PX)
+  # Cuadro quieto activo (acuarela si está importada, pixel art si no).
+  idle=self.j.animacion.defs['idle']['frames'][0]
+  self.assertEqual(self.j.sprites[idle].get_height(),ALTURA_PERSONAJE_PX)
+  from microgames.curramgram.juego import ALTURAS_ACUARELA
   for name in ('policia','hombre_gorra','turista_pasaporte','joven_llorando','senora_cava','bailarina_comparsa','tamborero'):
-   self.assertEqual(self.j.sprites[name].get_height(),ALTURA_PERSONAJE_PX,name)
+   esperado=ALTURAS_ACUARELA.get(name,ALTURA_PERSONAJE_PX) if self.j.acuarela else ALTURA_PERSONAJE_PX
+   self.assertEqual(self.j.sprites[name].get_height(),esperado,name)
   self.assertAlmostEqual(PISO/1080,.71,delta=.001)
-  self.assertAlmostEqual(self.j.sprites['cami_idle'].get_height()/1080,.162,delta=.001)
+  self.assertAlmostEqual(self.j.sprites[idle].get_height()/1080,.162,delta=.001)
  def test_inicio_bloquea_reloj_y_espacio_comienza(self):
   j=CurramGramGo();j.update(1,VectorTeclas(set()),(0,0));self.assertEqual(j.tiempo,120)
   j.keydown(pygame.K_SPACE);self.assertFalse(j.inicio)

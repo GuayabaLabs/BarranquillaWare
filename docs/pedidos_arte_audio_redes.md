@@ -4,6 +4,16 @@ Todo lo que falta para que los dos minijuegos queden a la altura de los demás. 
 para recibirlo**: basta con guardar cada archivo con el nombre exacto en la carpeta indicada y el juego lo
 usa solo (mientras falte, se ve el respaldo actual hecho por código).
 
+## Estado
+
+- ✅ **CurramGram, arte recibido e integrado**: pared, piso, visor, círculo, 6 botones, sello, logo, 6 props,
+  8 personajes y 8 poses de Cami (originales en `artifacts/arte_recibido/`). Se importaron con
+  `python tools/importar_arte_curramgram.py artifacts/arte_recibido` (quita el fondo blanco, separa las hojas y
+  descarta las etiquetas). Para cambiar una imagen: reemplazar el archivo numerado y volver a correr el comando.
+- ⏳ Pendiente: balanza de Emoji Catch (opcional: emojis rehechos), y **todo el audio** de los dos juegos.
+- Notas del arte recibido: Cami no tiene pose "agachada tomando foto" ni "empujón"; se reutiliza la pose agachada.
+  La hoja de Cami tiene los cuadros de caminar más pequeños que "quieta"; el código los iguala por altura.
+
 ## Reglas para generar las imágenes
 
 - Estilo: **acuarela pintada a mano**, colores cálidos del Caribe, contorno marrón oscuro suave
