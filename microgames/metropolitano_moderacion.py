@@ -10,6 +10,7 @@ from core.camera_gestures import CameraGestureInput
 
 
 class MetropolitanoModeracionMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
     """
     Nivel 3 — Estadio Metropolitano Roberto Meléndez
     Microjuego: ¡Modera la Barra Brava!

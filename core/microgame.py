@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict
 import pygame
 
 from core.state_machine import BaseState
@@ -17,6 +17,17 @@ class BaseMicrogame(BaseState):
     PHASE_INTRO = 0
     PHASE_PLAY = 1
     PHASE_OUTRO = 2
+
+    # Botones del mando que un microjuego quiere leer como teclas propias
+    # (índices estilo Xbox: 0=A, 1=B, 2=X, 3=Y). Lo consulta core.engine; Start/Back siguen pausando.
+    GAMEPAD_BUTTON_KEYS: Dict[int, int] = {}
+
+    # False en microjuegos que leen la cámara por su cuenta (posición, pellizco, golpe...):
+    # el motor no dibuja el lapicero ni consume gestos para no robarle la entrada al juego.
+    CAMERA_POINTER: bool = True
+
+    # Barra de tiempo acuarela: (centro_x, centro_y, ancho). None = abajo, centrada y ancha.
+    TIME_BAR_LAYOUT: Optional[tuple] = None
 
     def __init__(
         self,
@@ -571,7 +582,8 @@ class BaseMicrogame(BaseState):
                 import os
                 riel = self.assets.cargarSinFondo(os.path.join("Interfaz", "barraTiempoRiel.jpg"), 300)
                 riel = pygame.transform.smoothscale(riel, (int(riel.get_width() * 60 / riel.get_height()), 60))
-                self.rielBarra = self.estirarCentro(riel, 1120)
+                ancho_riel = self.TIME_BAR_LAYOUT[2] if self.TIME_BAR_LAYOUT else 1120
+                self.rielBarra = self.estirarCentro(riel, ancho_riel)
                 relleno = self.assets.cargarSinFondo(os.path.join("Interfaz", "barraTiempoRelleno.jpg"), 300)
                 relleno = pygame.transform.smoothscale(relleno, (int(relleno.get_width() * 40 / relleno.get_height()), 40))
                 self.rellenosBarra = {
@@ -586,7 +598,8 @@ class BaseMicrogame(BaseState):
         if not self.barraLista:
             return False
 
-        riel = self.rielBarra.get_rect(center=(self.screen_w // 2, self.screen_h - 44))
+        centro = (self.TIME_BAR_LAYOUT[0], self.TIME_BAR_LAYOUT[1]) if self.TIME_BAR_LAYOUT else (self.screen_w // 2, self.screen_h - 44)
+        riel = self.rielBarra.get_rect(center=centro)
         surface.blit(self.rielBarra, riel)
 
         ratio = max(0.0, min(1.0, self.time_left / self.time_limit))

@@ -7,6 +7,7 @@ from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
 from core.settings import SettingsManager, compute_social_metrics
 from ui.button import UIButton
+from ui.focus_nav import FocusNavigator
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
 from scenes.character_select import CharacterSelectScene
@@ -148,6 +149,8 @@ class ModeSelectScene(BaseState):
             self.btn_arcade,
             self.btn_libre
         ]
+        # Teclado / mando: foco inicial en "Modo Historia"
+        self.focus_nav = FocusNavigator(lambda: self.buttons, default_index=3)
 
     def _init_story_save_modal(self) -> None:
         """Inicializa el modal acuarela de 'Continuar Partida' vs 'Nueva Partida' para el Modo Historia."""
@@ -406,6 +409,9 @@ class ModeSelectScene(BaseState):
         # Tecla ESCAPE o BACKSPACE para volver al menú principal
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
             self._on_back_clicked()
+            return
+
+        if self.focus_nav.handle_event(event):
             return
 
         # Interacción Paloma

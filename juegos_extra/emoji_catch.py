@@ -35,6 +35,10 @@ def tiene_tecla(teclas, codigo):
 
 
 class EmojiCatch:
+    # Ajustes para cuando el juego corre dentro de BarranquillaWare (microgames/emoji_catch.py).
+    MOSTRAR_BARRA_TIEMPO_PROPIA = True
+    TEXTO_REINICIO = "R para reiniciar"
+
     def __init__(self):
         revisar_recursos("emoji_catch")
         self.fondo = cargar_imagen("fondo_concentracion_microjuego.png", (ANCHO, ALTO), alpha=False)
@@ -379,14 +383,15 @@ class EmojiCatch:
         if self.salud_floaters:
             f=self.salud_floaters[-1];alpha=max(0,min(255,round(255*f["t"])));lab=fuente(30,True).render(f["texto"],True,self.salud_flash_color)
             lab.set_alpha(alpha);s.blit(lab,(x+14+relleno,y-12-round((1-f["t"])*28)))
-        pygame.draw.rect(s,(76,74,99),(x+6,846,w-12,10),border_radius=5)
-        pygame.draw.rect(s,(90,155,210),(x+6,846,round((w-12)*self.tiempo/DURACION),10),border_radius=5)
+        if self.MOSTRAR_BARRA_TIEMPO_PROPIA:
+            pygame.draw.rect(s,(76,74,99),(x+6,846,w-12,10),border_radius=5)
+            pygame.draw.rect(s,(90,155,210),(x+6,846,round((w-12)*self.tiempo/DURACION),10),border_radius=5)
         if self.animo_activo>0:texto(s,f"ÁNIMO A TOPE · PUNTOS x2 · {self.animo_activo:.0f}s",(960,817),25,(54,139,82),True)
         self._draw_efectos(s)
         if self.pausa:self.rects=menu_pausa(s,["Continuar","Reiniciar","Salir"],self.sel,cursor=mouse)
         if self.final:
             balance="equilibrado" if abs(self.negatividad-self.positividad)<=UMBRAL_BALANCE else "desbalanceado"
-            pantalla_final(s,"PERFIL DE ÁNIMO · "+self.final,[f"Puntaje: {self.puntos}  |  Mejor racha: {self.mejor_racha}",f"Positividad {self.positividad}%  ·  Negatividad {self.negatividad}%  ·  {balance}",f"Salud mental restante: {self.salud}%", f"{self.estrellas} ESTRELLAS · salud final {self.salud}%"])
+            pantalla_final(s,"PERFIL DE ÁNIMO · "+self.final,[f"Puntaje: {self.puntos}  |  Mejor racha: {self.mejor_racha}",f"Positividad {self.positividad}%  ·  Negatividad {self.negatividad}%  ·  {balance}",f"Salud mental restante: {self.salud}%", f"{self.estrellas} ESTRELLAS · salud final {self.salud}%"],self.TEXTO_REINICIO)
 
     def run(self):
         ventana=VentanaVirtual("Emoji Catch: Balance!");clock=pygame.time.Clock();running=True

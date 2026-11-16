@@ -18,6 +18,8 @@ from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
 from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
 from microgames.troja_baile import TrojaBaileMicrogame
+from microgames.curramgram_go import CurramGramGoMicrogame
+from microgames.emoji_catch import EmojiCatchMicrogame
 
 class FreePlayScene(BaseState):
     """
@@ -115,6 +117,22 @@ class FreePlayScene(BaseState):
                 "desc": "Baila salsa brava equilibrando el vaso helado en la cabeza.",
                 "theme_color": (235, 60, 95),
                 "cls": TrojaBaileMicrogame
+            },
+            {
+                "id": "curramgram_go",
+                "title": "CURRAMGRAM GO!",
+                "district": "AEROPUERTO CORTISSOZ",
+                "desc": "Llega a la puerta 7 sin exponer a nadie: verifica antes de publicar.",
+                "theme_color": (85, 170, 215),
+                "cls": CurramGramGoMicrogame
+            },
+            {
+                "id": "emoji_catch",
+                "title": "EMOJI CATCH: BALANCE!",
+                "district": "TU FEED · SALUD MENTAL",
+                "desc": "Bloquea a los haters y atrapa lo positivo sin perder el balance.",
+                "theme_color": (150, 95, 205),
+                "cls": EmojiCatchMicrogame
             }
         ]
 
@@ -126,17 +144,21 @@ class FreePlayScene(BaseState):
             on_click=self._on_back_clicked
         )
 
-        # Generar rectángulos de las tarjetas (Cuadrícula 4x2)
+        # Generar rectángulos de las tarjetas (Cuadrícula 5x2)
         self.card_rects = []
-        cw, ch = 390, 250
-        gap_x, gap_y = 28, 24
-        grid_w = 4 * cw + 3 * gap_x
+        self.grid_cols = 5
+        cw, ch = 344, 250
+        gap_x, gap_y = 20, 24
+        grid_w = self.grid_cols * cw + (self.grid_cols - 1) * gap_x
         start_x = (self.screen_w - grid_w) // 2
         start_y = 190
 
+        # Foco de teclado / mando: índice de tarjeta (len(games_data) = tarjeta del jefe)
+        self.focus_idx: Optional[int] = None
+
         for idx, g in enumerate(self.games_data):
-            col = idx % 4
-            row = idx // 4
+            col = idx % self.grid_cols
+            row = idx // self.grid_cols
             rx = start_x + col * (cw + gap_x)
             ry = start_y + row * (ch + gap_y)
             self.card_rects.append(pygame.Rect(rx, ry, cw, ch))
@@ -162,6 +184,11 @@ class FreePlayScene(BaseState):
         if self.btn_back.handle_event(event):
             return
 
+        if event.type == pygame.KEYDOWN and self._handle_focus_key(event.key):
+            return
+        if event.type == pygame.MOUSEMOTION:
+            self.focus_idx = None  # El mouse retoma el control del resaltado
+
         # Click sobre alguna tarjeta para jugar ese minijuego
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if hasattr(self, "boss_card_rect") and self.boss_card_rect.collidepoint(event.pos):
@@ -172,6 +199,50 @@ class FreePlayScene(BaseState):
                 if rect.collidepoint(event.pos):
                     self._launch_game(idx)
                     return
+
+    def _handle_focus_key(self, key: int) -> bool:
+        """Flechas/WASD (y D-pad/stick) recorren la cuadrícula; Enter/Espacio/A juegan."""
+        n = len(self.games_data)
+        boss = n
+        moves = {
+            pygame.K_LEFT: (-1, 0), pygame.K_a: (-1, 0),
+            pygame.K_RIGHT: (1, 0), pygame.K_d: (1, 0),
+            pygame.K_UP: (0, -1), pygame.K_w: (0, -1),
+            pygame.K_DOWN: (0, 1), pygame.K_s: (0, 1),
+        }
+        if key in moves:
+            if self.focus_idx is None:
+                self.focus_idx = 0
+            else:
+                dx, dy = moves[key]
+                cols = self.grid_cols
+                if self.focus_idx == boss:
+                    if dy < 0:
+                        self.focus_idx = (n - 1) // cols * cols
+                else:
+                    col, row = self.focus_idx % cols, self.focus_idx // cols
+                    if dx:
+                        row_start = row * cols
+                        row_len = min(cols, n - row_start)
+                        self.focus_idx = row_start + (col + dx) % row_len
+                    elif dy:
+                        target = self.focus_idx + dy * cols
+                        if 0 <= target < n:
+                            self.focus_idx = target
+                        elif dy > 0:
+                            self.focus_idx = boss
+            if hasattr(self.audio, "play_hover"):
+                self.audio.play_hover()
+            return True
+        if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+            if self.focus_idx is None:
+                self.focus_idx = 0
+            elif self.focus_idx == boss:
+                self._launch_boss_stage()
+            else:
+                self._launch_game(self.focus_idx)
+            return True
+        return False
 
     def _launch_boss_stage(self) -> None:
         self.audio.play_click()
@@ -196,6 +267,28 @@ class FreePlayScene(BaseState):
     def _on_game_complete(self, won: bool) -> None:
         if hasattr(self, "state_machine") and self.state_machine:
             self.state_machine.change_state(self)
+
+    @staticmethod
+    def _fit_text(surf: pygame.Surface, max_w: int) -> pygame.Surface:
+        if surf.get_width() <= max_w:
+            return surf
+        h = max(1, int(surf.get_height() * max_w / surf.get_width()))
+        return pygame.transform.smoothscale(surf, (max_w, h))
+
+    @staticmethod
+    def _wrap_text(text: str, font: pygame.font.Font, max_w: int) -> List[str]:
+        lines: List[str] = []
+        current = ""
+        for word in text.split():
+            trial = f"{current} {word}".strip()
+            if font.size(trial)[0] <= max_w or not current:
+                current = trial
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines
 
     def update(self, dt: float) -> None:
         self.timer += dt
@@ -229,7 +322,7 @@ class FreePlayScene(BaseState):
         completed_games = progress.get("completed_microgames", [])
 
         for idx, (rect, g_data) in enumerate(zip(self.card_rects, self.games_data)):
-            is_hover = rect.collidepoint(mouse_pos)
+            is_hover = rect.collidepoint(mouse_pos) if self.focus_idx is None else idx == self.focus_idx
             is_cleared = g_data["id"] in completed_games
 
             # Tarjeta interactiva con hover pop
@@ -248,24 +341,27 @@ class FreePlayScene(BaseState):
             card_surf.blit(txt_dist, (24, 25))
 
             # Título del minijuego
-            txt_t = self.font_card_title.render(g_data["title"], True, (255, 255, 255))
+            max_text_w = rect.width - 48
+            txt_t = self._fit_text(self.font_card_title.render(g_data["title"], True, (255, 255, 255)), max_text_w)
             card_surf.blit(txt_t, (24, 55))
 
-            # Descripción
-            txt_d = self.font_card_desc.render(g_data["desc"], True, (190, 205, 225))
-            card_surf.blit(txt_d, (24, 98))
+            # Descripción (hasta 2 líneas)
+            for line_i, line in enumerate(self._wrap_text(g_data["desc"], self.font_card_desc, max_text_w)[:2]):
+                txt_d = self.font_card_desc.render(line, True, (190, 205, 225))
+                card_surf.blit(txt_d, (24, 98 + line_i * 20))
 
             # Badge de Estado / Despejado con Estrella
-            badge_surf = pygame.Surface((220, 38), pygame.SRCALPHA)
+            badge_w = min(220, rect.width - 140 - 24 * 2 - 12)
+            badge_surf = pygame.Surface((badge_w, 38), pygame.SRCALPHA)
             if is_cleared:
-                pygame.draw.rect(badge_surf, (35, 125, 60, 220), (0, 0, 220, 38), border_radius=12)
-                pygame.draw.rect(badge_surf, (110, 245, 150), (0, 0, 220, 38), width=2, border_radius=12)
+                pygame.draw.rect(badge_surf, (35, 125, 60, 220), (0, 0, badge_w, 38), border_radius=12)
+                pygame.draw.rect(badge_surf, (110, 245, 150), (0, 0, badge_w, 38), width=2, border_radius=12)
                 lbl_badge = self.font_card_district.render("★ COMPLETADO", True, (220, 255, 230))
             else:
-                pygame.draw.rect(badge_surf, (50, 60, 80, 180), (0, 0, 220, 38), border_radius=12)
+                pygame.draw.rect(badge_surf, (50, 60, 80, 180), (0, 0, badge_w, 38), border_radius=12)
                 lbl_badge = self.font_card_district.render("DISPONIBLE", True, (180, 195, 215))
 
-            badge_surf.blit(lbl_badge, lbl_badge.get_rect(center=(110, 19)))
+            badge_surf.blit(lbl_badge, lbl_badge.get_rect(center=(badge_w // 2, 19)))
             card_surf.blit(badge_surf, (24, 190))
 
             # Botón JUGAR a la derecha
@@ -282,7 +378,11 @@ class FreePlayScene(BaseState):
 
         # 4. Renderizar Tarjeta Dorada de la Etapa Jefe (Boss Stage)
         if hasattr(self, "boss_card_rect"):
-            b_hover = self.boss_card_rect.collidepoint(mouse_pos)
+            b_hover = (
+                self.boss_card_rect.collidepoint(mouse_pos)
+                if self.focus_idx is None
+                else self.focus_idx == len(self.games_data)
+            )
             b_surf = pygame.Surface((self.boss_card_rect.width, self.boss_card_rect.height), pygame.SRCALPHA)
             b_bg = (55, 42, 22, 245) if not b_hover else (75, 58, 28, 255)
             b_border = (255, 215, 45) if b_hover else (205, 160, 30)

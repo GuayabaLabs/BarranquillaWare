@@ -16,17 +16,22 @@ PUERTA_X=MUNDO-115
 ZONAS=((0,1450,"ZONA 1"),(1450,3650,"ZONA 2"),(3650,MUNDO,"ZONA 3"))
 PUNTOS=(520,1420,2320,3220,4120,5020)
 ESTRELLAS_CURRAM=(150,250,350)
+# Cada caso es un fenómeno real de redes sociales y la decisión responsable frente a él.
 CASOS=[
- ("Viajero","Confirma antes de acusar."),
- ("Turista","Protege datos privados."),
- ("Joven","Respeta su privacidad."),
- ("Señora","Verifica antes de publicar."),
- ("Comparsa","Comparte con respeto."),
- ("Tamborero","Busca evidencia y avisa a Policía."),
+ ("Viajero","Desinformación","Confirma antes de acusar."),
+ ("Turista","Sobreexposición de datos","Protege datos privados."),
+ ("Joven","Exposición sin consentimiento","Respeta su privacidad."),
+ ("Señora","Noticia falsa viral","Verifica antes de publicar."),
+ ("Comparsa","Contenido viral","Comparte con respeto."),
+ ("Tamborero","Escrache digital","Busca evidencia y avisa a Policía."),
 ]
 NPC_SPRITES=("hombre_gorra","turista_pasaporte","joven_llorando","senora_cava","bailarina_comparsa","tamborero")
 
 class CurramGramGo:
+ # Ajustes para cuando el juego corre dentro de BarranquillaWare (microgames/curramgram_go.py).
+ CONTROLES_Y=958
+ MOSTRAR_RELOJ=True
+ TEXTO_REINICIO="R PARA REINICIAR"
  def __init__(self):
   revisar_recursos("curramgram_go")
   self.sprites={}
@@ -427,7 +432,7 @@ class CurramGramGo:
   score=fuente(round(54*pop),True).render(f"CIUDADANÍA  {self.puntos}",True,(255,248,226))
   rect=score.get_rect(center=(990,54))
   texto_con_contorno(s,f"CIUDADANÍA  {self.puntos}",(990,54),round(54*pop),(255,248,226),centro=True,grosor=4,negrita=True)
-  texto_con_contorno(s,f"{int(self.tiempo//60)}:{int(self.tiempo%60):02}",(1780,55),38,(255,248,226),centro=True,grosor=3,negrita=True)
+  if self.MOSTRAR_RELOJ:texto_con_contorno(s,f"{int(self.tiempo//60)}:{int(self.tiempo%60):02}",(1780,55),38,(255,248,226),centro=True,grosor=3,negrita=True)
   texto_con_contorno(s,"LLEGA A LA PUERTA 7",(42,112),32,(255,248,226),grosor=3,negrita=True)
   pygame.draw.rect(s,(57,48,65),(42,155,440,20),border_radius=8)
   pygame.draw.rect(s,(83,167,200),(42,155,round(440*min(1,self.x/PUERTA_X)),20),border_radius=8)
@@ -440,12 +445,13 @@ class CurramGramGo:
    status=self.casos[i];color=(145,143,145) if status is None else (208,73,82) if str(status).startswith("ERROR:") else (72,170,112)
    cx=1400+i*78;pygame.draw.circle(s,color,(cx,148),20);texto(s,str(i+1),(cx,148),22,(255,255,255),True,True)
   # Controles breves con los iconos de las teclas de la hoja.
-  pygame.draw.rect(s,(52,43,51),(40,958,ANCHO-80,82),border_radius=17);pygame.draw.rect(s,(181,142,111),(40,958,ANCHO-80,82),3,border_radius=17)
+  cy=self.CONTROLES_Y
+  pygame.draw.rect(s,(52,43,51),(40,cy,ANCHO-80,82),border_radius=17);pygame.draw.rect(s,(181,142,111),(40,cy,ANCHO-80,82),3,border_radius=17)
   grupos=[("tecla_a","A/D"),("tecla_space","SALTAR"),("tecla_s","ESCONDER"),("tecla_e","AVISAR"),("tecla_camara","FOTO"),("tecla_p","PUBLICAR")];centros=(330,585,840,1095,1350,1605)
   for (key,label),cx in zip(grupos,centros):
    img=self.sprites.get(key)
-   if img:s.blit(img,img.get_rect(center=(cx,988)))
-   texto_con_contorno(s,label,(cx,1027),24,(255,246,228),centro=True,grosor=2,negrita=True)
+   if img:s.blit(img,img.get_rect(center=(cx,cy+30)))
+   texto_con_contorno(s,label,(cx,cy+69),24,(255,246,228),centro=True,grosor=2,negrita=True)
   if self.evidencia:
    texto_con_contorno(s,"¡CORRE AL POLICÍA!",(960,225),42,(255,246,222),centro=True,grosor=4,negrita=True)
    pygame.draw.polygon(s,(255,225,120),[(1000,265),(982,298),(1018,298)])
@@ -461,9 +467,9 @@ class CurramGramGo:
   velo=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA);velo.fill((22,19,32,210));s.blit(velo,(0,0))
   panel(s,pygame.Rect(350,230,1220,610),(37,31,48),(239,222,190),26,5)
   texto_con_contorno(s,"CAMINA · JUNTA SELLOS · RESUELVE",(960,320),52,(255,247,224),centro=True,grosor=4,negrita=True)
-  lineas=("A / D: LLEGA A LA PUERTA 7", "JUNTA SELLOS. AYUDA. ESQUIVA.", "NO PUBLIQUES CHISMES NI DATOS PRIVADOS.")
+  lineas=("A / D: LLEGA A LA PUERTA 7", "CADA PERSONA ES UN CASO DE REDES SOCIALES:", "DESINFORMACIÓN, PRIVACIDAD, CONTENIDO VIRAL.", "NO PUBLIQUES CHISMES NI DATOS PRIVADOS.")
   for i,linea in enumerate(lineas):texto_con_contorno(s,linea,(960,420+i*78),36,(255,255,255),centro=True,grosor=3,negrita=True)
-  texto_con_contorno(s,"ESPACIO PARA EMPEZAR",(960,750),35,(255,225,126),centro=True,grosor=3,negrita=True)
+  texto_con_contorno(s,"ESPACIO PARA EMPEZAR",(960,780),35,(255,225,126),centro=True,grosor=3,negrita=True)
 
  def _draw_guia(self,s):
   key=label=None
@@ -485,10 +491,10 @@ class CurramGramGo:
  def _draw_final(self,s):
   estrellas=sum(self.puntos>=umbral for umbral in ESTRELLAS_CURRAM) if self.victoria else 0
   lineas=[f"CIUDADANÍA {self.puntos} · {estrellas} ESTRELLAS"]
-  for i,(nombre,leccion) in enumerate(CASOS):
+  for i,(nombre,fenomeno,leccion) in enumerate(CASOS):
    estado="Pendiente" if self.casos[i] is None else "ERROR" if str(self.casos[i]).startswith("ERROR:") else "OK"
-   lineas.append(f"{estado} · {nombre}: {leccion}")
-  pantalla_final(s,"PERFIL CURRAMGRAM · "+str(self.final),lineas,"R PARA REINICIAR")
+   lineas.append(f"{estado} · {fenomeno} ({nombre}): {leccion}")
+  pantalla_final(s,"PERFIL CURRAMGRAM · "+str(self.final),lineas,self.TEXTO_REINICIO)
 
  def draw(self,s,mouse=(960,540)):
   self._dibujar_fondo(s);self._draw_prop_personajes(s);self._draw_carrito(s);self._draw_player(s)

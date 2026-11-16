@@ -2,6 +2,7 @@ import math
 import random
 from typing import Optional, Callable, List
 import pygame
+from core import input_state
 
 from core.microgame import BaseMicrogame
 
@@ -207,7 +208,7 @@ class BatallaFloresBossMicrogame(BaseMicrogame):
         subphase = self._get_current_boss_subphase()
 
         # 1. Movimiento del Jugador
-        keys = pygame.key.get_pressed()
+        keys = input_state.get_pressed()
         move_dir = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             move_dir -= 1.0

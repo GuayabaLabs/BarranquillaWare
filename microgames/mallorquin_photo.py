@@ -2,6 +2,7 @@ import math
 import random
 from typing import Optional, Callable
 import pygame
+from core import input_state
 
 from core.microgame import BaseMicrogame
 
@@ -175,7 +176,7 @@ class MallorquinPhotoMicrogame(BaseMicrogame):
     def update_game(self, dt: float) -> None:
         if not self.photo_taken:
             # Control suave por teclado si no se usa mouse
-            keys = pygame.key.get_pressed()
+            keys = input_state.get_pressed()
             speed = 900.0
             if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                 self.reticle_x = max(100.0, self.reticle_x - speed * dt)

@@ -13,6 +13,7 @@ from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
 from core.camera import Camera2D
 from ui.button import UIButton
+from ui.focus_nav import FocusNavigator
 from ui.social_hud import SocialHUD
 from ui.side_drawer import SideNavDrawer
 from tools.map_dev_tool import MapDevTool, get_bezier_points
@@ -85,6 +86,14 @@ class StoryMapScene(BaseState):
     _CACHED_WORLD_MAP: Optional[pygame.Surface] = None
     _CACHED_BASE_WORLD_MAP: Optional[pygame.Surface] = None
     ENTRY_PROXIMITY_RADIUS: float = 120.0
+    # Nodo amarillo de entrada de cada nivel jugable (ids de config/map_poi_layout.json).
+    POI_ENTRY_NODES: Dict[str, int] = {
+        "uninorte": 71,
+        "buenavista": 76,
+        "metropolitano": 55,
+        "aeropuerto": 35,
+        "malecon": 63,
+    }
     def __init__(
         self,
         character_id: str = "westcol",
@@ -1864,6 +1873,11 @@ class StoryMapScene(BaseState):
         poi_info = self.poi_registry.get(poi_key)
         if not poi_info or not nodes:
             return None
+        # Nodo amarillo oficial fijado a mano: evita que la heurística de distancia
+        # escoja un nodo vecino si se mueve un edificio o la red vial.
+        fixed_nid = self.POI_ENTRY_NODES.get(poi_key)
+        if fixed_nid is not None and fixed_nid in node_map:
+            return fixed_nid
         poi_rect = poi_info["rect"]
         center = (poi_rect.centerx, poi_rect.centery)
 
@@ -1904,10 +1918,13 @@ class StoryMapScene(BaseState):
         stop_node_map = self._get_playable_stop_node_map()
         _, _, node_map, _, _ = self._get_street_graph()
 
-        if not self.player_is_moving and self.player_node_id in stop_node_map:
+        if not self.player_is_moving:
+            # Detenido: solo el nodo amarillo oficial da acceso; un nodo vecino cercano
+            # (p. ej. 49/51 en la glorieta del Metropolitano) nunca abre el nivel.
             nid = self.player_node_id
-            if nid in node_map:
+            if nid in stop_node_map and nid in node_map:
                 return stop_node_map[nid], nid, "parked"
+            return None, None, ""
 
         best_poi: Optional[str] = None
         best_nid: Optional[int] = None
@@ -2232,6 +2249,10 @@ class StoryMapScene(BaseState):
 
         # Interacción con el modal de Victoria del Carnaval
         if self.show_victory_modal:
+            if not hasattr(self, "_victory_focus"):
+                self._victory_focus = FocusNavigator(lambda: [self.btn_vic_explore, self.btn_vic_menu])
+            if self._victory_focus.handle_event(event):
+                return
             if self.btn_vic_explore.handle_event(event):
                 return
             if self.btn_vic_menu.handle_event(event):
@@ -2245,6 +2266,10 @@ class StoryMapScene(BaseState):
         if self.quest_card_open:
             if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_m):
                 self._close_quest_card()
+                return
+            # Teclado / mando: Enter, Espacio o A juegan el nivel directamente.
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.btn_quest_play.activate()
                 return
             consumed_play = self.btn_quest_play.handle_event(event)
             consumed_close = self.btn_quest_close.handle_event(event)
@@ -2293,6 +2318,13 @@ class StoryMapScene(BaseState):
             # Click fuera del Drawer para cerrar
             if event.type == pygame.MOUSEBUTTONDOWN and event.pos[0] < drawer_x:
                 self._toggle_menu()
+                return
+
+            # Teclado / mando: recorrer los botones del Drawer
+            if event.type == pygame.KEYDOWN:
+                if not hasattr(self, "_drawer_focus"):
+                    self._drawer_focus = FocusNavigator(lambda: self.drawer_buttons)
+                self._drawer_focus.handle_event(event)
                 return
 
             # Delegar eventos a los botones del Drawer con offset de coordenadas

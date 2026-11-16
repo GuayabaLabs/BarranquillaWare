@@ -18,6 +18,7 @@ from microgames.uninorte_concentrate.entities import (
 
 
 class UninorteConcentrateMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
     """
     Microjuego «¡Concéntrate, llave!» — Nivel 1: Uninorte
     - Duración: 25 segundos.

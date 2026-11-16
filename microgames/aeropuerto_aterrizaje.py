@@ -2,6 +2,7 @@ import math
 import random
 from typing import Optional, Callable
 import pygame
+from core import input_state
 
 from core.microgame import BaseMicrogame
 
@@ -77,7 +78,7 @@ class AeropuertoAterrizajeMicrogame(BaseMicrogame):
     def update_game(self, dt: float) -> None:
         if not self.landed:
             # Control por teclado suave
-            keys = pygame.key.get_pressed()
+            keys = input_state.get_pressed()
             speed = 880.0
             if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                 self.plane_x -= speed * dt

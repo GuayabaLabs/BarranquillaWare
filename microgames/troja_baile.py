@@ -2,6 +2,7 @@ import math
 import random
 from typing import Optional, Callable
 import pygame
+from core import input_state
 
 from core.microgame import BaseMicrogame
 
@@ -97,7 +98,7 @@ class TrojaBaileMicrogame(BaseMicrogame):
             self._sfx_cooldown = max(0.0, self._sfx_cooldown - dt)
 
         # 1. Entrada continua por teclado o mouse
-        keys = pygame.key.get_pressed()
+        keys = input_state.get_pressed()
         correction = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             correction -= self.push_power * dt
