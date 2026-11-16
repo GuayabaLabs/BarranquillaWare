@@ -146,7 +146,7 @@ class StoryMapUI:
         txt_vt = font_v_title.render("★ ¡ORGULLO DE CURRAMBA! ★", True, (255, 225, 80))
         vic_surf.blit(txt_vt, txt_vt.get_rect(center=(vw // 2, 70)))
 
-        txt_vs = font_v_sub.render("¡COMPLETASTE LOS 4 NIVELES DE LA HISTORIA!", True, (255, 255, 255))
+        txt_vs = font_v_sub.render("¡COMPLETASTE LOS 5 NIVELES DE LA HISTORIA!", True, (255, 255, 255))
         vic_surf.blit(txt_vs, txt_vs.get_rect(center=(vw // 2, 135)))
 
         badge_w, badge_h = 460, 48

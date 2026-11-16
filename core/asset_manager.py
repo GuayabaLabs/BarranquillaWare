@@ -109,6 +109,24 @@ def achicar(img, lado):
     return pygame.transform.smoothscale(img, (round(img.get_width() * esc), round(img.get_height() * esc)))
 
 
+def bordeSuave(imagen, color, grosor=2):
+    import math
+    ancho, alto = imagen.get_size()
+    silueta = imagen.copy()
+    silueta.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGBA_MULT)
+    silueta.fill((*color, 0), special_flags=pygame.BLEND_RGBA_ADD)
+    margen = grosor + 2
+    lienzo = pygame.Surface((ancho + margen * 2, alto + margen * 2), pygame.SRCALPHA)
+    for anillo in (grosor, grosor * 0.5):
+        for grados in range(0, 360, 20):
+            dx = round(math.cos(math.radians(grados)) * anillo)
+            dy = round(math.sin(math.radians(grados)) * anillo)
+            lienzo.blit(silueta, (margen + dx, margen + dy))
+    lienzo = pygame.transform.box_blur(lienzo, 1)
+    lienzo.blit(imagen, (margen, margen))
+    return lienzo
+
+
 def quitarBlanco(foto, semillasExtra=()):
     # Borra el fondo blanco conectado a los 4 bordes exteriores (y semillasExtra);
     # si ya trae transparencia, solo se recorta.

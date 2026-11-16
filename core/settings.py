@@ -244,6 +244,7 @@ class SettingsManager:
             ("buenavista", "C.C. Buenavista", ("buenavista_trend",)),
             ("metropolitano", "Estadio Metropolitano", ("metropolitano_moderacion",)),
             ("aeropuerto", "Aeropuerto Cortissoz", ("punch_alert",)),
+            ("aleta", "Aleta del Tiburón", ("fritanga_84",)),
         ]
         levels_cleared = 0
         next_district = "¡Aventura Completada!"

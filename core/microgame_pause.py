@@ -262,9 +262,10 @@ class MicrogamePauseState(BaseState):
         try:
             import os
             ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), 660)
-            self.ventanaPausa = pygame.transform.smoothscale(ventana, (660, 1080))
+            self.ventanaPausa = pygame.transform.smoothscale_by(ventana, 1080 / float(ventana.get_height()))
             # El papel de la ventana va del 18% al 83% del ancho; su centro queda un poco a la derecha
-            self.centroPapel = 960 - 330 + int(660 * 0.508)
+            anchoVentana = self.ventanaPausa.get_width()
+            self.centroPapel = 960 - anchoVentana // 2 + int(anchoVentana * 0.508)
             self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 300)
             rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 300)
             # El rojo crece un poquito para que se note cuál está elegido
@@ -286,7 +287,7 @@ class MicrogamePauseState(BaseState):
         alto = self.botonMorado.get_height()
         separacion = 10
         total = len(self.items) * alto + (len(self.items) - 1) * separacion
-        centro_y = 584 if self.save_callback else 564
+        centro_y = 600 if self.save_callback else 590
         arriba = centro_y - total // 2
         cajas = []
         for i in range(len(self.items)):
@@ -320,8 +321,12 @@ class MicrogamePauseState(BaseState):
         ventana = self.ventanaPausa.get_rect(center=(960, 540))
         surface.blit(self.ventanaPausa, ventana)
 
+        cajas = self.cajasBotones()
+        primerBoton = cajas[0].top if cajas else ventana.top + 400
+        ultimoBoton = cajas[-1].bottom if cajas else ventana.top + 760
+        espacioEstado = 40 if self.save_callback else 0
         titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (110, 62, 150), (255, 250, 238))
-        surface.blit(titulo, titulo.get_rect(center=(ventana.left + int(ventana.width * 0.56), ventana.top + 205)))
+        surface.blit(titulo, titulo.get_rect(midbottom=(self.centroPapel, primerBoton - 44 - espacioEstado)))
 
         if self.save_callback:
             if self.save_feedback_timer > 0.0:
@@ -331,9 +336,9 @@ class MicrogamePauseState(BaseState):
                 estado_txt = "Auto-guardado activo tras cada misión"
                 estado_col = (116, 76, 48)
             estado_surf = self.fuenteEstadoPausa.render(estado_txt, True, estado_col)
-            surface.blit(estado_surf, estado_surf.get_rect(center=(self.centroPapel + 16, ventana.top + 266)))
+            surface.blit(estado_surf, estado_surf.get_rect(center=(self.centroPapel, primerBoton - 26)))
 
-        for i, caja in enumerate(self.cajasBotones()):
+        for i, caja in enumerate(cajas):
             elegido = i == self.selected
             boton = self.botonRojo if elegido else self.botonMorado
             surface.blit(boton, boton.get_rect(center=caja.center))
@@ -343,8 +348,8 @@ class MicrogamePauseState(BaseState):
             texto = self.textoConContorno(self.fuenteBotonPausa, etiqueta, (255, 248, 236), contorno)
             surface.blit(texto, texto.get_rect(center=(caja.centerx, caja.centery - 3)))
 
-        # Ayuda corta abajo a la izquierda del papel, donde no hay flores
+        # Ayuda corta debajo de los botones, centrada en el papel
         for i, linea in enumerate(("Enter para aceptar", "Esc para seguir")):
             ayuda = self.fuenteAyudaPausa.render(linea, True, (126, 90, 62))
-            surface.blit(ayuda, (ventana.left + int(ventana.width * 0.21), ventana.top + 856 + i * 28))
+            surface.blit(ayuda, ayuda.get_rect(midtop=(self.centroPapel, max(ventana.top + 790, ultimoBoton + 16) + i * 30)))
         return True

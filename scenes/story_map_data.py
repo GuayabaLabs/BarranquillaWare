@@ -8,9 +8,10 @@ from microgames.uninorte_concentrate import UninorteConcentrateMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
+from microgames.fritanga_84 import Fritanga84Microgame
 
-# Progresión de los 4 Niveles Principales del Modo Historia
-STORY_CAMPAIGN_ORDER = ["uninorte", "buenavista", "metropolitano", "aeropuerto"]
+# Progresión de los 5 Niveles Principales del Modo Historia
+STORY_CAMPAIGN_ORDER = ["uninorte", "buenavista", "metropolitano", "aeropuerto", "aleta"]
 STORY_SECRET_POIS = ["malecon"]
 STORY_PLAYABLE_POIS = STORY_CAMPAIGN_ORDER + STORY_SECRET_POIS
 
@@ -53,6 +54,14 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
             "cls": PunchAlertMicrogame,
             "difficulty": 4,
         }
+    ],
+    "aleta": [
+        {
+            "id": "fritanga_84",
+            "title": "La fritanga de la Aleta",
+            "cls": Fritanga84Microgame,
+            "difficulty": 4,
+        }
     ]
 }
 
@@ -86,6 +95,13 @@ STORY_LEVEL_PREVIEW_META: Dict[str, Dict[str, Any]] = {
         "crop_anchor": "center",
         "callout_title": "AEROPUERTO CORTISSOZ",
     },
+    "aleta": {
+        "difficulty": 4,
+        "max_difficulty": 5,
+        "preview_asset": "Fritanga/fondoFritanga.jpg",
+        "crop_anchor": "center",
+        "callout_title": "ALETA DEL TIBURÓN",
+    },
     "malecon": {
         "difficulty": 4,
         "max_difficulty": 5,
@@ -103,17 +119,18 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
             [
                 "¡Cucu-rrucú! ¡Ajá mi llave, qué alegría verte llegar a Barranquilla con esta brisa sabrosa!",
                 "Por ahí andan todos pegados a la pantallita y con el acelere a mil por hora, ¿verdad?",
-                "Ven conmigo: vamos a recorrer juntos nuestros 4 rincones favoritos sin estrés ni pantallas."
+                "Ven conmigo: vamos a recorrer juntos nuestros 5 rincones favoritos sin estrés ni pantallas."
             ],
             [
-                "Primero pasaremos por Uninorte, luego el C.C. Buenavista, el Metropolitano y el Cortissoz.",
+                "Primero pasaremos por Uninorte, luego el C.C. Buenavista, el Metropolitano y el Cortissoz,",
+                "y cerramos con broche de oro en la Aleta del Tiburón.",
                 "Acércate a cada parada, respira hondo y charlamos antes de jugar. ¡Ponte las pilas!"
             ]
         ],
         "voice_clip_prefix": "paloma_welcome"
     },
     "uninorte": {
-        "level_badge": "NIVEL 1 DE 4 • CAMPUS UNINORTE",
+        "level_badge": "NIVEL 1 DE 5 • CAMPUS UNINORTE",
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
@@ -149,7 +166,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         "voice_clip_prefix": "paloma_uninorte"
     },
     "buenavista": {
-        "level_badge": "NIVEL 2 DE 4 • C.C. BUENAVISTA",
+        "level_badge": "NIVEL 2 DE 5 • C.C. BUENAVISTA",
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
@@ -178,7 +195,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         "voice_clip_prefix": "paloma_buenavista"
     },
     "metropolitano": {
-        "level_badge": "NIVEL 3 DE 4 • ESTADIO METROPOLITANO",
+        "level_badge": "NIVEL 3 DE 5 • ESTADIO METROPOLITANO",
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
@@ -195,7 +212,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
             [
                 "¡Golazo por la convivencia, mi vale! La tribuna y el chat brillan cuando hay respeto.",
                 "Detrás de cada usuario y cada camiseta hay un ser humano sintiendo como tú.",
-                "¡Última escala: volemos con rumbo al Aeropuerto Ernesto Cortissoz!"
+                "¡Próxima escala: volemos con rumbo al Aeropuerto Ernesto Cortissoz!"
             ]
         ],
         "post_lose_pages": [
@@ -207,11 +224,11 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         "voice_clip_prefix": "paloma_metropolitano"
     },
     "aeropuerto": {
-        "level_badge": "NIVEL 4 DE 4 • AEROPUERTO CORTISSOZ",
+        "level_badge": "NIVEL 4 DE 5 • AEROPUERTO CORTISSOZ",
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
-                "¡Última escala en la pista del Aeropuerto Ernesto Cortissoz!",
+                "¡Llegamos a la pista del Aeropuerto Ernesto Cortissoz!",
                 "Antes de despegar, el celular quiere llenarte la maleta de cadenas falsas, spam",
                 "y un montón de urgencias ficticias que solo te cargan de angustia.",
             ],
@@ -222,9 +239,9 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         ],
         "post_win_pages": [
             [
-                "¡Pista limpia, cielo despejado y corazón en paz! Completaste todo el recorrido.",
-                "Barranquilla brilla mucho más bonita cuando despegas los ojos de la pantalla",
-                "para sentir su calor, su música y su gente real. ¡Eres orgullo de Curramba!"
+                "¡Pista limpia, cielo despejado y corazón en paz! Despachaste todo el spam.",
+                "Antes de despedirnos nos falta una parada bien sabrosa:",
+                "¡vamos a la Aleta del Tiburón a comernos una arepa de huevo!"
             ]
         ],
         "post_lose_pages": [
@@ -234,6 +251,36 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
             ]
         ],
         "voice_clip_prefix": "paloma_aeropuerto"
+    },
+    "aleta": {
+        "level_badge": "NIVEL 5 DE 5 • ALETA DEL TIBURÓN",
+        "speaker": "PALOMA DE CURRAMBA",
+        "pre_pages": [
+            [
+                "¡Llegamos a la Aleta del Tiburón! Huele a arepa de huevo recién hecha.",
+                "Hoy atiendes el puesto de fritos y lo transmites en vivo para toda Curramba.",
+                "Pero ojo: en el chat se mete un trol que dice barbaridades para que te piques."
+            ],
+            [
+                "Voltea las arepas con clic o espacio cuando estén doradas, y luego sácalas.",
+                "Mantén P o el clic en el botellón para llenar el vaso de patillazo,",
+                "y arrástralo hasta el cliente. ¡Y no le pares bolas al trol!"
+            ]
+        ],
+        "post_win_pages": [
+            [
+                "¡Erda, qué arepas tan bien hechas! Y el trol se fue aburrido sin tu rabia.",
+                "Hay cuentas que viven de hacerte enojar: si no les respondes, no ganan nada.",
+                "¡Completaste todo el recorrido! Barranquilla está orgullosa de ti, mi llave."
+            ]
+        ],
+        "post_lose_pages": [
+            [
+                "¡Ay, mi llave, ese trol te sacó la piedra y se nos quemó la arepa!",
+                "Respira la brisa, cuenta hasta diez y volvamos a prender el caldero con calma."
+            ]
+        ],
+        "voice_clip_prefix": "paloma_aleta"
     }
 }
 

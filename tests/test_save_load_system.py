@@ -59,7 +59,7 @@ def test_settings_save_load_summary_and_clean_reset():
     assert summary["character_id"] == "shakira"
     assert summary["character_name"] == "Shakira"
     assert summary["levels_cleared"] == 1
-    assert summary["total_levels"] == 4
+    assert summary["total_levels"] == 5
     assert summary["next_district"] == "C.C. Buenavista"
     assert summary["trophies_count"] == 1
     assert summary["weather"] == "sunset"

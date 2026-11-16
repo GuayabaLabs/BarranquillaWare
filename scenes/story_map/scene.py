@@ -6,7 +6,7 @@ from typing import Optional, Callable, Tuple, Dict, Type, Any, List
 import pygame
 
 from core.state_machine import BaseState
-from core.asset_manager import AssetManager
+from core.asset_manager import AssetManager, achicar, quitarBlanco, bordeSuave
 from core.audio_manager import AudioManager
 from core.settings import SettingsManager
 from core.map_settings import MapSettingsState
@@ -622,13 +622,14 @@ class StoryMapScene(BaseState):
             },
             "aleta": {
                 "title": "ALETA DEL TIBURÓN",
-                "district": "VENTANA DE CAMPEONES",
+                "district": "NIVEL 5 • VENTANA DE CAMPEONES",
                 "microgame_id": "aleta_campeones",
-                "microgame_title": "ALETA DEL TIBURÓN",
+                "microgame_title": "La fritanga de la Aleta",
                 "desc": [
-                    "Homenaje brillante a la pasión rojiblanca junto al río.",
-                    "Un mirador sereno para descansar en el recorrido."
+                    "Voltea las arepas de huevo y sirve patillazo en tu puesto en vivo.",
+                    "Cocina tranquilo y no le respondas al trol que te quiere sacar la piedra."
                 ],
+                "nodoParada": 59,
                 "rect": self.aleta_rect
             },
             "aeropuerto": {
@@ -662,21 +663,18 @@ class StoryMapScene(BaseState):
 
         # 1. Halo / Resplandor elíptico en el suelo
         w, h = 480, 280
-        self.poi_ground_glow = pygame.Surface((w, h), pygame.SRCALPHA)
-        cw, ch = w // 2, h // 2 + 18
-        for r in range(110, 0, -6):
-            f = 1.0 - (r / 110.0)
-            alpha = int(72 * f * f)
-            pygame.draw.ellipse(self.poi_ground_glow, (255, 205, 80, alpha), (cw - r * 1.5, ch - r * 0.65, r * 3.0, r * 1.3))
+        self.poi_ground_glow = self.crearResplandorSuave(w, h)
 
         # 2. Pin / Diamante dorado estilizado de ubicación clave
         pin_w, pin_h = 36, 44
-        self.poi_pin_surf = pygame.Surface((pin_w, pin_h), pygame.SRCALPHA)
-        pts = [(pin_w // 2, 4), (pin_w - 6, pin_h // 2 - 2), (pin_w // 2, pin_h - 6), (6, pin_h // 2 - 2)]
-        pygame.draw.polygon(self.poi_pin_surf, (255, 215, 75), pts)
-        pygame.draw.polygon(self.poi_pin_surf, (255, 248, 175), [(pin_w // 2, 8), (pin_w - 10, pin_h // 2 - 2), (pin_w // 2, pin_h // 2 - 2), (pin_w // 2, 8)])
-        pygame.draw.polygon(self.poi_pin_surf, (175, 120, 25), pts, width=2)
-        pygame.draw.circle(self.poi_pin_surf, (255, 255, 255, 230), (pin_w // 2 - 3, pin_h // 2 - 6), 3)
+        k = 4
+        pin_grande = pygame.Surface((pin_w * k, pin_h * k), pygame.SRCALPHA)
+        pts = [(pin_w // 2 * k, 4 * k), ((pin_w - 6) * k, (pin_h // 2 - 2) * k), (pin_w // 2 * k, (pin_h - 6) * k), (6 * k, (pin_h // 2 - 2) * k)]
+        pygame.draw.polygon(pin_grande, (255, 215, 75), pts)
+        pygame.draw.polygon(pin_grande, (255, 248, 175), [(pin_w // 2 * k, 8 * k), ((pin_w - 10) * k, (pin_h // 2 - 2) * k), (pin_w // 2 * k, (pin_h // 2 - 2) * k), (pin_w // 2 * k, 8 * k)])
+        pygame.draw.polygon(pin_grande, (175, 120, 25), pts, width=2 * k)
+        pygame.draw.circle(pin_grande, (255, 255, 255, 230), ((pin_w // 2 - 3) * k, (pin_h // 2 - 6) * k), 3 * k)
+        self.poi_pin_surf = pygame.transform.smoothscale(pin_grande, (pin_w, pin_h))
 
         # 2B. Estrella Dorada de Nivel Despejado / Completado
         star_w, star_h = 44, 44
@@ -691,9 +689,11 @@ class StoryMapScene(BaseState):
         pygame.draw.polygon(self.poi_star_surf, (255, 250, 180), pts_star, width=2)
         pygame.draw.polygon(self.poi_star_surf, (180, 120, 20), pts_star, width=1)
         pygame.draw.circle(self.poi_star_surf, (255, 255, 255), (cx, cy), 4)
+        self.cargarEstrellaPintada()
 
         # 3. Chispitas doradas flotantes para cada locación
         self._sp_surf = pygame.Surface((16, 16), pygame.SRCALPHA)
+        self.puntoBrillo = self.crearPuntoSuave(48)
         self.poi_sparkles = {}
         for p_key, p_info in self.poi_registry.items():
             r = p_info["rect"]
@@ -1277,6 +1277,77 @@ class StoryMapScene(BaseState):
                 btn.shimmer_progress = 1.0
         if hasattr(self.audio, "play_click"):
             self.audio.play_click()
+
+    def crearPuntoSuave(self, lado: int) -> pygame.Surface:
+        import numpy
+        punto = pygame.Surface((lado, lado), pygame.SRCALPHA)
+        punto.fill((255, 235, 110, 0))
+        ejes = (numpy.arange(lado) - lado / 2.0 + 0.5) / (lado / 2.0)
+        cerca = numpy.clip(1.0 - numpy.sqrt(ejes[:, None] ** 2 + ejes[None, :] ** 2), 0.0, 1.0)
+        pixeles = pygame.surfarray.pixels_alpha(punto)
+        pixeles[:] = (255 * numpy.clip(cerca * 1.8, 0.0, 1.0)).astype(numpy.uint8)
+        del pixeles
+        return punto
+
+    def crearResplandorSuave(self, w: int, h: int) -> pygame.Surface:
+        import numpy
+        resplandor = pygame.Surface((w, h), pygame.SRCALPHA)
+        resplandor.fill((255, 205, 80, 0))
+        xs = (numpy.arange(w) - w / 2.0) / 165.0
+        ys = (numpy.arange(h) - (h / 2.0 + 18)) / 71.5
+        cerca = numpy.clip(1.0 - numpy.sqrt(xs[:, None] ** 2 + ys[None, :] ** 2), 0.0, 1.0)
+        pixeles = pygame.surfarray.pixels_alpha(resplandor)
+        pixeles[:] = (72 * cerca * cerca).astype(numpy.uint8)
+        del pixeles
+        return resplandor
+
+    def cargarEstrellaPintada(self) -> None:
+        self.estrellaPintada = None
+        ruta = os.path.join("coaster_game", "elementos", "estrellaLlena.jpg")
+        if not os.path.exists(ruta):
+            return
+        try:
+            foto = achicar(pygame.image.load(ruta).convert_alpha(), 400)
+            estrella = quitarBlanco(foto)
+            estrella = pygame.transform.smoothscale_by(estrella, 54 / float(max(estrella.get_size())))
+            estrella = bordeSuave(estrella, (255, 246, 222), 4)
+            estrella = bordeSuave(estrella, (110, 62, 30), 2)
+        except Exception as e:
+            print(f"[StoryMap] Aviso: no se pudo cargar la estrella pintada: {e}")
+            return
+        self.estrellaPintada = estrella
+        blanca = estrella.copy()
+        blanca.fill((255, 255, 255, 0), special_flags=pygame.BLEND_RGB_MAX)
+        self.mascaraEstrella = pygame.Surface(estrella.get_size())
+        self.mascaraEstrella.fill((0, 0, 0))
+        self.mascaraEstrella.blit(blanca, (0, 0))
+        w, h = estrella.get_size()
+        franja = pygame.Surface((int(w * 0.32), h * 3), pygame.SRCALPHA)
+        franja.fill((255, 255, 255, 0))
+        import numpy
+        alfa = numpy.sin(numpy.linspace(0.0, math.pi, franja.get_width())) * 150
+        pixeles = pygame.surfarray.pixels_alpha(franja)
+        pixeles[:] = alfa.astype(numpy.uint8)[:, None]
+        del pixeles
+        self.franjaBrillo = pygame.transform.rotozoom(franja, -25, 1.0)
+
+    def estrellaConBrillo(self, avance: float) -> pygame.Surface:
+        estrella = self.estrellaPintada
+        if avance >= 1.0:
+            return estrella
+        w, h = estrella.get_size()
+        luz = pygame.Surface((w, h), pygame.SRCALPHA)
+        franja = self.franjaBrillo
+        x = int(-franja.get_width() + avance * (w + franja.get_width()))
+        luz.blit(franja, (x, (h - franja.get_height()) // 2))
+        luz.set_alpha(int(150 * math.sin(avance * math.pi)))
+        capa = pygame.Surface((w, h))
+        capa.fill((0, 0, 0))
+        capa.blit(luz, (0, 0))
+        capa.blit(self.mascaraEstrella, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        dibujo = estrella.copy()
+        dibujo.blit(capa, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+        return dibujo
 
     def _close_quest_card(self) -> None:
         self.quest_card_open = False
@@ -1864,6 +1935,8 @@ class StoryMapScene(BaseState):
         poi_info = self.poi_registry.get(poi_key)
         if not poi_info or not nodes:
             return None
+        if poi_info.get("nodoParada") in node_map:
+            return poi_info["nodoParada"]
         poi_rect = poi_info["rect"]
         center = (poi_rect.centerx, poi_rect.centery)
 
@@ -2729,9 +2802,10 @@ class StoryMapScene(BaseState):
                     sp_y = p_screen_y + sp["rel_y"]
                     fade = math.sin(sp["life"] * math.pi)
                     sp_alpha = int(220 * max(0.0, fade))
-                    self._sp_surf.fill((0, 0, 0, 0))
-                    pygame.draw.circle(self._sp_surf, (255, 235, 110, sp_alpha), (8, 8), max(1, int(sp["size"] * fade)))
-                    surface.blit(self._sp_surf, (sp_x - 8, sp_y - 8))
+                    lado = max(2, int(sp["size"] * fade * 2.6))
+                    chispa = pygame.transform.smoothscale(self.puntoBrillo, (lado, lado))
+                    chispa.set_alpha(sp_alpha)
+                    surface.blit(chispa, chispa.get_rect(center=(int(sp_x), int(sp_y))))
 
                 bob_y = math.sin(self.timer * 2.8) * 5.0 - (6.0 if is_hovered else 0.0)
                 pin_center_x = p_screen_x + p_rect.width // 2
@@ -2740,6 +2814,9 @@ class StoryMapScene(BaseState):
                 # Si el microjuego de la locación fue completado, mostrar Estrella Dorada
                 is_cleared = p_info["microgame_id"] in completed_games
                 pin_to_draw = self.poi_star_surf if is_cleared else self.poi_pin_surf
+                if is_cleared and getattr(self, "estrellaPintada", None) is not None:
+                    vuelta = (self.timer * 0.45 + (sum(map(ord, p_key)) % 100) / 100.0) % 1.0
+                    pin_to_draw = self.estrellaConBrillo(vuelta * 2.4)
                 surface.blit(pin_to_draw, pin_to_draw.get_rect(center=(pin_center_x, pin_center_y)))
 
         # 3. Renderizar nubes algodonosas caribeñas con profundidad parallax

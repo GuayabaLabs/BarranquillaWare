@@ -3,7 +3,7 @@ from typing import Optional, Callable
 import pygame
 
 from core.state_machine import BaseState
-from core.asset_manager import AssetManager
+from core.asset_manager import AssetManager, bordeSuave
 from core.audio_manager import AudioManager
 
 class BaseMicrogame(BaseState):
@@ -497,6 +497,15 @@ class BaseMicrogame(BaseState):
         conBorde.blit(imagen, (grosor, grosor))
         return conBorde
 
+    def ponerBordeFino(self, imagen: pygame.Surface, color, grosor: int = 2) -> pygame.Surface:
+        return bordeSuave(imagen, color, grosor)
+
+    def suavizarOrilla(self, imagen: pygame.Surface) -> pygame.Surface:
+        suave = imagen.copy()
+        alfa = pygame.transform.box_blur(imagen, 1)
+        suave.blit(alfa, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        return suave
+
     def crearCartel(self, lineas: list):
         try:
             import os
@@ -507,7 +516,8 @@ class BaseMicrogame(BaseState):
             textos = [fuente.render(linea, True, (110, 68, 38)) for linea in lineas]
             ancho = max(t.get_width() for t in textos) + banner.get_height() * 2
             cartel = self.estirarCentro(banner, max(banner.get_width(), ancho))
-            cartel = self.ponerBorde(cartel, (128, 76, 40), 5)
+            cartel = self.ponerBordeFino(self.suavizarOrilla(cartel), (128, 76, 40), 5)
+            cartel = self.ponerBordeFino(cartel, (84, 46, 22), 2)
             alto = fuente.get_linesize()
             y = cartel.get_height() // 2 - (alto * len(textos)) // 2
             for texto in textos:

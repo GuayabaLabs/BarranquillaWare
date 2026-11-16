@@ -309,8 +309,8 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
         self.scene.paloma_dialog_open = False
         self.scene.quest_card_open = False
 
-        # 6. Nodos de cruce no jugables (56, 75, 61, 62, 66) NO deben activar callout ni abrir nivel con SPACE
-        for non_entry_nid in (56, 75, 61, 62, 66):
+        # 6. Nodos de cruce no jugables (56, 75, 61, 66) NO deben activar callout ni abrir nivel con SPACE
+        for non_entry_nid in (56, 75, 61, 66):
             if non_entry_nid not in node_map:
                 continue
             nd = node_map[non_entry_nid]

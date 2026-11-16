@@ -467,6 +467,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
         pass
+        self.callarTictac()
 
     def _jump_forward(self) -> None:
         if self.player_lane < self.max_lane:
@@ -840,6 +841,9 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.saltoNormal = (self.jump_duration, self.jump_recovery)
         self.mensajeFlotante = ""
         self.tiempoMensaje = 0.0
+        self.sonidoTictac = self.cargarTictac()
+        self.canalTictac = None
+        self.ultimoUpdate = 0
 
         self.notificaciones = [
             ("Grupo del salón", "Tienes 27 mensajes sin leer"),
@@ -901,6 +905,39 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.ensenanza = self.ensenanzas[0]
         return True
 
+    def cargarTictac(self):
+        guardado = UninorteSprintMicrogame.__dict__.get("tictacGuardado")
+        if guardado is not None:
+            return guardado
+        try:
+            import os
+            import numpy
+            if not pygame.mixer.get_init():
+                return None
+            original = pygame.mixer.Sound(os.path.join("assets", "Uninorte", "tictac.mp3"))
+            onda = pygame.sndarray.array(original).astype(numpy.float32)
+            pico = max(1.0, float(numpy.abs(onda).max()))
+            onda = numpy.clip(onda * (26000.0 / pico), -32767, 32767).astype(numpy.int16)
+            sonido = pygame.sndarray.make_sound(numpy.ascontiguousarray(onda))
+            UninorteSprintMicrogame.tictacGuardado = sonido
+            return sonido
+        except Exception as e:
+            print(f"[UninorteSprint] Aviso: no se pudo cargar el tictac: {e}")
+            return None
+
+    def sonarTictac(self) -> None:
+        if self.sonidoTictac is None or not getattr(self.audio, "sound_enabled", True):
+            return
+        self.callarTictac()
+        self.canalTictac = self.sonidoTictac.play(loops=-1)
+        if self.canalTictac is not None:
+            self.canalTictac.set_volume(max(0.0, min(1.0, getattr(self.audio, "sfx_volume", 0.8))))
+
+    def callarTictac(self) -> None:
+        if getattr(self, "canalTictac", None) is not None:
+            self.canalTictac.stop()
+            self.canalTictac = None
+
     def crearTunel(self) -> pygame.Surface:
         tunel = pygame.Surface((self.screen_w, 2000), pygame.SRCALPHA)
         oscuro = (20, 20, 22)
@@ -916,6 +953,9 @@ class UninorteSprintMicrogame(BaseMicrogame):
         if self.phase == self.PHASE_PLAY and not self.is_finished and getattr(self, "imagenesNoti", False):
             if self.avisoAbierto:
                 self.tiempoAviso += dt
+                self.ultimoUpdate = pygame.time.get_ticks()
+                if self.canalTictac is not None:
+                    self.canalTictac.unpause()
                 self.revisarGestosAviso()
                 return
             self.tiempoJugado += dt
@@ -938,6 +978,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.avisoAbierto = True
         self.tiempoAviso = 0.0
         self.opcionAviso = 1
+        self.ultimoUpdate = pygame.time.get_ticks()
+        self.sonarTictac()
         if hasattr(self.audio, "play_click"):
             self.audio.play_click()
 
@@ -956,6 +998,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
     def elegirOpcionAviso(self, opcion: int) -> None:
         self.avisoAbierto = False
+        self.callarTictac()
         if opcion == 0:
             self.tiempoDistraido = self.duracionDistraccion
             self.jump_duration = 0.42
@@ -1011,6 +1054,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
         super().render(surface)
         if getattr(self, "avisoAbierto", False) and self.phase == self.PHASE_PLAY:
             self.dibujarAviso(surface)
+        if getattr(self, "canalTictac", None) is not None and pygame.time.get_ticks() - self.ultimoUpdate > 150:
+            self.canalTictac.pause()
 
     def partirEnLineas(self, fuente, texto: str, anchoMax: int) -> list:
         lineas = []
