@@ -1,13 +1,27 @@
-"""Emoji Catch integrado: el juego de `juegos_extra/emoji_catch.py` como BaseMicrogame.
+"""Emoji Catch: Balance! — minijuego del feed y la salud mental (única versión del juego).
 
-Obtiene de la arquitectura común: menú de pausa (ESC / Start), barra de tiempo acuarela,
-música y efectos vía AudioManager, mando y control por movimiento con dos manos.
+Relación con redes sociales: el feed lanza emojis de odio (haters) y de apoyo. La mano morada
+bloquea a los haters y la azul atrapa lo positivo; si se escapan los negativos, baja la salud mental.
+
+Archivos:
+- Este archivo: el minijuego dentro de BarranquillaWare (pausa, barra de tiempo, audio, mando, cámara).
+- microgames/emojis/juego.py: la lógica y el dibujo.
+- assets/emoji_catch/: sprites.
+
+Probarlo solo (desde la raíz del proyecto):  python microgames/emoji_catch.py
 
 Controles:
 - Teclado: A/D mano morada (negativos) · J/L mano azul (positivos). Flechas también mueven la morada.
 - Mando: stick/D-pad mano morada · X/B mano azul.
 - Cámara: la mano en la mitad izquierda guía la mano morada; la de la mitad derecha, la azul.
 """
+if __name__ == "__main__":  # Permite ejecutarlo solo: agrega la raíz del proyecto a sys.path
+    import os
+    import sys
+    _RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, _RAIZ)
+    os.chdir(_RAIZ)
+
 import os
 from typing import Callable, Optional
 
@@ -15,32 +29,33 @@ import pygame
 
 from core.camera_gestures import CameraGestureInput
 from core.microgame import BaseMicrogame
-from microgames.extra_bridge import HeldKeys, load_extra_module, load_managed_sound
-
-_emoji = load_extra_module("emoji_catch")
+from microgames.emojis import juego as _emoji
+from microgames.redes_comun import HeldKeys
 
 # AUDIO RECICLADO (provisional) — cuando haya pistas propias, cambiar aquí:
 #   MUSIC_TRACK: música de fondo de la biblioteca mientras caen emojis.
-#   SFX_BLOCK:   al bloquear (atrapar) un emoji negativo con la mano morada.
+#   Bloquear un emoji negativo: SFX_BLOQUEO en microgames/emojis/juego.py.
 #   Además (ver _play_event_sounds): emoji positivo atrapado, emoji que se escapa,
 #   Mega-Hater bloqueado y "ánimo a tope".
 MUSIC_TRACK = "concentracionMusic.mp3"
-SFX_BLOCK = "char_audio_0_microjuego_puño.ogg"
 
-# Límites horizontales de cada mano en el juego original.
+# Límites horizontales de cada mano en el juego.
 HAND_LIMITS = ((120.0, 900.0), (1020.0, 1800.0))
 
 
-class _IntegratedEmojiCatch(_emoji.EmojiCatch):
-    MOSTRAR_BARRA_TIEMPO_PROPIA = False  # La barra acuarela común la reemplaza
-    TEXTO_REINICIO = ""
-
-    def _iniciar_audio(self):
-        # La música la pone el microjuego con AudioManager; aquí solo el efecto de bloqueo.
-        self.sonido_bloqueo = load_managed_sound(SFX_BLOCK, 0.6)
-
-
 class EmojiCatchMicrogame(BaseMicrogame):
+    # Contexto narrativo de la Paloma antes de jugar (mismo diálogo del Modo Historia).
+    dialogoPaloma = [
+        ["¡Eche, mira cómo se llenó tu feed!",
+         "Hay haters lanzando odio y amigos",
+         "mandando buena vibra, todo al mismo tiempo."],
+        ["Con la mano morada bloquea a los haters",
+         "y con la azul atrapa lo positivo.",
+         "Si dejas pasar el odio, baja tu salud mental."],
+        ["No se trata de tener más likes:",
+         "se trata de cuidar tu balance.",
+         "¡Bloquea, silencia y cuida tu ánimo!"],
+    ]
     # Mismo cierre que los minijuegos del mapa: letrero Ganaste/Perdiste + enseñanza.
     ensenanzaFinal = {
         "gana": ["Tu feed no se controla solo:",
@@ -53,8 +68,8 @@ class EmojiCatchMicrogame(BaseMicrogame):
     CAMERA_POINTER = False  # Lee las manos directamente
     # Mando: X/B mueven la mano azul (J/L). El D-pad/stick ya llega como flechas.
     GAMEPAD_BUTTON_KEYS = {2: pygame.K_j, 1: pygame.K_l}
-    # La barra común reemplaza la barra fina propia, sobre el medidor de salud.
-    TIME_BAR_LAYOUT = (970, 840, 600)
+    # La barra de tiempo común va arriba al centro, donde estaba la caja de TIEMPO.
+    TIME_BAR_LAYOUT = (1020, 64, 500)
 
     def __init__(
         self,
@@ -87,7 +102,7 @@ class EmojiCatchMicrogame(BaseMicrogame):
         self._snap = now
 
     def setup_game(self) -> None:
-        self.game = _IntegratedEmojiCatch()
+        self.game = _emoji.EmojiCatch()
         self._snap = self._snapshot()
         self.keys = HeldKeys(aliases={pygame.K_a: (pygame.K_LEFT,), pygame.K_d: (pygame.K_RIGHT,)})
         self.camera_input = CameraGestureInput.get_instance()
@@ -123,9 +138,10 @@ class EmojiCatchMicrogame(BaseMicrogame):
         super().update(dt)
 
     def render_game(self, surface: pygame.Surface) -> None:
-        # Al terminar se usan el letrero y la enseñanza comunes en vez del panel propio.
-        final, self.game.final = self.game.final, "" if self.is_finished else self.game.final
-        try:
-            self.game.draw(surface)
-        finally:
-            self.game.final = final
+        self.game.draw(surface)
+
+
+if __name__ == "__main__":
+    from core.standalone import ejecutar_minijuego
+
+    ejecutar_minijuego(EmojiCatchMicrogame, "Emoji Catch: Balance!")

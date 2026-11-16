@@ -18,6 +18,8 @@ from microgames.emoji_catch import EmojiCatchMicrogame
 
 
 def _to_play(game: BaseMicrogame) -> None:
+    assert game.paloma_intro is not None and game.paloma_intro.active  # contexto de la Paloma
+    game.paloma_intro.skip()
     for _ in range(60):
         game.update(1 / 30)
     assert game.phase == BaseMicrogame.PHASE_PLAY
@@ -92,9 +94,7 @@ def test_curramgram_keyboard_gamepad_and_photo():
     input_state.clear()
     game = CurramGramGoMicrogame()
     _to_play(game)
-    assert game.game.inicio
-    game.handle_event(_key(pygame.KEYDOWN, pygame.K_SPACE))  # empezar (A del mando)
-    assert not game.game.inicio
+    assert not game.game.inicio  # sin panel propio: la Paloma y la portada común dan el contexto
 
     x0 = game.game.x
     input_state.VIRTUAL_KEYS.add(pygame.K_RIGHT)
@@ -129,3 +129,22 @@ def test_curramgram_final_explains_social_media_phenomena():
     game.update(1 / 30)
     assert game.is_finished and not game.is_won
     game.render(pygame.Surface((1920, 1080)))
+
+
+def test_paloma_context_advances_with_keys_and_blocks_play():
+    game = EmojiCatchMicrogame()
+    intro = game.paloma_intro
+    assert intro.active and len(intro.pages) == 3
+    for _ in range(10):
+        game.update(1 / 30)
+    assert game.phase == BaseMicrogame.PHASE_INTRO  # no arranca mientras habla la Paloma
+    surf = pygame.Surface((1920, 1080))
+    game.render(surf)
+    for _ in range(3):
+        game.handle_event(_key(pygame.KEYDOWN, pygame.K_SPACE))
+    for _ in range(20):
+        game.update(1 / 30)
+    assert not intro.active
+    for _ in range(60):
+        game.update(1 / 30)
+    assert game.phase == BaseMicrogame.PHASE_PLAY

@@ -1,46 +1,62 @@
-"""CurramGram Go! integrado: el juego del aeropuerto de `juegos_extra/curramgram_go.py` como BaseMicrogame.
+"""CurramGram Go! — minijuego del Aeropuerto Cortissoz (única versión del juego).
 
 Relación con redes sociales: Cami es creadora de contenido en el Aeropuerto Cortissoz y cada
 persona es un caso real de redes (desinformación, sobreexposición de datos, exposición sin
 consentimiento, noticia falsa viral, contenido viral y escrache digital). Antes de publicar
 debe confirmar, proteger la privacidad y pedir ayuda a la autoridad en vez de exponer a alguien.
 
-Obtiene de la arquitectura común: menú de pausa (ESC / Start), barra de tiempo acuarela,
-música y efectos vía AudioManager, mando y puntero de cámara para apuntar la foto.
+Archivos:
+- Este archivo: el minijuego dentro de BarranquillaWare (pausa, barra de tiempo, audio, mando, cámara).
+- microgames/curramgram/juego.py: la lógica y el dibujo del recorrido.
+- assets/curramgram/: sprites y animaciones.
+
+Probarlo solo (desde la raíz del proyecto):  python microgames/curramgram_go.py
 
 Controles:
 - Teclado: A/D o flechas caminar · ESPACIO saltar · S/↓ esconderse · E avisar · clic o F foto · P publicar.
 - Mando: stick/D-pad caminar · A saltar · ↓ esconderse · X avisar · B foto · Y publicar.
 - Cámara: el lapicero apunta la foto; mantener quieto o pellizcar dispara.
 """
+if __name__ == "__main__":  # Permite ejecutarlo solo: agrega la raíz del proyecto a sys.path
+    import os
+    import sys
+    _RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, _RAIZ)
+    os.chdir(_RAIZ)
+
 from typing import Callable, Optional
 
 import pygame
 
 from core.microgame import BaseMicrogame
-from microgames.extra_bridge import HeldKeys, load_extra_module, load_managed_sound
-
-_curram = load_extra_module("curramgram_go")
+from microgames.curramgram import juego as _curram
+from microgames.redes_comun import HeldKeys
 
 # AUDIO RECICLADO (provisional) — cuando haya pistas propias, cambiar aquí:
 #   MUSIC_TRACK: música de fondo mientras se recorre la terminal.
-#   SFX_SELLO:   al recoger cada sello de pasaporte.
+#   Sello recogido: SFX_SELLO en microgames/curramgram/juego.py.
 #   Además (ver _play_event_sounds): salto, tropiezo, foto, caso resuelto bien/mal.
 MUSIC_TRACK = "contraRelojMusic.mp3"
-SFX_SELLO = "char_audio_1_microjuego_puño.ogg"
 
 PHOTO_KEY = pygame.K_f
 
 
-class _IntegratedCurramGram(_curram.CurramGramGo):
-    MOSTRAR_RELOJ = False  # La barra acuarela común ocupa el lugar del reloj
-    TEXTO_REINICIO = ""
-
-    def _iniciar_audio(self):
-        self.sonido_tambor = load_managed_sound(SFX_SELLO, 0.5)
-
-
 class CurramGramGoMicrogame(BaseMicrogame):
+    # Contexto narrativo de la Paloma antes de jugar (mismo diálogo del Modo Historia).
+    dialogoPaloma = [
+        ["¡Ajá, llegamos al Aeropuerto Cortissoz!",
+         "Cami es creadora de contenido y tiene",
+         "que llegar a la puerta 7 antes de su vuelo."],
+        ["En el camino verá cosas que parecen virales:",
+         "un chisme, un accidente, una foto privada...",
+         "¡Ojo! No todo lo que se ve merece un post."],
+        ["Antes de publicar: confirma lo que ves,",
+         "protege los datos y la imagen de los demás,",
+         "y si alguien hace algo malo, avísale a la Policía."],
+        ["Junta los sellos, resuelve los 6 casos",
+         "y llega a tiempo a la puerta 7.",
+         "¡Dale, que el avión no espera!"],
+    ]
     # Mismo cierre que los minijuegos del mapa: letrero Ganaste/Perdiste + enseñanza.
     ensenanzaFinal = {
         "gana": ["Antes de publicar: confirma lo que ves,",
@@ -67,7 +83,8 @@ class CurramGramGoMicrogame(BaseMicrogame):
         )
 
     def setup_game(self) -> None:
-        self.game = _IntegratedCurramGram()
+        self.game = _curram.CurramGramGo()
+        self.game.inicio = False  # La Paloma y la portada común reemplazan el panel de inicio propio
         self.keys = HeldKeys()
         self.mouse = (960, 540)
         self._snap = self._snapshot()
@@ -140,12 +157,15 @@ class CurramGramGoMicrogame(BaseMicrogame):
         super().update(dt)
 
     def render_game(self, surface: pygame.Surface) -> None:
-        # Al terminar se usan el letrero y la enseñanza comunes en vez del panel propio.
-        final, self.game.final = self.game.final, None if self.is_finished else self.game.final
         # Durante la portada común no se dibuja el panel propio de inicio.
         inicio, self.game.inicio = self.game.inicio, self.game.inicio and self.phase == self.PHASE_PLAY
         try:
             self.game.draw(surface, self.mouse)
         finally:
-            self.game.final = final
             self.game.inicio = inicio
+
+
+if __name__ == "__main__":
+    from core.standalone import ejecutar_minijuego
+
+    ejecutar_minijuego(CurramGramGoMicrogame, "CurramGram Go!")

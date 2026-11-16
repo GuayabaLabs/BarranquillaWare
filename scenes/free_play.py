@@ -260,6 +260,9 @@ class FreePlayScene(BaseState):
             character_id=self.character_id,
             on_complete_callback=self._on_game_complete
         )
+        # Misma pausa que en el mapa: reiniciar el minijuego o salir al catálogo.
+        microgame.pause_restart_callback = lambda: self._launch_game(game_idx)
+        microgame.pause_menu_callback = lambda: self._on_game_complete(False)
 
         if hasattr(self, "state_machine") and self.state_machine:
             self.state_machine.change_state(microgame)

@@ -36,6 +36,10 @@ class BaseMicrogame(BaseState):
     #   "dedos":  teclas para doblar índice, medio, anular y meñique (como un piano).
     # Lo llama core.engine en cada frame; si se define, el lapicero de menú se apaga en el juego.
     CAMERA_ACTIONS: Dict[str, object] = {}
+
+    # Contexto opcional de la Paloma antes de jugar: lista de páginas (cada una, lista de líneas).
+    # Se muestra con el mismo cuadro de diálogo del Modo Historia (ui/paloma_intro.py).
+    dialogoPaloma: Optional[list] = None
     CAMERA_DEADZONE: float = 0.12  # Zona muerta alrededor del centro para los ejes
 
     def __init__(
@@ -67,6 +71,7 @@ class BaseMicrogame(BaseState):
         self.outro_message: Optional[str] = None
         self.pause_return_callback: Optional[Callable[[], None]] = None
         self.pause_restart_callback: Optional[Callable[[], None]] = None
+        self.pause_menu_callback: Optional[Callable[[], None]] = None
 
         # Sacudida de pantalla (Screenshake)
         self.shake_intensity: float = 0.0
@@ -82,6 +87,11 @@ class BaseMicrogame(BaseState):
         self._outro_shader_cache: dict = {}
 
         self.setup_game()
+
+        self.paloma_intro = None
+        if self.dialogoPaloma:
+            from ui.paloma_intro import PalomaIntro
+            self.paloma_intro = PalomaIntro(self.dialogoPaloma)
 
     def setup_game(self) -> None:
         """Inicializa variables específicas del microjuego individual."""
@@ -179,6 +189,9 @@ class BaseMicrogame(BaseState):
         pass
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            self.paloma_intro.handle_event(event)
+            return
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if self.phase == self.PHASE_PLAY and getattr(self, "state_machine", None):
                 from core.microgame_pause import MicrogamePauseState
@@ -186,7 +199,8 @@ class BaseMicrogame(BaseState):
                     MicrogamePauseState(
                         previous=self,
                         return_callback=self.pause_return_callback,
-                        restart_callback=self.pause_restart_callback
+                        restart_callback=self.pause_restart_callback,
+                        menu_callback=self.pause_menu_callback,
                     )
                 )
                 return
@@ -198,6 +212,10 @@ class BaseMicrogame(BaseState):
         pass
 
     def update(self, dt: float) -> None:
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            from core.camera_gestures import CameraGestureInput
+            self.paloma_intro.update(dt, CameraGestureInput.get_instance())
+            return
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:
@@ -228,6 +246,11 @@ class BaseMicrogame(BaseState):
 
         # 2. Render de la barra de tiempo elástica / mecha inferior estilo WarioWare
         self._render_fuse_timer(surface)
+
+        # 0. Contexto de la Paloma (antes de la consigna)
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            self.paloma_intro.render(surface)
+            return
 
         # 3. Cartel de consigna inicial (Fase Intro con bounce elástico)
         if self.phase == self.PHASE_INTRO:
