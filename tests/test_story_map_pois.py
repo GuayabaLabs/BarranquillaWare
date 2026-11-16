@@ -58,7 +58,7 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     test_screen = pygame.Surface((1920, 1080))
 
     # 1. Verificar orden de los 4 niveles y configuración de etapas
-    assert STORY_CAMPAIGN_ORDER == ["uninorte", "buenavista", "metropolitano", "aeropuerto"]
+    assert STORY_CAMPAIGN_ORDER == ["uninorte", "buenavista", "metropolitano", "aeropuerto", "aleta"]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["uninorte"]] == [UninorteSprintMicrogame, UninorteConcentrateMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["buenavista"]] == [BuenavistaTrendMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["metropolitano"]] == [MetropolitanoModeracionMicrogame]
@@ -97,7 +97,7 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     assert scene.get_current_campaign_poi() == "buenavista"
 
     # Simular llegada y victoria en Buenavista (2 rondas: Cine + Trend), Metropolitano y Aeropuerto
-    for poi_key in ["buenavista", "metropolitano", "aeropuerto"]:
+    for poi_key in ["buenavista", "metropolitano", "aeropuerto", "aleta"]:
         scene._notify_poi_arrival(poi_key)
         while scene.paloma_dialog_open:
             scene.advance_paloma_dialog()
