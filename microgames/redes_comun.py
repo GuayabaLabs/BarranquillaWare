@@ -27,7 +27,8 @@ _EMOJI_SPRITES = (
     "barra_positividad", "mano_morada", "mano_azul_der", "emoji_enojado_naranja",
     "emoji_enojado_rojo", "emoji_triste", "emoji_vomito_1", "emoji_vomito_2",
     "emoji_corazon_roto", "emoji_pulgar_abajo", "emoji_sonriente", "emoji_cara_azul",
-    "emoji_corazon", "emoji_pulgar_arriba", "emoji_bolsa_dinero",
+    "emoji_corazon", "emoji_pulgar_arriba", "emoji_bolsa_dinero", "emoji_estrellas", "emoji_angel",
+    "balanza", "mano_morada_puno", "mano_azul_puno",
 )
 _CURRAM_SPRITES = (
     "titulo", "barranquilla", "aeropuerto", "gates_1_10", "hud_pildora", "zona_1",
@@ -301,11 +302,34 @@ class ManagedSound:
         """El volumen lo decide AudioManager."""
 
 
-def load_managed_sound(filename: str, volume_scale: float = 1.0) -> Optional[ManagedSound]:
+def recortar_sonido(sonido: pygame.mixer.Sound, max_seg: Optional[float]) -> pygame.mixer.Sound:
+    """Quita el silencio inicial y, si se pide, corta a `max_seg` con un desvanecido de salida.
+
+    Los efectos de los juegos rápidos deben sonar al instante y no encimarse; el archivo original no cambia.
+    """
+    try:
+        datos = pygame.sndarray.array(sonido)
+        frec = pygame.mixer.get_init()[0]
+        nivel = np.abs(datos.astype(np.int32)).reshape(len(datos), -1).max(axis=1)
+        umbral = max(1, int(nivel.max() * 0.04))
+        inicio = int(np.argmax(nivel > umbral))
+        datos = datos[inicio:]
+        if max_seg is not None and len(datos) > int(max_seg * frec):
+            datos = datos[: int(max_seg * frec)].copy()
+            n = min(len(datos), int(0.15 * frec))
+            rampa = np.linspace(1.0, 0.0, n)
+            datos[-n:] = (datos[-n:] * (rampa[:, None] if datos.ndim > 1 else rampa)).astype(datos.dtype)
+        return pygame.sndarray.make_sound(np.ascontiguousarray(datos))
+    except Exception:
+        return sonido
+
+
+def load_managed_sound(filename: str, volume_scale: float = 1.0, max_seg: Optional[float] = None) -> Optional[ManagedSound]:
     try:
         if not pygame.mixer.get_init():
             return None
-        return ManagedSound(pygame.mixer.Sound(str(RAIZ / "assets" / filename)), volume_scale)
+        sonido = pygame.mixer.Sound(str(RAIZ / "assets" / filename))
+        return ManagedSound(recortar_sonido(sonido, max_seg), volume_scale)
     except (pygame.error, OSError):
         return None
 

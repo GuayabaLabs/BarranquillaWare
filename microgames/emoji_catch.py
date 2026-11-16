@@ -30,14 +30,17 @@ import pygame
 from core.camera_gestures import CameraGestureInput
 from core.microgame import BaseMicrogame
 from microgames.emojis import juego as _emoji
-from microgames.redes_comun import HeldKeys
+from microgames.redes_comun import HeldKeys, load_managed_sound
 
-# AUDIO RECICLADO (provisional) — cuando haya pistas propias, cambiar aquí:
-#   MUSIC_TRACK: música de fondo de la biblioteca mientras caen emojis.
-#   Bloquear un emoji negativo: SFX_BLOQUEO en microgames/emojis/juego.py.
-#   Además (ver _play_event_sounds): emoji positivo atrapado, emoji que se escapa,
-#   Mega-Hater bloqueado y "ánimo a tope".
-MUSIC_TRACK = "concentracionMusic.mp3"
+# AUDIO PROPIO (assets/). Bloquear un emoji negativo: SFX_BLOQUEO en microgames/emojis/juego.py.
+MUSIC_TRACK = "emoji_musica.mp3"
+# Efectos por momento: (archivo, volumen relativo, duración máxima en s). Se recortan al cargar.
+SFX = {
+    "positivo": ("emoji_positivo.mp3", 0.8, None),
+    "escapa": ("emoji_escapa.mp3", 0.9, 1.0),
+    "animo": ("emoji_animo.mp3", 0.9, 2.0),
+    "megahater": ("emoji_megahater.mp3", 1.0, None),
+}
 
 # Límites horizontales de cada mano en el juego.
 HAND_LIMITS = ((120.0, 900.0), (1020.0, 1800.0))
@@ -91,19 +94,21 @@ class EmojiCatchMicrogame(BaseMicrogame):
     def _play_event_sounds(self) -> None:
         before, now = self._snap, self._snapshot()
         audio = self.audio
+        sonar = lambda clave, respaldo: self.sfx[clave].play() if self.sfx.get(clave) else respaldo()
         if now["pos"] > before["pos"]:
-            audio.play_hit()  # Emoji positivo atrapado
+            sonar("positivo", audio.play_hit)  # Emoji positivo atrapado
         if now["grietas"] > before["grietas"]:
-            audio.play_miss()  # Se escapó un emoji
+            sonar("escapa", audio.play_miss)  # Se escapó un emoji
         if now["animo"] > before["animo"] + 1.0:
-            audio.play_whistle()  # Ánimo a tope
+            sonar("animo", audio.play_whistle)  # Ánimo a tope
         if now["megas"] < before["megas"] and now["puntos"] >= before["puntos"] + 60:
-            audio.play_drum()  # Mega-Hater bloqueado
+            sonar("megahater", audio.play_drum)  # Mega-Hater bloqueado
         self._snap = now
 
     def setup_game(self) -> None:
         self.game = _emoji.EmojiCatch()
         self._snap = self._snapshot()
+        self.sfx = {k: load_managed_sound(f, v, m) for k, (f, v, m) in SFX.items()}
         self.keys = HeldKeys(aliases={pygame.K_a: (pygame.K_LEFT,), pygame.K_d: (pygame.K_RIGHT,)})
         self.camera_input = CameraGestureInput.get_instance()
         if os.environ.get("SDL_VIDEODRIVER") != "dummy" and not self.camera_input.enabled:

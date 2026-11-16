@@ -53,8 +53,13 @@ python microgames/emoji_catch.py
 - [ ] Emojis sin halo blanco (se limpia el borde por código al cargar).
 - [ ] La pausa en Modo Libre ahora tiene Reiniciar y Salir (antes solo Continuar y Opciones).
 
-- [ ] **Audio provisional reciclado** de otros juegos: escuchar si tiene sentido. Lista de momentos y archivos al inicio
-      de `microgames/curramgram_go.py` y `microgames/emoji_catch.py`.
+- [ ] **Audio propio** (música + 11 efectos): escuchar volumen y que cada efecto suene en su momento. Los efectos
+      largos se recortan (p. ej. "caso mal" de 4 s queda en 1,6 s); si alguno se corta feo, subir su duración
+      máxima en `SFX` (`microgames/curramgram_go.py`, `microgames/emoji_catch.py`).
+- [ ] **Arte acuarela**: CurramGram (fondo, props, personajes, Cami) y Emoji Catch (balanza, manos, emojis).
+      Revisar que los personajes estén asignados al caso correcto (viajero, turista, joven, señora, comparsa,
+      tamborero = niño con tambor, trabajador con cava = carrito) y que las manos acuarela no se vean borrosas
+      (vienen pequeñas, ~100 px, y se agrandan a 270 px).
 - [ ] Emoji Catch con dos manos: si las manos se cruzan de lado pueden "saltar" entre morada y azul; con una sola mano
       visible, la otra mano del juego se queda quieta.
 - [ ] CurramGram: el tiempo puede pasar de 120 s con bonos; la barra se queda llena hasta que baja de 120.

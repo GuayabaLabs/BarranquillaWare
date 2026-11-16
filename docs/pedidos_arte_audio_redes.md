@@ -10,7 +10,12 @@ usa solo (mientras falte, se ve el respaldo actual hecho por código).
   8 personajes y 8 poses de Cami (originales en `artifacts/arte_recibido/`). Se importaron con
   `python tools/importar_arte_curramgram.py artifacts/arte_recibido` (quita el fondo blanco, separa las hojas y
   descarta las etiquetas). Para cambiar una imagen: reemplazar el archivo numerado y volver a correr el comando.
-- ⏳ Pendiente: balanza de Emoji Catch (opcional: emojis rehechos), y **todo el audio** de los dos juegos.
+- ✅ **Emoji Catch, arte recibido e integrado**: balanza, 8 manos (se usan abierta y puño) y 12 emojis
+  (dos nuevos: estrellas y ángel). Importados con `python tools/importar_arte_emoji.py artifacts/arte_recibido`.
+- ✅ **Audio recibido e integrado**: música de los dos juegos y los 11 efectos. Los efectos largos se recortan al
+  cargar (silencio inicial y duración máxima con desvanecido); los archivos originales en `assets/` no cambian.
+  Duraciones máximas en `SFX` de `microgames/curramgram_go.py` y `microgames/emoji_catch.py`.
+- Sin pedidos pendientes. La voz de la Paloma sigue siendo opcional (hoy suena su arrullo).
 - Notas del arte recibido: Cami no tiene pose "agachada tomando foto" ni "empujón"; se reutiliza la pose agachada.
   La hoja de Cami tiene los cuadros de caminar más pequeños que "quieta"; el código los iguala por altura.
 

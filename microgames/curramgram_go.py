@@ -30,13 +30,18 @@ import pygame
 
 from core.microgame import BaseMicrogame
 from microgames.curramgram import juego as _curram
-from microgames.redes_comun import HeldKeys
+from microgames.redes_comun import HeldKeys, load_managed_sound
 
-# AUDIO RECICLADO (provisional) — cuando haya pistas propias, cambiar aquí:
-#   MUSIC_TRACK: música de fondo mientras se recorre la terminal.
-#   Sello recogido: SFX_SELLO en microgames/curramgram/juego.py.
-#   Además (ver _play_event_sounds): salto, tropiezo, foto, caso resuelto bien/mal.
-MUSIC_TRACK = "contraRelojMusic.mp3"
+# AUDIO PROPIO (assets/). El sello está en SFX_SELLO de microgames/curramgram/juego.py.
+MUSIC_TRACK = "curramgram_musica.mp3"
+# Efectos por momento: (archivo, volumen relativo, duración máxima en s). Se recortan al cargar.
+SFX = {
+    "salto": ("curramgram_salto.mp3", 0.8, 0.9),
+    "tropiezo": ("curramgram_tropiezo.mp3", 0.9, 1.2),
+    "foto": ("curramgram_foto.mp3", 0.9, 0.8),
+    "caso_bien": ("curramgram_caso_bien.mp3", 1.0, 1.8),
+    "caso_mal": ("curramgram_caso_mal.mp3", 0.9, 1.6),
+}
 
 PHOTO_KEY = pygame.K_f
 
@@ -88,6 +93,15 @@ class CurramGramGoMicrogame(BaseMicrogame):
         self.keys = HeldKeys()
         self.mouse = (960, 540)
         self._snap = self._snapshot()
+        self.sfx = {k: load_managed_sound(f, v, m) for k, (f, v, m) in SFX.items()}
+
+    def _sonar(self, clave: str, respaldo) -> None:
+        """Efecto propio del juego; si no cargó, el efecto general equivalente de AudioManager."""
+        sonido = self.sfx.get(clave)
+        if sonido is not None:
+            sonido.play()
+        else:
+            respaldo()
 
     def _snapshot(self) -> dict:
         g = self.game
@@ -103,17 +117,17 @@ class CurramGramGoMicrogame(BaseMicrogame):
         before, now = self._snap, self._snapshot()
         audio = self.audio
         if now["salto"] > 0 and before["salto"] <= 0:
-            audio.play_jump()
+            self._sonar("salto", audio.play_jump)
         if now["invulnerable"] > before["invulnerable"] + 0.5:
-            audio.play_miss()  # Tropiezo con maleta o carrito
+            self._sonar("tropiezo", audio.play_miss)  # Tropiezo con maleta o carrito
         if now["foto"] != before["foto"] and now["foto"][0] is not None:
-            audio.play_click()  # Obturador
+            self._sonar("foto", audio.play_click)  # Obturador
         for old, new in zip(before["casos"], now["casos"]):
             if old is None and new is not None:
                 if str(new).startswith("ERROR:"):
-                    audio.play_lose()
+                    self._sonar("caso_mal", audio.play_lose)
                 else:
-                    audio.play_drum()
+                    self._sonar("caso_bien", audio.play_drum)
         self._snap = now
 
     def enter(self, params: Optional[dict] = None) -> None:

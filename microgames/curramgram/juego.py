@@ -5,8 +5,8 @@ import random
 import pygame
 from microgames.redes_comun import ANCHO, ALTO, FPS, RAIZ, cargar_imagen, cargar_sprite, revisar_recursos, fuente, texto, texto_con_contorno, panel, load_managed_sound
 
-# Efecto al recoger cada sello (reciclado; cambiar aquí cuando haya uno propio).
-SFX_SELLO="char_audio_1_microjuego_puño.ogg"
+# Efecto al recoger cada sello.
+SFX_SELLO="curramgram_sello.mp3"
 from microgames.curramgram.animacion import Animacion
 from microgames.curramgram import interfaz as ui
 

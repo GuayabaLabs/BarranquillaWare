@@ -5,8 +5,8 @@ import pygame
 from microgames.redes_comun import ANCHO, ALTO, FPS, RAIZ, cargar_imagen, cargar_sprite, revisar_recursos, texto, fuente, panel, load_managed_sound
 from microgames.redes_comun import TINTA, barra_acuarela, cartel, circulo_acuarela, sprite_opcional, texto_con_contorno
 
-# Efecto al bloquear un emoji negativo (reciclado; cambiar aquí cuando haya uno propio).
-SFX_BLOQUEO = "char_audio_0_microjuego_puño.ogg"
+# Efecto al bloquear un emoji negativo.
+SFX_BLOQUEO = "emoji_bloqueo.mp3"
 
 # Parámetros configurables
 DURACION = 120.0
@@ -26,7 +26,8 @@ COLOR_MORADO = (133, 79, 185)
 COLOR_AZUL = (55, 147, 218)
 
 NEGATIVOS = ("emoji_enojado_naranja", "emoji_enojado_rojo", "emoji_triste", "emoji_vomito_1", "emoji_vomito_2", "emoji_corazon_roto", "emoji_pulgar_abajo")
-POSITIVOS = ("emoji_sonriente", "emoji_cara_azul", "emoji_corazon", "emoji_pulgar_arriba", "emoji_bolsa_dinero")
+POSITIVOS = ("emoji_sonriente", "emoji_cara_azul", "emoji_corazon", "emoji_pulgar_arriba", "emoji_bolsa_dinero", "emoji_estrellas", "emoji_angel")
+ALTO_MANO = 270  # Alto en pantalla de las manos acuarela
 SPRITES = (*NEGATIVOS, *POSITIVOS)
 
 
@@ -48,8 +49,12 @@ class EmojiCatch:
         self.sprites = {n: cargar_sprite(f"{n}.png", "emoji") for n in SPRITES}
         self.decoracion = {n: cargar_sprite(f"{n}.png", "emoji") for n in (
             "titulo", "tiempo", "tarjeta_mano_izq", "tarjeta_mano_der", "barra_negatividad", "barra_positividad", "mano_morada", "mano_azul_der")}
-        self.mano_morada = self._escalar(self.decoracion["mano_morada"], 2)
-        self.mano_azul = self._escalar(self.decoracion["mano_azul_der"], 2)
+        a_alto = lambda img: pygame.transform.smoothscale_by(img, ALTO_MANO / img.get_height()) if img else None
+        self.mano_morada = a_alto(self.decoracion["mano_morada"])
+        self.mano_azul = a_alto(self.decoracion["mano_azul_der"])
+        # Al atrapar, la mano se cierra en puño (arte acuarela; opcional).
+        self.puno = [a_alto(cargar_sprite(f"{n}.png", "emoji")) if (RAIZ / "assets/emoji_catch" / f"{n}.png").is_file() else None
+                     for n in ("mano_morada_puno", "mano_azul_puno")]
         self._limpiar_barras_de_matte()
         self._preparar_barras()
         self._preparar_corazon_partido()
@@ -281,7 +286,7 @@ class EmojiCatch:
         x,y=960,186;dif=max(-1,min(1,(self.negatividad-self.positividad)/60))
         propio=sprite_opcional("balanza.png","emoji")
         if propio is not None:
-            img=pygame.transform.smoothscale_by(propio,150/max(propio.get_size()));img=pygame.transform.rotate(img,-dif*14)
+            img=pygame.transform.smoothscale_by(propio,190/max(propio.get_size()));img=pygame.transform.rotate(img,-dif*14)
             s.blit(img,img.get_rect(center=(x,y)))
         else:
             fondo=circulo_acuarela(124,(250,240,226));s.blit(fondo,fondo.get_rect(center=(x,y)))
@@ -333,6 +338,7 @@ class EmojiCatch:
         for i,(x,base,color) in enumerate(((self.manos[0],self.mano_morada,COLOR_MORADO),(self.manos[1],self.mano_azul,COLOR_AZUL))):
             if base is None:continue
             pulse=self.pulso[i];escala=1+0.10*math.sin(pulse*math.pi/.22) if pulse else 1
+            if pulse and self.puno[i] is not None:base=self.puno[i]
             img=base
             if escala!=1:img=pygame.transform.smoothscale(base,(int(base.get_width()*escala),int(base.get_height()*escala)))
             img=pygame.transform.rotate(img,-self.direccion[i]*8)
