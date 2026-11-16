@@ -87,12 +87,18 @@ class BaseMicrogame(BaseState):
         self.outro_timer = 0.0
 
         if won:
-            if hasattr(self.audio, "play_win"):
+            fallback = getattr(self.audio, "_win_sound", None)
+            if hasattr(self.audio, "play_voice"):
+                self.audio.play_voice("coronaste.ogg", volume_scale=1.0, fallback_sound=fallback)
+            elif hasattr(self.audio, "play_win"):
                 self.audio.play_win()
             elif hasattr(self.audio, "play_click"):
                 self.audio.play_click()
         else:
-            if hasattr(self.audio, "play_lose"):
+            fallback = getattr(self.audio, "_lose_sound", None)
+            if hasattr(self.audio, "play_voice"):
+                self.audio.play_voice("ombe_casi.ogg", volume_scale=1.0, fallback_sound=fallback)
+            elif hasattr(self.audio, "play_lose"):
                 self.audio.play_lose()
             elif hasattr(self.audio, "play_pigeon"):
                 self.audio.play_pigeon()

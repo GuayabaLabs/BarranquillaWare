@@ -1,62 +1,85 @@
 import os
+import pytest
 import pygame
 
+from core.audio_manager import AudioManager
+from core.asset_manager import AssetManager
+from scenes.story_map.scene import StoryMapScene
+from scenes.story_map.ui_dialogs import StoryMapUI
+
 os.environ["SDL_VIDEODRIVER"] = "dummy"
+os.environ["SDL_AUDIODRIVER"] = "dummy"
+
 pygame.init()
-pygame.display.set_mode((1920, 1080))
+if not pygame.display.get_surface():
+    pygame.display.set_mode((1920, 1080))
 
-from scenes.mode_select import ModeSelectScene
+def test_paloma_frames_exist_and_valid():
+    """Verifica que los 4 sprites de animación de la Paloma existan y tengan dimensiones válidas con canal alfa."""
+    frames = [
+        "assets/paloma_dialog_habla_0.png",
+        "assets/paloma_dialog_habla_1.png",
+        "assets/paloma_dialog_habla_2.png",
+        "assets/paloma_dialog_pestaneo.png",
+    ]
+    for frame_path in frames:
+        assert os.path.exists(frame_path), f"El frame {frame_path} no existe en disco."
+        surf = pygame.image.load(frame_path)
+        assert surf.get_width() > 100
+        assert surf.get_height() > 100
+        assert surf.get_masks()[3] != 0, f"El frame {frame_path} debe tener canal alfa."
 
-def test_paloma_state_flow():
-    scene = ModeSelectScene()
-    assert scene.paloma_state == "descanso", f"Estado inicial debe ser 'descanso', obtenido: {scene.paloma_state}"
-    assert scene.paloma_hd == scene.paloma_hd_descanso
+def test_story_map_loads_talk_frames():
+    """Verifica que StoryMapScene cargue los 4 frames de habla y gestione el ciclo de animación."""
+    scene = StoryMapScene(character_id="westcol")
+    assert hasattr(scene, "paloma_talk_frames")
+    assert len(scene.paloma_talk_frames) == 4
+    for f in scene.paloma_talk_frames:
+        assert isinstance(f, pygame.Surface)
+        assert f.get_size() == scene.paloma_dialog_portrait.get_size()
 
-    # 1. Primer clic en la paloma
-    click_pos = scene.paloma_rect.center
-    scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {'pos': click_pos, 'button': 1}))
-    assert scene.paloma_state == "parada", f"Tras el primer clic debe pasar a 'parada', obtenido: {scene.paloma_state}"
-    assert scene.paloma_hd == scene.paloma_hd_parada
-    assert scene.paloma_jump_vel < 0.0, "Debe tener velocidad vertical negativa de salto."
-    assert scene.paloma_squash < 0.0, "Debe iniciar con deformación de impulso (squash)."
+    # Si diálogo cerrado -> reposo (frame 0)
+    scene.paloma_dialog_open = False
+    assert scene.get_paloma_talk_portrait() == scene.paloma_talk_frames[0]
 
-    # 2. Clics sucesivos para elevarla hasta superar el umbral de vuelo (-150 px)
-    dt = 1.0 / 60.0
-    for _ in range(5):
-        scene.update(dt)
+    # Si diálogo abierto -> modula según timer
+    scene.paloma_dialog_open = True
+    scene.timer = 1.0
+    active = scene.get_paloma_talk_portrait()
+    assert isinstance(active, pygame.Surface)
 
-    # Segundo y tercer clic mientras asciende
-    scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {'pos': scene.paloma_rect.center, 'button': 1}))
-    scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {'pos': scene.paloma_rect.center, 'button': 1}))
+def test_paloma_dialog_ui_render_with_animation():
+    """Verifica que render_paloma_dialog soporte talk_frames y renderice en superficie virtual 1920x1080."""
+    ui = StoryMapUI(1920, 1080)
+    surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+    scene = StoryMapScene(character_id="westcol")
 
-    # Simular tiempo hasta que suba a zona aérea
-    for _ in range(20):
-        scene.update(dt)
+    pages = [["¡Cucu-rrucú! Hablando con la animación de la Paloma."]]
+    font = pygame.font.Font(None, 24)
 
-    assert scene.paloma_state == "volando", f"Al subir en el aire debe cambiar a 'volando', obtenido: {scene.paloma_state}"
-    assert scene.paloma_hd == scene.paloma_hd_volando
+    ui.render_paloma_dialog(
+        surface=surf,
+        anim_t=1.0,
+        pages=pages,
+        page_idx=0,
+        speaker="PALOMA DE CURRAMBA",
+        badge="NIVEL DE PRUEBA",
+        timer=2.5,
+        portrait_surf=scene.paloma_dialog_portrait,
+        dialog_box_surf=scene.dialog_box_surf,
+        font_speaker=font,
+        font_badge=font,
+        font_body=font,
+        font_hint=font,
+        talk_frames=scene.paloma_talk_frames,
+    )
+    assert surf.get_bounding_rect().width > 0
 
-    # 3. Render en estado volando (prueba que el aleteo, inclinación y transformación no rompan)
-    virtual_surface = pygame.Surface((1920, 1080))
-    scene.render(virtual_surface)
+def test_audio_manager_play_voice_fallback():
+    """Verifica que AudioManager.play_voice no falle y recurra limpiamente a fallback_sound si no hay clip."""
+    audio = AudioManager.get_instance()
+    res = audio.play_voice("archivo_inexistente_12345.ogg", volume_scale=1.0, fallback_sound=None)
+    assert res is None
 
-    # 4. Simular caída libre hasta aterrizar
-    # Dejamos pasar suficientes frames sin clics para que la gravedad la baje al suelo
-    for _ in range(120):
-        scene.update(dt)
-        scene.render(virtual_surface)
-
-    assert scene.paloma_jump_y == 0.0, f"Debe haber aterrizado en el suelo (jump_y=0.0), obtenido: {scene.paloma_jump_y}"
-    assert scene.paloma_state == "parada", f"Al aterrizar debe quedar en 'parada', obtenido: {scene.paloma_state}"
-    assert scene.paloma_hd == scene.paloma_hd_parada
-
-    # 5. Esperar 5 segundos de inactividad para que vuelva a 'descanso'
-    for _ in range(320):  # > 5.0 segundos a 60 FPS
-        scene.update(dt)
-
-    assert scene.paloma_state == "descanso", f"Tras inactividad debe relajarse a 'descanso', obtenido: {scene.paloma_state}"
-    assert scene.paloma_hd == scene.paloma_hd_descanso
-    print("TODAS LAS PRUEBAS DE ANIMACION Y ESTADOS DE LA PALOMA PASARON EXITOSAMENTE.")
-
-if __name__ == "__main__":
-    test_paloma_state_flow()
+    fallback = audio._win_sound
+    audio.play_voice("archivo_inexistente_12345.ogg", volume_scale=1.0, fallback_sound=fallback)

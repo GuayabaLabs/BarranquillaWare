@@ -1143,16 +1143,61 @@ class StoryMapScene(BaseState):
             pygame.draw.rect(self.dialog_box_surf, (255, 244, 218, 248), (20, 60, 1020, 420), border_radius=36)
             pygame.draw.rect(self.dialog_box_surf, (150, 95, 175), (20, 60, 1020, 420), width=6, border_radius=36)
 
+        self.paloma_talk_frames: list = []
         try:
             raw_pal = self.assets.load_surface("paloma_dialog.png", has_alpha=True)
             mask = pygame.mask.from_surface(raw_pal)
             rects = mask.get_bounding_rects()
-            cropped = raw_pal.subsurface(rects[0]) if rects else raw_pal
+            crop_rect = rects[0] if rects else raw_pal.get_rect()
+            cropped = raw_pal.subsurface(crop_rect)
             target_h = 330
             target_w = max(180, int(cropped.get_width() * (target_h / float(max(1, cropped.get_height())))))
             self.paloma_dialog_portrait = pygame.transform.smoothscale(cropped, (target_w, target_h))
+
+            # Cargar frames para animación de habla y parpadeo (habla_0, habla_1, habla_2, pestaneo)
+            frame_filenames = [
+                "paloma_dialog_habla_0.png",
+                "paloma_dialog_habla_1.png",
+                "paloma_dialog_habla_2.png",
+                "paloma_dialog_pestaneo.png",
+            ]
+            loaded_frames = []
+            for fname in frame_filenames:
+                try:
+                    f_raw = self.assets.load_surface(fname, has_alpha=True)
+                    f_cropped = f_raw.subsurface(crop_rect) if f_raw.get_size() == raw_pal.get_size() else f_raw
+                    f_scaled = pygame.transform.smoothscale(f_cropped, (target_w, target_h))
+                    loaded_frames.append(f_scaled)
+                except Exception:
+                    loaded_frames.append(self.paloma_dialog_portrait)
+
+            if len(loaded_frames) == 4:
+                self.paloma_talk_frames = loaded_frames
+            else:
+                self.paloma_talk_frames = [self.paloma_dialog_portrait] * 4
         except Exception:
             self.paloma_dialog_portrait = self.paloma_guide
+            self.paloma_talk_frames = [self.paloma_guide] * 4
+
+    def get_paloma_talk_portrait(self) -> pygame.Surface:
+        """Retorna el sprite activo de la Paloma modulando pico y pestañeo."""
+        frames = getattr(self, "paloma_talk_frames", None)
+        if not frames or len(frames) < 4:
+            return getattr(self, "paloma_dialog_portrait", self.paloma_guide)
+
+        # Si el diálogo no está abierto o está en transición de salida, reposo
+        if not getattr(self, "paloma_dialog_open", False):
+            return frames[0]
+
+        t = getattr(self, "timer", 0.0)
+        # Pestañeo cada 3.8s durante 0.16s
+        if (t % 3.8) < 0.16:
+            return frames[3]  # Pestañeo
+
+        # Modulación de habla a ~6.2 Hz (0 -> 1 -> 2 -> 1)
+        step = int((t * 6.2) % 4)
+        mapping = [0, 1, 2, 1]
+        return frames[mapping[step]]
 
     def open_paloma_dialog(
         self,
@@ -1180,18 +1225,34 @@ class StoryMapScene(BaseState):
             self.audio.play_click()
 
     def _trigger_dialog_voice(self, page_idx: int) -> None:
-        """Reproduce clip de voz opcional si existe en assets (soporte para doblaje Tarea 005)."""
+        """Reproduce clip de voz opcional si existe en assets/voces/ o assets/ con fallback a las voces de SEOR."""
         prefix = getattr(self, "paloma_dialog_voice_prefix", "")
-        if prefix:
-            voice_name = f"{prefix}_{page_idx}.ogg"
-            try:
-                import os
-                full_p = os.path.join(self.assets.assets_dir, voice_name)
-                if os.path.exists(full_p):
-                    self.audio.play_sound(voice_name)
+        fallback_pigeon = getattr(self.audio, "_pigeon_sound", None) if page_idx == 0 else None
+
+        if hasattr(self.audio, "play_voice"):
+            # 1. Intentar archivo específico si existiera (ej. paloma_welcome_0.ogg)
+            if prefix:
+                voice_name = f"{prefix}_{page_idx}.ogg"
+                channel = self.audio.play_voice(voice_name, volume_scale=1.0, fallback_sound=None)
+                if channel is not None:
                     return
-            except Exception:
-                pass
+
+            # 2. Si no existe clip por página y es la primera página del diálogo, reproducir voz de reacción de SEOR
+            if page_idx == 0:
+                generic_clip = None
+                if "win" in prefix:
+                    generic_clip = "paloma_victoria.ogg"
+                elif "lose" in prefix:
+                    generic_clip = "paloma_derrota.ogg"
+                elif "welcome" in prefix:
+                    generic_clip = "paloma_saludo.ogg"
+                else:
+                    generic_clip = "paloma_animo.ogg"
+
+                channel = self.audio.play_voice(generic_clip, volume_scale=1.0, fallback_sound=fallback_pigeon)
+                if channel is not None:
+                    return
+
         if hasattr(self.audio, "play_pigeon") and page_idx == 0:
             self.audio.play_pigeon()
 
@@ -3565,7 +3626,8 @@ class StoryMapScene(BaseState):
             surface.blit(pill, rect.topleft)
 
     def _render_paloma_dialog(self, surface: pygame.Surface) -> None:
-        """Renderiza el cuadro de diálogo acuarela oficial (text_dialog.png) acompañado por paloma_dialog.png."""
+        """Renderiza el cuadro de diálogo acuarela oficial con animación de habla de la Paloma."""
+        active_portrait = self.get_paloma_talk_portrait()
         self.story_ui.render_paloma_dialog(
             surface=surface,
             anim_t=self.paloma_dialog_anim_t,
@@ -3574,12 +3636,13 @@ class StoryMapScene(BaseState):
             speaker=self.paloma_dialog_speaker,
             badge=self.paloma_dialog_badge,
             timer=self.timer,
-            portrait_surf=self.paloma_dialog_portrait,
+            portrait_surf=active_portrait,
             dialog_box_surf=self.dialog_box_surf,
             font_speaker=self.font_paloma_speaker,
             font_badge=self.font_paloma_badge,
             font_body=self.font_paloma_body,
             font_hint=self.font_paloma_hint,
+            talk_frames=getattr(self, "paloma_talk_frames", None),
         )
 
     def _render_intro_dialog(self, surface: pygame.Surface) -> None:
