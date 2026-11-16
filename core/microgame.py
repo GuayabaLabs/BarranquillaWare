@@ -3,7 +3,7 @@ from typing import Optional, Callable
 import pygame
 
 from core.state_machine import BaseState
-from core.asset_manager import AssetManager, bordeSuave
+from core.asset_manager import AssetManager, bordeSuave, desenfoque_suave
 from core.audio_manager import AudioManager
 
 class BaseMicrogame(BaseState):
@@ -502,7 +502,7 @@ class BaseMicrogame(BaseState):
 
     def suavizarOrilla(self, imagen: pygame.Surface) -> pygame.Surface:
         suave = imagen.copy()
-        alfa = pygame.transform.box_blur(imagen, 1)
+        alfa = desenfoque_suave(imagen)
         suave.blit(alfa, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         return suave
 
