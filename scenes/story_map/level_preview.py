@@ -348,7 +348,7 @@ class LevelPreviewBuilder:
             refs.append(player_rect)
 
         for ref in refs:
-            for b_gap in (36, 26, 16):
+            for b_gap in (44, 36, 26, 16):
                 # Arriba del edificio/personaje
                 top_y = ref.top - b_gap - self.BODY_H
                 # Abajo del edificio/personaje
@@ -411,8 +411,8 @@ class LevelPreviewBuilder:
                 if (tr_env.top < 0 or tr_env.bottom > self.screen_h or tr_env.left < 0 or tr_env.right > self.screen_w)
                 else 0
             )
-            prim_ov = clip_area_sum(br_env, primary_obstacles)
-            sec_ov = clip_area_sum(br_env, secondary_obstacles)
+            prim_ov = clip_area_sum(br_env, primary_obstacles) + clip_area_sum(tr_env, primary_obstacles)
+            sec_ov = clip_area_sum(br_env, secondary_obstacles) + clip_area_sum(tr_env, secondary_obstacles)
 
             # Evitar tapar el punto ancla cuando no hay obstáculo primario o incluso con él
             anchor_pen = 500000 if br_env.inflate(10, 10).collidepoint(ax, ay) else 0
@@ -453,7 +453,9 @@ class LevelPreviewBuilder:
             clip_area_sum(br_env, hud_rects)
             + clip_area_sum(tr_env, hud_rects)
             + clip_area_sum(br_env, primary_obstacles)
+            + clip_area_sum(tr_env, primary_obstacles)
             + clip_area_sum(br_env, secondary_obstacles)
+            + clip_area_sum(tr_env, secondary_obstacles)
         )
         for blk in hud_rects:
             if br_env.colliderect(blk) or tr_env.colliderect(blk):
@@ -472,7 +474,9 @@ class LevelPreviewBuilder:
                         clip_area_sum(cbr_env, hud_rects)
                         + clip_area_sum(ctr_env, hud_rects)
                         + clip_area_sum(cbr_env, primary_obstacles)
+                        + clip_area_sum(ctr_env, primary_obstacles)
                         + clip_area_sum(cbr_env, secondary_obstacles)
+                        + clip_area_sum(ctr_env, secondary_obstacles)
                     )
                     if cand_penalty < cur_penalty:
                         chosen_rect = cand_rect

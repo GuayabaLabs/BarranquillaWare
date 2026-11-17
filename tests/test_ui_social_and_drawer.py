@@ -119,8 +119,68 @@ def test_story_map_integration():
 
     print("  -> Integración en StoryMapScene validada con éxito.")
 
+def test_drawer_tabs_and_sections():
+    """Valida la navegación entre todas las pestañas del menú desplegable izquierdo."""
+    print("[TEST] 4. Verificando pestañas Mensajes, Misiones, Perfil y Logros...")
+    scene = StoryMapScene(character_id="westcol")
+    drawer = scene.side_drawer
+    drawer.is_open = True
+    drawer.anim_t = 1.0
+
+    os.makedirs("artifacts", exist_ok=True)
+    test_surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+
+    # 1. Probar pestaña Mensajes
+    scene._on_side_nav_selected("mensajes")
+    assert drawer.seccionActual == "mensajes"
+    drawer.render(test_surf)
+    pygame.image.save(test_surf, "artifacts/verify_drawer_mensajes.png")
+
+    # Cerrar sección con botón X
+    close_r = drawer.rectBotonCerrar(drawer._get_panel_x())
+    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+    consumed = drawer.handle_event(ev_down)
+    assert consumed is True
+    assert drawer.seccionActual == "botones"
+
+    # 2. Probar pestaña Misiones
+    scene._on_side_nav_selected("misiones")
+    assert drawer.seccionActual == "misiones"
+    test_surf.fill((0, 0, 0, 0))
+    drawer.render(test_surf)
+    pygame.image.save(test_surf, "artifacts/verify_drawer_misiones.png")
+
+    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+    drawer.handle_event(ev_down)
+    assert drawer.seccionActual == "botones"
+
+    # 3. Probar pestaña Perfil
+    scene._on_side_nav_selected("perfil")
+    assert drawer.seccionActual == "perfil"
+    test_surf.fill((0, 0, 0, 0))
+    drawer.render(test_surf)
+    pygame.image.save(test_surf, "artifacts/verify_drawer_perfil.png")
+
+    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+    drawer.handle_event(ev_down)
+    assert drawer.seccionActual == "botones"
+
+    # 4. Probar pestaña Logros
+    scene._on_side_nav_selected("logros")
+    assert drawer.seccionActual == "trofeos"
+    test_surf.fill((0, 0, 0, 0))
+    drawer.render(test_surf)
+    pygame.image.save(test_surf, "artifacts/verify_drawer_trofeos.png")
+
+    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+    drawer.handle_event(ev_down)
+    assert drawer.seccionActual == "botones"
+
+    print("  -> Todas las secciones del Drawer validadas y capturadas en artifacts/.")
+
 if __name__ == "__main__":
     test_social_hud()
     test_side_drawer()
     test_story_map_integration()
+    test_drawer_tabs_and_sections()
     print("\n[ÉXITO] Todas las pruebas empíricas pasaron satisfactoriamente.")

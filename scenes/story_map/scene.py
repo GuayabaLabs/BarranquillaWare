@@ -8,7 +8,7 @@ import pygame
 from core.state_machine import BaseState
 from core.asset_manager import AssetManager, achicar, quitarBlanco, bordeSuave
 from core.audio_manager import AudioManager
-from core.settings import SettingsManager
+from core.settings import SettingsManager, CHARACTER_DISPLAY_NAMES
 from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
 from core.camera import Camera2D
@@ -169,6 +169,7 @@ class StoryMapScene(BaseState):
 
         # 13. Trofeos escondidos en las glorietas de la Ventana al Mundo y la Aleta del Tiburón
         self.iniciarTrofeos()
+        self._sync_drawer_data()
 
     def _count_completed_campaign_levels(self, completed_microgames: Optional[list] = None) -> int:
         """Cuenta cuántos de los 4 niveles principales de la Historia han sido completados."""
@@ -197,15 +198,115 @@ class StoryMapScene(BaseState):
 
     def _on_side_nav_selected(self, nav_id: str) -> None:
         """Callback ejecutado al seleccionar una opción del SideNavDrawer izquierdo."""
+        self._sync_drawer_data()
         if nav_id == "mapa":
             # Si se selecciona mapa, enfocar la cámara suavemente en el jugador
             self.camera.target_x = max(0.0, min(float(self.camera.max_x), self.player_pos[0] - self.screen_w / 2.0))
             self.camera.target_y = max(0.0, min(float(self.camera.max_y), self.player_pos[1] - self.screen_h / 2.0))
+            self.side_drawer.is_open = False
         elif nav_id == "logros":
             # Muestra la sección de trofeos dentro del panel lateral
             self.side_drawer.mostrarTrofeos()
+        elif nav_id == "mensajes":
+            self.side_drawer.mostrarMensajes()
+        elif nav_id == "misiones":
+            self.side_drawer.mostrarMisiones()
+        elif nav_id == "perfil":
+            self.side_drawer.mostrarPerfil()
         else:
             print(f"[StoryMap] Pestaña de navegación seleccionada: {nav_id}")
+
+    def _sync_drawer_data(self) -> None:
+        """Sincroniza mensajes, misiones y perfil en el SideNavDrawer con el progreso de la historia."""
+        if not hasattr(self, "side_drawer"):
+            return
+        progress = self.settings.get_story_progress()
+        completed_microgames = progress.get("completed_microgames", [])
+        unlocked_locations = progress.get("unlocked_locations", [])
+        trofeos_obtenidos = self.leerTrofeosObtenidos()
+
+        # Misiones de campaña
+        misiones = [
+            {
+                "id": "uninorte",
+                "titulo": "Biblioteca Uninorte",
+                "desc": "Espanta distracciones y vence el doomscrolling.",
+                "completada": "uninorte" in unlocked_locations or "uninorte_concentrate" in completed_microgames,
+            },
+            {
+                "id": "buenavista",
+                "titulo": "C.C. Buenavista",
+                "desc": "Sigue el compás del trend sin volverte viral adicto.",
+                "completada": "buenavista" in unlocked_locations or "buenavista_trend" in completed_microgames,
+            },
+            {
+                "id": "metropolitano",
+                "titulo": "Estadio Metropolitano",
+                "desc": "Modera el chat en vivo y frena la toxicidad.",
+                "completada": "metropolitano" in unlocked_locations or "metropolitano_moderacion" in completed_microgames,
+            },
+            {
+                "id": "aeropuerto",
+                "titulo": "Aeropuerto Cortissoz",
+                "desc": "Batea el phishing y bloquea mensajes sospechosos.",
+                "completada": "aeropuerto" in unlocked_locations or "punch_alert" in completed_microgames,
+            },
+            {
+                "id": "malecon",
+                "titulo": "Gran Malecón del Río",
+                "desc": "Suelta el celular y reconéctate con el Magdalena.",
+                "completada": "malecon" in unlocked_locations or "coaster" in completed_microgames,
+            },
+        ]
+        self.side_drawer.ponerMisiones(misiones)
+
+        # Mensajes narrativos y alertas de redes
+        mensajes = [
+            {
+                "remitente": "Paloma de Curramba",
+                "asunto": "¡Bienvenido a Curramba!",
+                "cuerpo": "¡Epa llave! Usa las redes con cabeza fría. No todo lo que brilla en el feed es oro.",
+                "leido": True,
+            },
+            {
+                "remitente": "Alerta Digital Uninorte",
+                "asunto": "Zona Libre de Doomscrolling",
+                "cuerpo": "El estudio rinde más cuando silencias las notificaciones innecesarias.",
+                "leido": "uninorte" in unlocked_locations,
+            },
+            {
+                "remitente": "Radar Buenavista",
+                "asunto": "Tendencia en Consciencia",
+                "cuerpo": "Baila por alegría y arte, no para buscar validación en métricas vacías.",
+                "leido": "buenavista" in unlocked_locations,
+            },
+            {
+                "remitente": "Tribuna Metropolitano",
+                "asunto": "Pasión con Respeto",
+                "cuerpo": "El fútbol une a Barranquilla. Deja los insultos y la toxicidad fuera de la red.",
+                "leido": "metropolitano" in unlocked_locations,
+            },
+            {
+                "remitente": "Seguridad Cortissoz",
+                "asunto": "Alerta de Phishing y Estafas",
+                "cuerpo": "Nunca abras enlaces de premios milagrosos ni compartas contraseñas.",
+                "leido": "aeropuerto" in unlocked_locations,
+            },
+        ]
+        self.side_drawer.ponerMensajes(mensajes)
+
+        # Perfil del jugador
+        metricas = self._sync_social_hud()
+        perfil = {
+            "character_id": self.character_id,
+            "nombre": CHARACTER_DISPLAY_NAMES.get(self.character_id, "Protagonista"),
+            "rol": "Influencer Consciente de Curramba",
+            "seguidores": metricas.get("seguidores", "0"),
+            "likes": metricas.get("likes", "0"),
+            "trofeos": f"{len(trofeos_obtenidos)}/{len(trofeosMapa)}",
+            "niveles": f"{self._count_completed_campaign_levels(completed_microgames)}/4",
+        }
+        self.side_drawer.ponerPerfil(perfil)
 
     def iniciarTrofeos(self) -> None:
         """Prepara los trofeos escondidos del mapa y la ventana que avisa al ganarlos."""
@@ -1019,16 +1120,61 @@ class StoryMapScene(BaseState):
             pygame.draw.rect(self.dialog_box_surf, (255, 244, 218, 248), (20, 60, 1020, 420), border_radius=36)
             pygame.draw.rect(self.dialog_box_surf, (150, 95, 175), (20, 60, 1020, 420), width=6, border_radius=36)
 
+        self.paloma_talk_frames: list = []
         try:
             raw_pal = self.assets.load_surface("paloma_dialog.png", has_alpha=True)
             mask = pygame.mask.from_surface(raw_pal)
             rects = mask.get_bounding_rects()
-            cropped = raw_pal.subsurface(rects[0]) if rects else raw_pal
+            crop_rect = rects[0] if rects else raw_pal.get_rect()
+            cropped = raw_pal.subsurface(crop_rect)
             target_h = 330
             target_w = max(180, int(cropped.get_width() * (target_h / float(max(1, cropped.get_height())))))
             self.paloma_dialog_portrait = pygame.transform.smoothscale(cropped, (target_w, target_h))
+
+            # Cargar frames para animación de habla y parpadeo (habla_0, habla_1, habla_2, pestaneo)
+            frame_filenames = [
+                "paloma_dialog_habla_0.png",
+                "paloma_dialog_habla_1.png",
+                "paloma_dialog_habla_2.png",
+                "paloma_dialog_pestaneo.png",
+            ]
+            loaded_frames = []
+            for fname in frame_filenames:
+                try:
+                    f_raw = self.assets.load_surface(fname, has_alpha=True)
+                    f_cropped = f_raw.subsurface(crop_rect) if f_raw.get_size() == raw_pal.get_size() else f_raw
+                    f_scaled = pygame.transform.smoothscale(f_cropped, (target_w, target_h))
+                    loaded_frames.append(f_scaled)
+                except Exception:
+                    loaded_frames.append(self.paloma_dialog_portrait)
+
+            if len(loaded_frames) == 4:
+                self.paloma_talk_frames = loaded_frames
+            else:
+                self.paloma_talk_frames = [self.paloma_dialog_portrait] * 4
         except Exception:
             self.paloma_dialog_portrait = self.paloma_guide
+            self.paloma_talk_frames = [self.paloma_guide] * 4
+
+    def get_paloma_talk_portrait(self) -> pygame.Surface:
+        """Retorna el sprite activo de la Paloma modulando pico y pestañeo."""
+        frames = getattr(self, "paloma_talk_frames", None)
+        if not frames or len(frames) < 4:
+            return getattr(self, "paloma_dialog_portrait", self.paloma_guide)
+
+        # Si el diálogo no está abierto o está en transición de salida, reposo
+        if not getattr(self, "paloma_dialog_open", False):
+            return frames[0]
+
+        t = getattr(self, "timer", 0.0)
+        # Pestañeo cada 3.8s durante 0.16s
+        if (t % 3.8) < 0.16:
+            return frames[3]  # Pestañeo
+
+        # Modulación de habla a ~6.2 Hz (0 -> 1 -> 2 -> 1)
+        step = int((t * 6.2) % 4)
+        mapping = [0, 1, 2, 1]
+        return frames[mapping[step]]
 
     def open_paloma_dialog(
         self,
@@ -1056,18 +1202,34 @@ class StoryMapScene(BaseState):
             self.audio.play_click()
 
     def _trigger_dialog_voice(self, page_idx: int) -> None:
-        """Reproduce clip de voz opcional si existe en assets (soporte para doblaje Tarea 005)."""
+        """Reproduce clip de voz opcional si existe en assets/voces/ o assets/ con fallback a las voces de SEOR."""
         prefix = getattr(self, "paloma_dialog_voice_prefix", "")
-        if prefix:
-            voice_name = f"{prefix}_{page_idx}.ogg"
-            try:
-                import os
-                full_p = os.path.join(self.assets.assets_dir, voice_name)
-                if os.path.exists(full_p):
-                    self.audio.play_sound(voice_name)
+        fallback_pigeon = getattr(self.audio, "_pigeon_sound", None) if page_idx == 0 else None
+
+        if hasattr(self.audio, "play_voice"):
+            # 1. Intentar archivo específico si existiera (ej. paloma_welcome_0.ogg)
+            if prefix:
+                voice_name = f"{prefix}_{page_idx}.ogg"
+                channel = self.audio.play_voice(voice_name, volume_scale=1.0, fallback_sound=None)
+                if channel is not None:
                     return
-            except Exception:
-                pass
+
+            # 2. Si no existe clip por página y es la primera página del diálogo, reproducir voz de reacción de SEOR
+            if page_idx == 0:
+                generic_clip = None
+                if "win" in prefix:
+                    generic_clip = "paloma_victoria.ogg"
+                elif "lose" in prefix:
+                    generic_clip = "paloma_derrota.ogg"
+                elif "welcome" in prefix:
+                    generic_clip = "paloma_saludo.ogg"
+                else:
+                    generic_clip = "paloma_animo.ogg"
+
+                channel = self.audio.play_voice(generic_clip, volume_scale=1.0, fallback_sound=fallback_pigeon)
+                if channel is not None:
+                    return
+
         if hasattr(self.audio, "play_pigeon") and page_idx == 0:
             self.audio.play_pigeon()
 
@@ -1972,21 +2134,35 @@ class StoryMapScene(BaseState):
         """
         Retorna (poi_key, entry_node_id, anchor_source) cuando el jugador está sobre
         o dentro del radio de cercanía del nodo amarillo oficial de entrada de un POI jugable.
+        Cuando está estacionado en un nodo NO-parada (ej. 42 o 53 cerca de 55), o transitando
+        aristas que no se dirigen hacia esa parada oficial, NO activa el POI vecino.
         """
         radius = self.ENTRY_PROXIMITY_RADIUS if max_dist is None else float(max_dist)
         stop_node_map = self._get_playable_stop_node_map()
         _, _, node_map, _, _ = self._get_street_graph()
 
-        if not self.player_is_moving and self.player_node_id in stop_node_map:
-            nid = self.player_node_id
-            if nid in node_map:
-                return stop_node_map[nid], nid, "parked"
+        if not self.player_is_moving:
+            if self.player_node_id in stop_node_map and self.player_node_id in node_map:
+                return stop_node_map[self.player_node_id], self.player_node_id, "parked"
+            return None, None, ""
+
+        curr_edge_to: Optional[int] = None
+        has_active_edges = bool(
+            self.player_path_edges and 0 <= self.player_edge_idx < len(self.player_path_edges)
+        )
+        if has_active_edges:
+            curr_edge_to = self.player_path_edges[self.player_edge_idx].get("to")
 
         best_poi: Optional[str] = None
         best_nid: Optional[int] = None
         best_d = radius
         px, py = self.player_pos
         for nid, poi_key in stop_node_map.items():
+            if has_active_edges:
+                if curr_edge_to != nid:
+                    continue
+                if self.player_target_poi is not None and self.player_target_poi != poi_key:
+                    continue
             nd = node_map.get(nid)
             if nd is None:
                 continue
@@ -3230,6 +3406,20 @@ class StoryMapScene(BaseState):
         else:
             anchor_screen = (int(poi_rect.centerx - cam_x), int(poi_rect.top - cam_y + 24))
 
+        def _marker_envelope_rect(key: str, poi_screen_r: pygame.Rect) -> Optional[pygame.Rect]:
+            if key not in STORY_PLAYABLE_POIS:
+                return None
+            pin_w = max(self.poi_pin_surf.get_width(), self.poi_star_surf.get_width()) if hasattr(self, "poi_pin_surf") else 48
+            pin_h = max(self.poi_pin_surf.get_height(), self.poi_star_surf.get_height()) if hasattr(self, "poi_pin_surf") else 56
+            env_w = pin_w + 4
+            env_h = pin_h + 20
+            return pygame.Rect(
+                poi_screen_r.centerx - env_w // 2,
+                poi_screen_r.top - 18 - 11 - pin_h // 2 - 2,
+                env_w,
+                env_h,
+            )
+
         progress = self.settings.get_story_progress()
         is_cleared = poi_info["microgame_id"] in progress.get("completed_microgames", [])
         blocked = self._get_blocked_hud_rects()
@@ -3237,6 +3427,9 @@ class StoryMapScene(BaseState):
         player_screen = self._get_player_screen_rect(cam_x, cam_y)
         viewport = pygame.Rect(-20, -20, self.screen_w + 40, self.screen_h + 40)
         obstacle_rects: List[pygame.Rect] = []
+        active_marker_rect = _marker_envelope_rect(poi_key, active_poi_screen)
+        if active_marker_rect is not None and active_marker_rect.colliderect(viewport):
+            obstacle_rects.append(active_marker_rect)
         for other_key, other_info in self.poi_registry.items():
             if other_key == poi_key or other_key == "batalla_flores":
                 continue
@@ -3246,6 +3439,9 @@ class StoryMapScene(BaseState):
             other_screen = other_r.move(-cam_x, -cam_y)
             if other_screen.colliderect(viewport):
                 obstacle_rects.append(other_screen)
+            other_marker_rect = _marker_envelope_rect(other_key, other_screen)
+            if other_marker_rect is not None and other_marker_rect.colliderect(viewport):
+                obstacle_rects.append(other_marker_rect)
         self.level_preview.render_callout(
             surface=surface,
             poi_key=poi_key,
@@ -3510,7 +3706,8 @@ class StoryMapScene(BaseState):
             surface.blit(pill, rect.topleft)
 
     def _render_paloma_dialog(self, surface: pygame.Surface) -> None:
-        """Renderiza el cuadro de diálogo acuarela oficial (text_dialog.png) acompañado por paloma_dialog.png."""
+        """Renderiza el cuadro de diálogo acuarela oficial con animación de habla de la Paloma."""
+        active_portrait = self.get_paloma_talk_portrait()
         self.story_ui.render_paloma_dialog(
             surface=surface,
             anim_t=self.paloma_dialog_anim_t,
@@ -3519,12 +3716,13 @@ class StoryMapScene(BaseState):
             speaker=self.paloma_dialog_speaker,
             badge=self.paloma_dialog_badge,
             timer=self.timer,
-            portrait_surf=self.paloma_dialog_portrait,
+            portrait_surf=active_portrait,
             dialog_box_surf=self.dialog_box_surf,
             font_speaker=self.font_paloma_speaker,
             font_badge=self.font_paloma_badge,
             font_body=self.font_paloma_body,
             font_hint=self.font_paloma_hint,
+            talk_frames=getattr(self, "paloma_talk_frames", None),
         )
 
     def _render_intro_dialog(self, surface: pygame.Surface) -> None:

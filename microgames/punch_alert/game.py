@@ -1,13 +1,17 @@
 import os
 import math
 import random
-from typing import Optional, Callable, List, Tuple, Dict
+from typing import Optional, Callable, List, Tuple, Dict, Any
 import pygame
 import numpy as np
 
 from core.microgame import BaseMicrogame
 from core.camera_gestures import CameraGestureInput
 from core.asset_manager import AssetManager
+
+# Cachés compartidas a nivel de módulo para reutilizar sprites procesados y buffers de audio
+_SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
+_AUDIO_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 class PunchAlertMicrogame(BaseMicrogame):
     """
@@ -94,24 +98,25 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def _extract_clean_card_surface(self, sheet: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
         """
-        Extrae una tarjeta de notificación limpiando cualquier artefacto desconectado
-        en los primeros píxeles superiores y ajustando a su bounding box real.
+        Extrae una tarjeta de notificación limpiando con NumPy vectorizado cualquier artefacto
+        desconectado en los primeros píxeles superiores y ajustando a su bounding box real.
         """
         sub = sheet.subsurface(rect).copy()
         alpha_arr = pygame.surfarray.pixels_alpha(sub)
         w, h = sub.get_size()
 
-        for x in range(w):
-            if alpha_arr[x, 0] > 15 or alpha_arr[x, 2] > 15:
-                has_gap = False
-                gap_y = 0
-                for y in range(4, min(25, h)):
-                    if alpha_arr[x, y] < 15:
-                        has_gap = True
-                        gap_y = y
-                        break
-                if has_gap:
-                    alpha_arr[x, :gap_y] = 0
+        if w > 0 and h > 4:
+            y_lim = min(25, h)
+            top_active = (alpha_arr[:, 0] > 15) | (alpha_arr[:, 2] > 15)
+            low_band = alpha_arr[:, 4:y_lim] < 15
+            has_gap = top_active & low_band.any(axis=1)
+            if has_gap.any():
+                cols = np.flatnonzero(has_gap)
+                ys = 4 + np.argmax(low_band[cols], axis=1)
+                y_grid = np.arange(y_lim)[None, :]
+                band_view = alpha_arr[cols, :y_lim]
+                band_view[y_grid < ys[:, None]] = 0
+                alpha_arr[cols, :y_lim] = band_view
 
         del alpha_arr
 
@@ -122,13 +127,18 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def _load_optional_ui(self, filename: str, target_h: int) -> Optional[pygame.Surface]:
         """Carga un elemento de UI opcional manteniendo su relación de aspecto."""
+        cache_key = ("optional_ui", filename, target_h)
+        if cache_key in _SURFACE_CACHE:
+            return _SURFACE_CACHE[cache_key]
         try:
             raw = self.assets.load_surface(filename)
             bbox = raw.get_bounding_rect(min_alpha=15)
             cropped = raw.subsurface(bbox).copy() if (bbox.width > 0 and bbox.height > 0) else raw
             w, h = cropped.get_size()
             scale = target_h / float(max(1, h))
-            return pygame.transform.smoothscale(cropped, (int(w * scale), target_h))
+            res = pygame.transform.smoothscale(cropped, (int(w * scale), target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             return None
 
@@ -149,18 +159,24 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def _load_character_punch_voices(self) -> None:
         """
-        Carga las líneas de voz del personaje seleccionado al pegarle a una notificación.
-        Si el personaje seleccionado aún no tiene sus propios archivos de voz en disco,
-        usa por defecto el banco de voces de 'char' (garantizando que todos hablen desde ya,
-        y que cada personaje use su propia voz apenas se incluyan sus archivos).
+        Carga (o reutiliza desde caché) las líneas de voz del personaje seleccionado al pegarle a una notificación.
         """
         self.punch_voices: List[pygame.mixer.Sound] = []
         self.last_voice_idx: int = -1
 
-        if not pygame.mixer.get_init():
+        mixer_cfg = pygame.mixer.get_init()
+        if not mixer_cfg:
             return
 
         sfx_vol = getattr(self.audio, "sfx_volume", 0.85)
+        cache_key = ("punch_voices", self.character_id, mixer_cfg)
+        cached_voices = _AUDIO_CACHE.get(cache_key)
+        if cached_voices is not None:
+            for snd in cached_voices:
+                snd.set_volume(sfx_vol)
+            self.punch_voices = list(cached_voices)
+            return
+
         target_files = self.CHARACTER_PUNCH_VOICES.get(
             self.character_id,
             self.CHARACTER_PUNCH_VOICES["char"]
@@ -199,6 +215,9 @@ class PunchAlertMicrogame(BaseMicrogame):
                     except Exception:
                         pass
 
+        if self.punch_voices:
+            _AUDIO_CACHE[cache_key] = list(self.punch_voices)
+
     def _play_character_punch_voice(self) -> None:
         """Reproduce una voz aleatoria del personaje al conectar el golpe (evitando repetir la misma seguida)."""
         if not self.punch_voices:
@@ -222,13 +241,20 @@ class PunchAlertMicrogame(BaseMicrogame):
             snd.play()
 
     def _init_punch_sounds(self) -> None:
-        """Genera efectos de sonido procedurales de soporte para el bateo y notificaciones."""
+        """Genera (o reutiliza desde caché) los efectos de sonido procedurales de soporte."""
         self.snd_hit: Optional[pygame.mixer.Sound] = None
         self.snd_whiff: Optional[pygame.mixer.Sound] = None
         self.snd_safe: Optional[pygame.mixer.Sound] = None
         self.snd_strike: Optional[pygame.mixer.Sound] = None
 
-        if not pygame.mixer.get_init():
+        mixer_cfg = pygame.mixer.get_init()
+        if not mixer_cfg:
+            return
+
+        cache_key = ("punch_sfx", mixer_cfg)
+        cached_sfx = _AUDIO_CACHE.get(cache_key)
+        if cached_sfx is not None:
+            self.snd_hit, self.snd_whiff, self.snd_safe, self.snd_strike = cached_sfx
             return
 
         try:
@@ -267,6 +293,8 @@ class PunchAlertMicrogame(BaseMicrogame):
             wave_st = np.clip(buzz * env_st * 0.82, -1.0, 1.0)
             arr_st = (wave_st * 32767).astype(np.int16)
             self.snd_strike = pygame.sndarray.make_sound(np.column_stack((arr_st, arr_st)))
+
+            _AUDIO_CACHE[cache_key] = (self.snd_hit, self.snd_whiff, self.snd_safe, self.snd_strike)
         except Exception:
             pass
 
@@ -284,117 +312,147 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def setup_game(self) -> None:
         self.camera_input = CameraGestureInput.get_instance()
-        self.camera_input.start()
+        if (
+            os.environ.get("SDL_VIDEODRIVER") != "dummy"
+            and self.camera_input.available
+            and not self.camera_input.enabled
+            and not self.camera_input.suspended
+        ):
+            self.camera_input.keep_alive(retry_interval=2.0)
         """Carga recursos oficiales, configura el reloj HUD, voces del personaje y la oleada."""
         self.assets = AssetManager.get_instance()
         self._init_punch_sounds()
         self._load_character_punch_voices()
 
         # 1. Cargar fondo oficial provisto
-        raw_bg = self.assets.load_surface("fondo_box_microjuego.png")
-        if raw_bg:
-            self.bg_surface = pygame.transform.smoothscale(raw_bg, (self.screen_w, self.screen_h))
+        bg_key = ("bg", self.screen_w, self.screen_h)
+        cached_bg = _SURFACE_CACHE.get(bg_key)
+        if cached_bg is not None:
+            self.bg_surface = cached_bg
         else:
-            self.bg_surface = pygame.Surface((self.screen_w, self.screen_h))
-            self.bg_surface.fill((25, 25, 35))
+            raw_bg = self.assets.load_surface("fondo_box_microjuego.png")
+            if raw_bg:
+                self.bg_surface = pygame.transform.smoothscale(raw_bg, (self.screen_w, self.screen_h))
+                _SURFACE_CACHE[bg_key] = self.bg_surface
+            else:
+                self.bg_surface = pygame.Surface((self.screen_w, self.screen_h))
+                self.bg_surface.fill((25, 25, 35))
 
         # 2. Cargar contador gráfico oficial (igual que en UninorteSprint / Crossy Road)
         self.spr_counter = self._load_optional_ui("contador_microjuegos.png", target_h=96)
 
         # 3. Notificaciones con límites exactos del nuevo sheet (4 Filas x 4 Columnas)
-        notif_sheet = self.assets.load_surface("notificaciones_microjuego.png")
-        self.safe_sprites: List[pygame.Surface] = []
-        self.trash_sprites: List[pygame.Surface] = []
-
-        row_intervals = [(10, 248), (246, 463), (462, 661), (660, 868)]
-        col_intervals = [(0, 439), (441, 883), (886, 1328), (1331, 1773)]
-        safe_cells = {(2, 0), (2, 1), (2, 2), (2, 3), (1, 2)}
-
         target_card_w = 430
         target_card_h = 205
-
-        if notif_sheet:
-            for r_idx, (y1, y2) in enumerate(row_intervals):
-                for c_idx, (x1, x2) in enumerate(col_intervals):
-                    cell_rect = pygame.Rect(x1, y1, x2 - x1, y2 - y1)
-                    clean_card = self._extract_clean_card_surface(notif_sheet, cell_rect)
-                    cw, ch = clean_card.get_size()
-                    scale = min(target_card_w / float(cw), target_card_h / float(ch))
-                    final_w = int(cw * scale)
-                    final_h = int(ch * scale)
-                    scaled_inner = pygame.transform.smoothscale(clean_card, (final_w, final_h))
-
-                    card_canvas = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
-                    card_x = (target_card_w - final_w) // 2
-                    card_y = (target_card_h - final_h) // 2
-                    card_canvas.blit(scaled_inner, (card_x, card_y))
-
-                    if (r_idx, c_idx) in safe_cells:
-                        self.safe_sprites.append(card_canvas)
-                    else:
-                        self.trash_sprites.append(card_canvas)
+        notif_key = ("notif_cards", target_card_w, target_card_h)
+        cached_notifs = _SURFACE_CACHE.get(notif_key)
+        if cached_notifs is not None:
+            safe_tuple, trash_tuple = cached_notifs
+            self.safe_sprites = list(safe_tuple)
+            self.trash_sprites = list(trash_tuple)
         else:
-            ph_trash = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
-            ph_trash.fill((220, 50, 50, 220))
-            self.trash_sprites.append(ph_trash)
-            ph_safe = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
-            ph_safe.fill((50, 220, 50, 220))
-            self.safe_sprites.append(ph_safe)
+            notif_sheet = self.assets.load_surface("notificaciones_microjuego.png")
+            self.safe_sprites = []
+            self.trash_sprites = []
+
+            row_intervals = [(10, 248), (246, 463), (462, 661), (660, 868)]
+            col_intervals = [(0, 439), (441, 883), (886, 1328), (1331, 1773)]
+            safe_cells = {(2, 0), (2, 1), (2, 2), (2, 3), (1, 2)}
+
+            if notif_sheet:
+                for r_idx, (y1, y2) in enumerate(row_intervals):
+                    for c_idx, (x1, x2) in enumerate(col_intervals):
+                        cell_rect = pygame.Rect(x1, y1, x2 - x1, y2 - y1)
+                        clean_card = self._extract_clean_card_surface(notif_sheet, cell_rect)
+                        cw, ch = clean_card.get_size()
+                        scale = min(target_card_w / float(cw), target_card_h / float(ch))
+                        final_w = int(cw * scale)
+                        final_h = int(ch * scale)
+                        scaled_inner = pygame.transform.smoothscale(clean_card, (final_w, final_h))
+
+                        card_canvas = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
+                        card_x = (target_card_w - final_w) // 2
+                        card_y = (target_card_h - final_h) // 2
+                        card_canvas.blit(scaled_inner, (card_x, card_y))
+
+                        if (r_idx, c_idx) in safe_cells:
+                            self.safe_sprites.append(card_canvas)
+                        else:
+                            self.trash_sprites.append(card_canvas)
+                _SURFACE_CACHE[notif_key] = (tuple(self.safe_sprites), tuple(self.trash_sprites))
+            else:
+                ph_trash = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
+                ph_trash.fill((220, 50, 50, 220))
+                self.trash_sprites.append(ph_trash)
+                ph_safe = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
+                ph_safe.fill((50, 220, 50, 220))
+                self.safe_sprites.append(ph_safe)
 
         # 4. Personaje Boxeador con separación dinámica por valle de transparencia
-        char_sheet_name = f"{self.character_id}_sprite_box_microjuego.png"
-        try:
-            box_sheet = self.assets.load_surface(char_sheet_name)
-        except Exception:
-            box_sheet = self.assets.load_surface("char_sprite_box_microjuego.png")
-
         char_render_h = 540
-        if box_sheet:
-            bw, bh = box_sheet.get_size()
-            mask_arr = pygame.surfarray.array_alpha(box_sheet)
-            x_start = int(bw * 0.40)
-            x_end = int(bw * 0.53)
-            col_sums = [int((mask_arr[x, :] > 20).sum()) for x in range(x_start, x_end)]
-            zero_indices = [x_start + idx for idx, val in enumerate(col_sums) if val == 0]
-            if zero_indices:
-                split_x = zero_indices[len(zero_indices) // 2]
-            else:
-                min_idx = col_sums.index(min(col_sums))
-                split_x = x_start + min_idx
-
-            idle_rect = pygame.Rect(0, 0, split_x, bh)
-            punch_rect = pygame.Rect(split_x, 0, bw - split_x, bh)
-
-            idle_tight = self._extract_tight_surface(box_sheet, idle_rect)
-            punch_tight = self._extract_tight_surface(box_sheet, punch_rect)
-
-            scale_idle = char_render_h / float(idle_tight.get_height())
-            idle_w = int(idle_tight.get_width() * scale_idle)
-            self.sprite_idle = pygame.transform.smoothscale(idle_tight, (idle_w, char_render_h))
-
-            scale_punch = char_render_h / float(punch_tight.get_height())
-            punch_w = int(punch_tight.get_width() * scale_punch)
-            self.sprite_punch = pygame.transform.smoothscale(punch_tight, (punch_w, char_render_h))
+        box_key = ("box_char", self.character_id, char_render_h)
+        cached_box = _SURFACE_CACHE.get(box_key)
+        if cached_box is not None:
+            self.sprite_idle, self.sprite_punch = cached_box
         else:
-            self.sprite_idle = pygame.Surface((400, char_render_h), pygame.SRCALPHA)
-            self.sprite_idle.fill((60, 60, 160, 200))
-            self.sprite_punch = pygame.Surface((440, char_render_h), pygame.SRCALPHA)
-            self.sprite_punch.fill((220, 60, 60, 200))
+            char_sheet_name = f"{self.character_id}_sprite_box_microjuego.png"
+            try:
+                box_sheet = self.assets.load_surface(char_sheet_name)
+            except Exception:
+                box_sheet = self.assets.load_surface("char_sprite_box_microjuego.png")
+
+            if box_sheet:
+                bw, bh = box_sheet.get_size()
+                mask_arr = pygame.surfarray.array_alpha(box_sheet)
+                x_start = int(bw * 0.40)
+                x_end = int(bw * 0.53)
+                col_sums = (mask_arr[x_start:x_end, :] > 20).sum(axis=1)
+                zero_offsets = np.flatnonzero(col_sums == 0)
+                if zero_offsets.size > 0:
+                    split_x = int(x_start + zero_offsets[len(zero_offsets) // 2])
+                else:
+                    split_x = int(x_start + np.argmin(col_sums))
+
+                idle_rect = pygame.Rect(0, 0, split_x, bh)
+                punch_rect = pygame.Rect(split_x, 0, bw - split_x, bh)
+
+                idle_tight = self._extract_tight_surface(box_sheet, idle_rect)
+                punch_tight = self._extract_tight_surface(box_sheet, punch_rect)
+
+                scale_idle = char_render_h / float(idle_tight.get_height())
+                idle_w = int(idle_tight.get_width() * scale_idle)
+                self.sprite_idle = pygame.transform.smoothscale(idle_tight, (idle_w, char_render_h))
+
+                scale_punch = char_render_h / float(punch_tight.get_height())
+                punch_w = int(punch_tight.get_width() * scale_punch)
+                self.sprite_punch = pygame.transform.smoothscale(punch_tight, (punch_w, char_render_h))
+                _SURFACE_CACHE[box_key] = (self.sprite_idle, self.sprite_punch)
+            else:
+                self.sprite_idle = pygame.Surface((400, char_render_h), pygame.SRCALPHA)
+                self.sprite_idle.fill((60, 60, 160, 200))
+                self.sprite_punch = pygame.Surface((440, char_render_h), pygame.SRCALPHA)
+                self.sprite_punch.fill((220, 60, 60, 200))
 
         # 5. HUD Completo de Strikes (ui_strike_microjuegos.png con los 3 círculos vacíos)
-        strike_sheet = self.assets.load_surface("ui_strike_microjuegos.png")
         hud_bar_h = 115
-        if strike_sheet:
-            tight_bar = self._extract_tight_surface(strike_sheet, pygame.Rect(0, 0, strike_sheet.get_width(), strike_sheet.get_height()))
-            aspect = float(tight_bar.get_width()) / float(tight_bar.get_height())
-            self.hud_bar_w = int(hud_bar_h * aspect)
-            self.hud_bar_h = hud_bar_h
-            self.strike_hud_base = pygame.transform.smoothscale(tight_bar, (self.hud_bar_w, self.hud_bar_h))
+        hud_key = ("strike_hud", hud_bar_h)
+        cached_hud = _SURFACE_CACHE.get(hud_key)
+        if cached_hud is not None:
+            self.hud_bar_w, self.hud_bar_h, self.strike_hud_base = cached_hud
         else:
-            self.hud_bar_w = 400
-            self.hud_bar_h = hud_bar_h
-            self.strike_hud_base = pygame.Surface((self.hud_bar_w, self.hud_bar_h), pygame.SRCALPHA)
-            self.strike_hud_base.fill((160, 40, 40, 200))
+            strike_sheet = self.assets.load_surface("ui_strike_microjuegos.png")
+            if strike_sheet:
+                tight_bar = self._extract_tight_surface(strike_sheet, pygame.Rect(0, 0, strike_sheet.get_width(), strike_sheet.get_height()))
+                aspect = float(tight_bar.get_width()) / float(tight_bar.get_height())
+                self.hud_bar_w = int(hud_bar_h * aspect)
+                self.hud_bar_h = hud_bar_h
+                self.strike_hud_base = pygame.transform.smoothscale(tight_bar, (self.hud_bar_w, self.hud_bar_h))
+                _SURFACE_CACHE[hud_key] = (self.hud_bar_w, self.hud_bar_h, self.strike_hud_base)
+            else:
+                self.hud_bar_w = 400
+                self.hud_bar_h = hud_bar_h
+                self.strike_hud_base = pygame.Surface((self.hud_bar_w, self.hud_bar_h), pygame.SRCALPHA)
+                self.strike_hud_base.fill((160, 40, 40, 200))
 
         self.circle_rel_positions = [
             (0.510, 0.500),
