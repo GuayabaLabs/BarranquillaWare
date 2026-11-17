@@ -32,6 +32,7 @@ class UIButton:
         # Estados de interacción
         self.is_hovered: bool = False
         self.is_pressed: bool = False
+        self.is_focused: bool = False  # Foco de teclado/mando (ver ui/focus_nav.py)
 
         # Animación de escala (Game Feel)
         self.current_scale: float = 1.0
@@ -47,6 +48,23 @@ class UIButton:
         """Actualiza la posición central del botón y su rectángulo de colisión."""
         self.center_x, self.center_y = center_pos
         self.rect.center = (self.center_x, self.center_y)
+
+    def set_focus(self, focused: bool) -> None:
+        """Marca el botón como seleccionado por teclado/mando."""
+        if focused and not self.is_focused:
+            self.audio.play_hover()
+            self.shimmer_progress = 0.0
+        self.is_focused = focused
+
+    def activate(self) -> None:
+        """Equivale a un clic completo (Enter / Espacio / botón A)."""
+        if self.is_toggle:
+            self.toggle_state = not self.toggle_state
+        self.audio.play_click()
+        self.shimmer_progress = 0.0
+        self.current_scale = 0.94
+        if self.on_click:
+            self.on_click()
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame.MOUSEMOTION:
@@ -83,7 +101,7 @@ class UIButton:
         if self.is_pressed:
             self.target_scale = 0.94
             target_offset = 3.0
-        elif self.is_hovered:
+        elif self.is_hovered or self.is_focused:
             self.target_scale = 1.05
             target_offset = -2.0
         else:
@@ -109,6 +127,13 @@ class UIButton:
 
         draw_y = self.center_y + self.press_offset_y
         dest_rect = scaled_surf.get_rect(center=(self.center_x, int(draw_y)))
+
+        if self.is_focused:
+            # Halo dorado del foco de teclado/mando, dibujado detrás del botón.
+            glow = pygame.Surface((w + 28, h + 28), pygame.SRCALPHA)
+            pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 180.0)
+            pygame.draw.rect(glow, (255, 214, 80, int(90 + 70 * pulse)), glow.get_rect(), border_radius=min(w, h) // 2 + 14)
+            surface.blit(glow, glow.get_rect(center=dest_rect.center))
 
         # 1. Aplicar destello interno DENTRO del botón (cero spray en los bordes)
         if self.shimmer_progress < 1.15:

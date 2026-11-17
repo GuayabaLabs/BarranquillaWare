@@ -6,6 +6,8 @@ import pygame
 from core.microgame import BaseMicrogame
 
 class MaleconRuedaMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"accion": pygame.K_SPACE}
     """
     Microjuego 5: '¡Frena en la Cima!' (Gran Malecón del Río - Rueda Luna del Río).
     - Consigna: ¡FRENA EN LA CIMA!

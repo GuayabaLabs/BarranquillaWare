@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict
 import pygame
 
 from core.state_machine import BaseState
@@ -17,6 +17,30 @@ class BaseMicrogame(BaseState):
     PHASE_INTRO = 0
     PHASE_PLAY = 1
     PHASE_OUTRO = 2
+
+    # Botones del mando que un microjuego quiere leer como teclas propias
+    # (índices estilo Xbox: 0=A, 1=B, 2=X, 3=Y). Lo consulta core.engine; Start/Back siguen pausando.
+    GAMEPAD_BUTTON_KEYS: Dict[int, int] = {}
+
+    # False en microjuegos que leen la cámara por su cuenta (posición, pellizco, golpe...):
+    # el motor no dibuja el lapicero ni consume gestos para no robarle la entrada al juego.
+    CAMERA_POINTER: bool = True
+
+    # Barra de tiempo acuarela: (centro_x, centro_y, ancho). None = abajo, centrada y ancha.
+    TIME_BAR_LAYOUT: Optional[tuple] = None
+
+    # Control por movimiento genérico: traduce gestos de la cámara a las teclas que el juego ya usa.
+    #   "accion": tecla que se pulsa al cerrar el puño o pellizcar.
+    #   "eje_x":  (izquierda, derecha) sostenidas según la mano esté a un lado u otro de la pantalla.
+    #   "eje_y":  (arriba, abajo) sostenidas según la altura de la mano.
+    #   "dedos":  teclas para doblar índice, medio, anular y meñique (como un piano).
+    # Lo llama core.engine en cada frame; si se define, el lapicero de menú se apaga en el juego.
+    CAMERA_ACTIONS: Dict[str, object] = {}
+
+    # Contexto opcional de la Paloma antes de jugar: lista de páginas (cada una, lista de líneas).
+    # Se muestra con el mismo cuadro de diálogo del Modo Historia (ui/paloma_intro.py).
+    dialogoPaloma: Optional[list] = None
+    CAMERA_DEADZONE: float = 0.12  # Zona muerta alrededor del centro para los ejes
 
     def __init__(
         self,
@@ -47,6 +71,7 @@ class BaseMicrogame(BaseState):
         self.outro_message: Optional[str] = None
         self.pause_return_callback: Optional[Callable[[], None]] = None
         self.pause_restart_callback: Optional[Callable[[], None]] = None
+        self.pause_menu_callback: Optional[Callable[[], None]] = None
 
         # Sacudida de pantalla (Screenshake)
         self.shake_intensity: float = 0.0
@@ -63,9 +88,64 @@ class BaseMicrogame(BaseState):
 
         self.setup_game()
 
+        self.paloma_intro = None
+        if self.dialogoPaloma:
+            from ui.paloma_intro import PalomaIntro
+            self.paloma_intro = PalomaIntro(self.dialogoPaloma)
+
     def setup_game(self) -> None:
         """Inicializa variables específicas del microjuego individual."""
         pass
+
+    def update_camera_actions(self, camera) -> None:
+        """Convierte gestos en teclas virtuales según CAMERA_ACTIONS (solo en la fase de juego)."""
+        from core import input_state
+
+        acciones = self.CAMERA_ACTIONS
+        held = getattr(self, "_camera_held", None)
+        if held is None:
+            held = self._camera_held = set()
+
+        activo = bool(acciones) and self.phase == self.PHASE_PLAY and not self.is_finished
+        presente = activo and camera is not None and camera.enabled and camera.is_hand_present()
+
+        deseadas = set()
+        if presente:
+            x, y = camera.get_position()
+            dz = self.CAMERA_DEADZONE
+            for eje, valor in (("eje_x", x), ("eje_y", y)):
+                teclas = acciones.get(eje)
+                if not teclas:
+                    continue
+                if valor < 0.5 - dz:
+                    deseadas.add(teclas[0])
+                elif valor > 0.5 + dz:
+                    deseadas.add(teclas[1])
+
+        def evento(tipo, tecla):
+            datos = {"key": tecla, "mod": 0, "scancode": 0, "camera_gesture": True}
+            if tipo == pygame.KEYDOWN:
+                datos["unicode"] = " " if tecla == pygame.K_SPACE else ""
+            self.handle_game_event(pygame.event.Event(tipo, datos))
+
+        for tecla in held - deseadas:
+            input_state.VIRTUAL_KEYS.discard(tecla)
+            evento(pygame.KEYUP, tecla)
+        for tecla in deseadas - held:
+            input_state.VIRTUAL_KEYS.add(tecla)
+            evento(pygame.KEYDOWN, tecla)
+        self._camera_held = deseadas
+
+        if not presente:
+            return
+        tecla_accion = acciones.get("accion")
+        if tecla_accion is not None and (camera.consume_fist() or camera.consume_click()):
+            evento(pygame.KEYDOWN, tecla_accion)
+            evento(pygame.KEYUP, tecla_accion)
+        for i, tecla in enumerate(acciones.get("dedos", ()) or ()):
+            if camera.consume_finger(i):
+                evento(pygame.KEYDOWN, tecla)
+                evento(pygame.KEYUP, tecla)
 
     def trigger_screenshake(self, intensity: float = 10.0, duration: float = 0.2) -> None:
         """Activa sacudida de pantalla."""
@@ -109,6 +189,9 @@ class BaseMicrogame(BaseState):
         pass
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            self.paloma_intro.handle_event(event)
+            return
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if self.phase == self.PHASE_PLAY and getattr(self, "state_machine", None):
                 from core.microgame_pause import MicrogamePauseState
@@ -116,7 +199,8 @@ class BaseMicrogame(BaseState):
                     MicrogamePauseState(
                         previous=self,
                         return_callback=self.pause_return_callback,
-                        restart_callback=self.pause_restart_callback
+                        restart_callback=self.pause_restart_callback,
+                        menu_callback=self.pause_menu_callback,
                     )
                 )
                 return
@@ -128,6 +212,10 @@ class BaseMicrogame(BaseState):
         pass
 
     def update(self, dt: float) -> None:
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            from core.camera_gestures import CameraGestureInput
+            self.paloma_intro.update(dt, CameraGestureInput.get_instance())
+            return
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:
@@ -158,6 +246,11 @@ class BaseMicrogame(BaseState):
 
         # 2. Render de la barra de tiempo elástica / mecha inferior estilo WarioWare
         self._render_fuse_timer(surface)
+
+        # 0. Contexto de la Paloma (antes de la consigna)
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            self.paloma_intro.render(surface)
+            return
 
         # 3. Cartel de consigna inicial (Fase Intro con bounce elástico)
         if self.phase == self.PHASE_INTRO:
@@ -581,7 +674,8 @@ class BaseMicrogame(BaseState):
                 import os
                 riel = self.assets.cargarSinFondo(os.path.join("Interfaz", "barraTiempoRiel.jpg"), 300)
                 riel = pygame.transform.smoothscale(riel, (int(riel.get_width() * 60 / riel.get_height()), 60))
-                self.rielBarra = self.estirarCentro(riel, 1120)
+                ancho_riel = self.TIME_BAR_LAYOUT[2] if self.TIME_BAR_LAYOUT else 1120
+                self.rielBarra = self.estirarCentro(riel, ancho_riel)
                 relleno = self.assets.cargarSinFondo(os.path.join("Interfaz", "barraTiempoRelleno.jpg"), 300)
                 relleno = pygame.transform.smoothscale(relleno, (int(relleno.get_width() * 40 / relleno.get_height()), 40))
                 self.rellenosBarra = {
@@ -596,7 +690,8 @@ class BaseMicrogame(BaseState):
         if not self.barraLista:
             return False
 
-        riel = self.rielBarra.get_rect(center=(self.screen_w // 2, self.screen_h - 44))
+        centro = (self.TIME_BAR_LAYOUT[0], self.TIME_BAR_LAYOUT[1]) if self.TIME_BAR_LAYOUT else (self.screen_w // 2, self.screen_h - 44)
+        riel = self.rielBarra.get_rect(center=centro)
         surface.blit(self.rielBarra, riel)
 
         ratio = max(0.0, min(1.0, self.time_left / self.time_limit))

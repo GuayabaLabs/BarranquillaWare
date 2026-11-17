@@ -166,6 +166,8 @@ class SpectatorSeat:
 
 
 class BuenavistaCineMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"accion": pygame.K_SPACE, "dedos": (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4)}
     """
     Microjuego: ¡Silencio, que hay función! 🎬
     Nivel 2: Buenavista (30 segundos).

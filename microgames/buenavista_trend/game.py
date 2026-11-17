@@ -12,6 +12,9 @@ from microgames.buenavista_trend.beatmap import MusicalNoteEvent, IMITADORA_BEAT
 
 
 class BuenavistaTrendMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
+    # Carriles de izquierda a derecha con el mando: X, A, Y, B.
+    GAMEPAD_BUTTON_KEYS = {2: pygame.K_d, 0: pygame.K_f, 3: pygame.K_j, 1: pygame.K_k}
     """
     Microjuego de ritmo y supervivencia: «El Trend en Buenavista» (Inspirado en Piano Tiles).
     - Ubicación: Centro Comercial Buenavista, Barranquilla.

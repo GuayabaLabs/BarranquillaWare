@@ -5,6 +5,8 @@ import pygame
 from core.microgame import BaseMicrogame
 
 class MetropolitanoPenaltyMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"accion": pygame.K_SPACE}
     """
     Microjuego 2: 'El Penal del Tiburón' (Estadio Metropolitano Roberto Meléndez).
     - Consigna: ¡PATEA AL ARCO!

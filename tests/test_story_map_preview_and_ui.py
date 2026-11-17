@@ -44,7 +44,7 @@ class TestMainMenuCohesion(unittest.TestCase):
             scene.btn_jugar,
             scene.btn_cargar,
             scene.btn_opciones,
-            scene.btn_estadisticas,
+            scene.btn_logros,
             scene.btn_salir,
         ]
 

@@ -10,6 +10,7 @@ from core.camera_gestures import CameraGestureInput
 from core.asset_manager import AssetManager
 
 class PunchAlertMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
     """
     Minijuego Punch-Alert: El Despachador de Notificaciones (Estilo WarioWare / Béisbol).
     Compatible 100% con el sistema de niveles / escenas (StoryMap, ArcadeMode, FreePlay)

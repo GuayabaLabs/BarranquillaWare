@@ -13,6 +13,7 @@ from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
 from core.camera import Camera2D
 from ui.button import UIButton
+from ui.focus_nav import FocusNavigator
 from ui.social_hud import SocialHUD
 from ui.side_drawer import SideNavDrawer
 from tools.map_dev_tool import MapDevTool, get_bezier_points
@@ -85,6 +86,21 @@ class StoryMapScene(BaseState):
     _CACHED_WORLD_MAP: Optional[pygame.Surface] = None
     _CACHED_BASE_WORLD_MAP: Optional[pygame.Surface] = None
     ENTRY_PROXIMITY_RADIUS: float = 120.0
+    # Cámara en el mapa: sin clic por permanencia (evita caminar sin querer); se usa pellizco,
+    # palma abierta hacia un lado para avanzar un nodo y puño para entrar al nivel.
+    CAMERA_DWELL_CLICK: bool = False
+    CAMERA_WALK_DEADZONE: float = 0.16
+    CAMERA_WALK_HOLD: float = 0.35  # Segundos sosteniendo la palma antes de avanzar
+    CAMERA_WALK_REPEAT: float = 0.65
+
+    # Nodo amarillo de entrada de cada nivel jugable (ids de config/map_poi_layout.json).
+    POI_ENTRY_NODES: Dict[str, int] = {
+        "uninorte": 71,
+        "buenavista": 76,
+        "metropolitano": 55,
+        "aeropuerto": 35,
+        "malecon": 63,
+    }
     def __init__(
         self,
         character_id: str = "westcol",
@@ -1937,6 +1953,11 @@ class StoryMapScene(BaseState):
             return None
         if poi_info.get("nodoParada") in node_map:
             return poi_info["nodoParada"]
+        # Nodo amarillo oficial fijado a mano: evita que la heurística de distancia
+        # escoja un nodo vecino si se mueve un edificio o la red vial.
+        fixed_nid = self.POI_ENTRY_NODES.get(poi_key)
+        if fixed_nid is not None and fixed_nid in node_map:
+            return fixed_nid
         poi_rect = poi_info["rect"]
         center = (poi_rect.centerx, poi_rect.centery)
 
@@ -1977,10 +1998,13 @@ class StoryMapScene(BaseState):
         stop_node_map = self._get_playable_stop_node_map()
         _, _, node_map, _, _ = self._get_street_graph()
 
-        if not self.player_is_moving and self.player_node_id in stop_node_map:
+        if not self.player_is_moving:
+            # Detenido: solo el nodo amarillo oficial da acceso; un nodo vecino cercano
+            # (p. ej. 49/51 en la glorieta del Metropolitano) nunca abre el nivel.
             nid = self.player_node_id
-            if nid in node_map:
+            if nid in stop_node_map and nid in node_map:
                 return stop_node_map[nid], nid, "parked"
+            return None, None, ""
 
         best_poi: Optional[str] = None
         best_nid: Optional[int] = None
@@ -2305,6 +2329,10 @@ class StoryMapScene(BaseState):
 
         # Interacción con el modal de Victoria del Carnaval
         if self.show_victory_modal:
+            if not hasattr(self, "_victory_focus"):
+                self._victory_focus = FocusNavigator(lambda: [self.btn_vic_explore, self.btn_vic_menu])
+            if self._victory_focus.handle_event(event):
+                return
             if self.btn_vic_explore.handle_event(event):
                 return
             if self.btn_vic_menu.handle_event(event):
@@ -2318,6 +2346,10 @@ class StoryMapScene(BaseState):
         if self.quest_card_open:
             if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_m):
                 self._close_quest_card()
+                return
+            # Teclado / mando: Enter, Espacio o A juegan el nivel directamente.
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.btn_quest_play.activate()
                 return
             consumed_play = self.btn_quest_play.handle_event(event)
             consumed_close = self.btn_quest_close.handle_event(event)
@@ -2366,6 +2398,13 @@ class StoryMapScene(BaseState):
             # Click fuera del Drawer para cerrar
             if event.type == pygame.MOUSEBUTTONDOWN and event.pos[0] < drawer_x:
                 self._toggle_menu()
+                return
+
+            # Teclado / mando: recorrer los botones del Drawer
+            if event.type == pygame.KEYDOWN:
+                if not hasattr(self, "_drawer_focus"):
+                    self._drawer_focus = FocusNavigator(lambda: self.drawer_buttons)
+                self._drawer_focus.handle_event(event)
                 return
 
             # Delegar eventos a los botones del Drawer con offset de coordenadas
@@ -2491,6 +2530,42 @@ class StoryMapScene(BaseState):
                             return
         elif event.type == pygame.MOUSEMOTION:
             self.camera.update_drag(event.pos)
+
+    def _camera_map_blocked(self) -> bool:
+        return bool(
+            self.menu_open
+            or self.quest_card_open
+            or getattr(self, "paloma_dialog_open", False)
+            or self.show_victory_modal
+            or self.show_intro_dialog
+            or (hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado())
+            or (hasattr(self, "side_drawer") and self.side_drawer.is_blocking())
+        )
+
+    def update_camera_walk(self, camera, dt: float) -> None:
+        """Palma abierta desplazada del centro = avanzar un nodo en esa dirección; puño = entrar."""
+        self._cam_walk_t = getattr(self, "_cam_walk_t", 0.0)
+        if camera is None or not camera.enabled or not camera.is_hand_present() or self._camera_map_blocked():
+            self._cam_walk_t = 0.0
+            return
+        if camera.consume_fist():
+            active_poi = self._get_active_entry_poi()
+            if active_poi:
+                self._enter_playable_poi_from_proximity(active_poi)
+                return
+        if not camera.is_open_palm():
+            self._cam_walk_t = 0.0
+            return
+        x, y = camera.get_position()
+        dx, dy = x - 0.5, y - 0.5
+        if max(abs(dx), abs(dy)) < self.CAMERA_WALK_DEADZONE:
+            self._cam_walk_t = 0.0
+            return
+        direction = (1.0 if dx > 0 else -1.0, 0.0) if abs(dx) >= abs(dy) else (0.0, 1.0 if dy > 0 else -1.0)
+        self._cam_walk_t += dt
+        if self._cam_walk_t >= self.CAMERA_WALK_HOLD and not self.player_is_moving:
+            if self._handle_dpad_move(direction):
+                self._cam_walk_t = self.CAMERA_WALK_HOLD - self.CAMERA_WALK_REPEAT
 
     def update(self, dt: float) -> None:
         self.timer += dt

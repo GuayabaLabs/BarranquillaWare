@@ -93,6 +93,7 @@ class ZombieNPC:
 
 
 class UninorteSprintMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
     """
     Microjuego 1: 'Carrera al Salón A-203' (Campus Uninorte).
     - Duración: 10 Segundos exactos.

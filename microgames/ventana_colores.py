@@ -6,6 +6,10 @@ import pygame
 from core.microgame import BaseMicrogame
 
 class VentanaColoresMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"dedos": (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4)}
+    # Colores del mando Xbox: B rojo, Y amarillo, X azul, A verde.
+    GAMEPAD_BUTTON_KEYS = {1: pygame.K_1, 3: pygame.K_2, 2: pygame.K_3, 0: pygame.K_4}
     """
     Microjuego 4: '¡Armoniza los Cristales!' (Monumento Ventana al Mundo).
     - Consigna: ¡TOCA EL COLOR QUE FALTA!
