@@ -4,12 +4,6 @@ import sys
 # Asegurar que el directorio raíz esté en sys.path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-# Limpiar variables dummy de testing si quedaron en el entorno para permitir audio y video reales
-if os.environ.get("SDL_AUDIODRIVER") == "dummy":
-    del os.environ["SDL_AUDIODRIVER"]
-if os.environ.get("SDL_VIDEODRIVER") == "dummy":
-    del os.environ["SDL_VIDEODRIVER"]
-
 from core.engine import Engine
 from scenes.main_menu import MainMenuScene
 

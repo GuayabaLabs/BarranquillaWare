@@ -36,9 +36,8 @@ class StoryMapUI:
         font_badge: pygame.font.Font,
         font_body: pygame.font.Font,
         font_hint: pygame.font.Font,
-        talk_frames: Optional[List[pygame.Surface]] = None,
     ) -> None:
-        """Renderiza el cuadro de diálogo acuarela oficial con paloma animada modulando pico y pestañeo."""
+        """Renderiza el cuadro de diálogo acuarela oficial (text_dialog.png) con paloma_dialog.png."""
         anim = max(0.0, min(1.0, anim_t))
 
         # 1. Oscurecimiento cálido y suave de fondo
@@ -53,17 +52,7 @@ class StoryMapUI:
         lines = pages[p_idx]
 
         bob_y = int(math.sin(timer * 3.0) * 6.0)
-
-        # Selección de frame animado de la Paloma
-        if talk_frames and len(talk_frames) >= 4 and anim > 0.05:
-            blink_c = timer % 3.8
-            if blink_c < 0.16:
-                pal_surf = talk_frames[3]
-            else:
-                step = int((timer * 6.2) % 4)
-                pal_surf = talk_frames[[0, 1, 2, 1][step]]
-        else:
-            pal_surf = portrait_surf
+        pal_surf = portrait_surf
         pal_w, pal_h = pal_surf.get_size()
 
         box_surf = dialog_box_surf.copy()

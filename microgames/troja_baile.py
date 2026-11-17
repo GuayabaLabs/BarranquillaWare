@@ -2,13 +2,10 @@ import math
 import random
 from typing import Optional, Callable
 import pygame
-from core import input_state
 
 from core.microgame import BaseMicrogame
 
 class TrojaBaileMicrogame(BaseMicrogame):
-    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
-    CAMERA_ACTIONS = {"eje_x": (pygame.K_LEFT, pygame.K_RIGHT)}
     """
     Microjuego Folclórico 8: 'Salsa y Cumbia en La Troja' (Calle 74 con Cra 44).
     - Consigna: ¡MANTÉN EL EQUILIBRIO!
@@ -100,7 +97,7 @@ class TrojaBaileMicrogame(BaseMicrogame):
             self._sfx_cooldown = max(0.0, self._sfx_cooldown - dt)
 
         # 1. Entrada continua por teclado o mouse
-        keys = input_state.get_pressed()
+        keys = pygame.key.get_pressed()
         correction = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             correction -= self.push_power * dt

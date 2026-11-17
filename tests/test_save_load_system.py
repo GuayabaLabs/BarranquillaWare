@@ -99,15 +99,15 @@ def test_main_menu_load_game_button_modal_and_scene_flow():
     assert isinstance(menu.load_game_scene, LoadGameScene)
 
     # Verificar que los 5 botones centrales no se traslapan verticalmente
-    stack = [menu.btn_jugar, menu.btn_cargar, menu.btn_opciones, menu.btn_logros, menu.btn_salir]
+    stack = [menu.btn_jugar, menu.btn_cargar, menu.btn_opciones, menu.btn_estadisticas, menu.btn_salir]
     for a, b in zip(stack, stack[1:]):
         assert a.rect.bottom <= b.rect.top + 8
 
     screen = pygame.Surface((1920, 1080))
     menu.render(screen)
 
-    # Modal de logros con marco acuarela (sin errores de llaves ni parámetros)
-    menu._open_modal("logros")
+    # Modal de estadísticas con marco acuarela (sin errores de llaves ni parámetros)
+    menu._open_modal("estadisticas")
     menu.update(0.1)
     menu.render(screen)
     menu.active_modal = None
@@ -202,9 +202,8 @@ def test_mode_select_watercolor_save_modal_bounds():
     mode_select.render(screen)
 
     # Toast acuarela en ModeSelectScene (sin cajas oscuras procedimentales)
-    mode_select.toast_msg = "¡AVISO DE PRUEBA ACUARELA!"
-    mode_select.toast_timer = 2.5
-    assert mode_select.toast_msg == "¡AVISO DE PRUEBA ACUARELA!"
+    mode_select._select_mode("arcade")
+    assert mode_select.toast_msg == "¡MODO ARCADE EN DESARROLLO!"
     mode_select.render(screen)
 
     # Iniciar Nueva Partida desde el modal limpia el guardado y va a selección de personaje

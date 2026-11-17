@@ -6,7 +6,6 @@ import math
 import random
 from typing import Optional, List, Tuple, Dict
 import pygame
-from core import input_state
 
 
 class Student:
@@ -282,7 +281,7 @@ class VirtualCursor:
         })
 
     def update(self, dt: float, clouds: Optional[List[Distraction]] = None) -> None:
-        keys = input_state.get_pressed()
+        keys = pygame.key.get_pressed()
         ix = 0.0
         iy = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:

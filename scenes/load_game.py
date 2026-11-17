@@ -10,7 +10,6 @@ from core.state_machine import BaseState
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
 from ui.button import UIButton
-from ui.focus_nav import FocusNavigator
 
 
 def render_outlined_text(
@@ -332,11 +331,6 @@ class StorySaveModalPanel:
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
             self._handle_cancel()
-            return True
-
-        if not hasattr(self, "focus_nav"):
-            self.focus_nav = FocusNavigator(lambda: self.buttons, default_index=0)
-        if self.focus_nav.handle_event(event):
             return True
 
         for btn in self.buttons:

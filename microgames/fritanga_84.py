@@ -127,7 +127,6 @@ class Fritanga84Microgame(BaseMicrogame):
                           "de lo que de verdad importa."]
     fraseRedes = "Usa las redes pa' compartir lo bueno, no pa' pelear."
 
-    CAMERA_ACTIONS = {"accion": pygame.K_SPACE}
     def __init__(
         self,
         character_id: str = "westcol",

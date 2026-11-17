@@ -48,8 +48,10 @@ def test_boss_microgame():
     # Probar render
     surf = pygame.Surface((1920, 1080))
     boss.render_game(surf)
-    out_png = os.path.join(os.path.dirname(__file__), "..", "artifacts", "render_boss_stage.png")
-    os.makedirs(os.path.dirname(out_png), exist_ok=True)
+    out_png = "C:/Users/danie/.gemini/antigravity/brain/b41976be-0b61-4f7e-ae55-10b881bf2028/render_boss_stage.png"
+    out_dir = os.path.dirname(out_png)
+    if not os.path.exists(out_dir):
+        out_png = "render_boss_stage.png"
     pygame.image.save(surf, out_png)
     print(f"[OK] Render de Boss Stage guardado en: {out_png}")
 

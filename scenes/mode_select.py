@@ -7,7 +7,6 @@ from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
 from core.settings import SettingsManager, compute_social_metrics
 from ui.button import UIButton
-from ui.focus_nav import FocusNavigator
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
 from scenes.character_select import CharacterSelectScene
@@ -149,8 +148,6 @@ class ModeSelectScene(BaseState):
             self.btn_arcade,
             self.btn_libre
         ]
-        # Teclado / mando: foco inicial en "Modo Historia"
-        self.focus_nav = FocusNavigator(lambda: self.buttons, default_index=3)
 
     def _init_story_save_modal(self) -> None:
         """Inicializa el modal acuarela de 'Continuar Partida' vs 'Nueva Partida' para el Modo Historia."""
@@ -206,12 +203,18 @@ class ModeSelectScene(BaseState):
         self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
 
     def _select_mode(self, mode_id: str) -> None:
-        """Gestiona la selección de modo: abre modal si hay partida guardada de historia o avanza a personajes."""
+        """Gestiona la selección de modo: notifica si está en desarrollo, abre modal si hay partida guardada o avanza a personajes."""
         self.audio.play_click()
         if mode_id == "arcade":
+            self.toast_msg = "¡MODO ARCADE EN DESARROLLO!"
+            self.toast_timer = 2.5
             self.juice_particles.emit_sparks((960, 550), count=10)
+            return
         elif mode_id == "libre":
+            self.toast_msg = "¡MODO LIBRE EN DESARROLLO!"
+            self.toast_timer = 2.5
             self.juice_particles.emit_sparks((1500, 550), count=10)
+            return
 
         if mode_id == "historia" and self.settings.has_saved_story():
             self.story_save_panel.refresh()
@@ -403,9 +406,6 @@ class ModeSelectScene(BaseState):
         # Tecla ESCAPE o BACKSPACE para volver al menú principal
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
             self._on_back_clicked()
-            return
-
-        if self.focus_nav.handle_event(event):
             return
 
         # Interacción Paloma

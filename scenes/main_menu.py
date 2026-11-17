@@ -6,19 +6,13 @@ from core.state_machine import BaseState
 from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
 from core.settings import SettingsManager
-from core.achievements import AchievementManager
 from core.map_settings import MapSettingsState
 from ui.button import UIButton
-from ui.focus_nav import FocusNavigator
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
 from scenes.mode_select import ModeSelectScene
 from scenes.load_game import LoadGameScene, render_outlined_text
 from scenes.slide_transition import SlideTransitionState
-
-# Marcadores internos de color para las líneas de logros (no se dibujan).
-LOGRO_ON = ""
-LOGRO_OFF = ""
 
 MODAL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "jugar": {
@@ -47,11 +41,18 @@ MODAL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "(Haz click o pulsa ESC para volver)"
         ]
     },
-    "logros": {
-        "title": "LOGROS DEL ÚLTIMO GUARDADO",
-        "color": (135, 55, 185),
-        # Las líneas se generan en vivo desde AchievementManager (ver _build_logros_lines).
-        "lines": [],
+    "estadisticas": {
+        "title": "ESTADÍSTICAS Y RÉCORDS",
+        "color": (25, 135, 215),
+        "lines": [
+            "Récord Modo Arcade: {arcade_best} microjuegos consecutivos",
+            "Puntaje Modo Historia: {story_score} pts",
+            "Minijuegos Despejados: {completed_count} / 4",
+            "Explorador Activo: {active_char}",
+            "Tasa de Completitud: {completion_pct}%",
+            "",
+            "(Haz click o pulsa ESC para volver)"
+        ]
     }
 }
 
@@ -148,18 +149,14 @@ class MainMenuScene(BaseState):
         btn_jugar_surf = self._scale_button_tight("boton_jugar_main_menu.png", target_width=496)
         btn_cargar_surf = self._scale_button_tight("boton_cargar_partida_main_menu.png", target_width=364)
         btn_opciones_surf = self._scale_button_tight("boton_opciones_main_menu.png", target_width=366)
-        btn_logros_surf = self._scale_button_tight("boton_logros_mapa.png", target_width=364)
-        # El arte de Logros viene sin halo: se aplana 4 px para conservar el ritmo vertical del menú.
-        btn_logros_surf = pygame.transform.smoothscale(
-            btn_logros_surf, (btn_logros_surf.get_width(), btn_logros_surf.get_height() - 4)
-        )
+        btn_estadisticas_surf = self._scale_button_tight("boton_estadísticas_main_menu.png", target_width=366)
         btn_salir_surf = self._scale_button_tight("boton_salir_main_menu.png", target_width=366)
 
         centers_y = [414, 544, 666, 784, 902]
         self.btn_jugar = UIButton((self.screen_w // 2, centers_y[0]), btn_jugar_surf, on_click=self._on_play_clicked)
         self.btn_cargar = UIButton((self.screen_w // 2, centers_y[1]), btn_cargar_surf, on_click=self._on_load_game_clicked)
         self.btn_opciones = UIButton((self.screen_w // 2, centers_y[2]), btn_opciones_surf, on_click=self._on_open_settings)
-        self.btn_logros = UIButton((self.screen_w // 2, centers_y[3]), btn_logros_surf, on_click=lambda: self._open_modal("logros"))
+        self.btn_estadisticas = UIButton((self.screen_w // 2, centers_y[3]), btn_estadisticas_surf, on_click=lambda: self._open_modal("estadisticas"))
         self.btn_salir = UIButton((self.screen_w // 2, centers_y[4]), btn_salir_surf, on_click=self._on_exit_clicked)
 
         self.btn_music = UIButton(
@@ -184,13 +181,11 @@ class MainMenuScene(BaseState):
             self.btn_jugar,
             self.btn_cargar,
             self.btn_opciones,
-            self.btn_logros,
+            self.btn_estadisticas,
             self.btn_salir,
             self.btn_music,
             self.btn_sound
         ]
-        # Teclado / mando: foco inicial en "Jugar"
-        self.focus_nav = FocusNavigator(lambda: self.buttons, default_index=0)
 
     def sync_audio_buttons(self) -> None:
         """Sincroniza el estado visual de los toggles con el AudioManager (SSOT)."""
@@ -199,25 +194,6 @@ class MainMenuScene(BaseState):
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.sync_audio_buttons()
-        self.audio.play_bgm("7am_ancpg_ost_main_menu.ogg")
-
-    def _build_logros_lines(self) -> List[str]:
-        """Resumen de la última partida guardada y estado de cada logro."""
-        summary = SettingsManager.get_instance().get_story_save_summary()
-        if not summary["has_save"]:
-            header = "Aún no hay partida guardada en Modo Historia."
-        else:
-            header = f"{summary['character_name']} · Niveles {summary['levels_cleared']}/4"
-        achievements = AchievementManager.get_instance().get_all_achievements()
-        unlocked = sum(1 for a in achievements if a["unlocked"])
-        lines = [header, f"Logros desbloqueados: {unlocked} / {len(achievements)}", ""]
-        for ach in achievements:
-            if ach["unlocked"]:
-                lines.append(f"{LOGRO_ON}{ach['title']} ({ach['category']}) - ¡Desbloqueado!")
-            else:
-                lines.append(f"{LOGRO_OFF}{ach['title']} - Bloqueado")
-        lines += ["", "(Haz click o pulsa ESC para volver)"]
-        return lines
 
     def _open_modal(self, modal_name: str) -> None:
         self.active_modal = modal_name
@@ -348,9 +324,6 @@ class MainMenuScene(BaseState):
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self.active_modal = None
                 self.audio.play_click()
-            return
-
-        if self.focus_nav.handle_event(event):
             return
 
         if event.type == pygame.MOUSEMOTION:
@@ -494,9 +467,8 @@ class MainMenuScene(BaseState):
         active_char = summary["character_name"] if summary["has_save"] else "Ninguno"
         completion_pct = int((completed_count / 4.0) * 100)
 
-        lines = self._build_logros_lines() if self.active_modal == "logros" else modal_info["lines"]
         cur_y = inner_rect.top + 64
-        for line in lines:
+        for line in modal_info["lines"]:
             if not line:
                 cur_y += 12
                 continue
@@ -511,10 +483,6 @@ class MainMenuScene(BaseState):
                 completion_pct=completion_pct,
             )
             color = (74, 48, 34) if not formatted_line.startswith("(") else (130, 96, 72)
-            if formatted_line.startswith(LOGRO_ON):
-                formatted_line, color = formatted_line[1:], (40, 135, 60)
-            elif formatted_line.startswith(LOGRO_OFF):
-                formatted_line, color = formatted_line[1:], (150, 135, 125)
             line_surf = self.font_body.render(formatted_line, True, color)
             surface.blit(line_surf, line_surf.get_rect(center=(frame_rect.centerx, cur_y)))
             cur_y += 42

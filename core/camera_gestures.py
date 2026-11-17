@@ -5,7 +5,6 @@ permisos, el adaptador queda inactivo y el juego conserva sus controles normales
 """
 from __future__ import annotations
 
-import os
 import threading
 import time
 from typing import Optional
@@ -47,7 +46,6 @@ class CameraGestureInput:
         self._cooldowns = [0.0] * 4
         self.hand_x = 0.5
         self.hand_y = 0.5
-        self.hands_xy: list = []  # Todas las manos detectadas (máx. 2), en coordenadas normalizadas espejadas
         self.hand_detected = False
         self.pinch_active = False
         self._pinch_just_pressed = False
@@ -62,8 +60,6 @@ class CameraGestureInput:
         self._previous_hand_y = 0.5
 
     def start(self) -> bool:
-        if os.environ.get("SDL_VIDEODRIVER") == "dummy":
-            return False
         self.suspended = False
         if self.enabled:
             return True
@@ -165,16 +161,6 @@ class CameraGestureInput:
         with self._lock:
             return self.hand_x, self.hand_y
 
-    def is_open_palm(self) -> bool:
-        """Palma abierta (cuatro dedos extendidos) de la mano principal."""
-        with self._lock:
-            return bool(self.hand_detected and self.open_palm)
-
-    def get_hands(self) -> list:
-        """Posiciones (x, y) normalizadas de hasta dos manos; la primera es la mano principal."""
-        with self._lock:
-            return list(self.hands_xy)
-
     def _run(self) -> None:
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
@@ -185,7 +171,7 @@ class CameraGestureInput:
             return
         try:
             hands = mp.solutions.hands.Hands(
-                static_image_mode=False, max_num_hands=2,
+                static_image_mode=False, max_num_hands=1,
                 min_detection_confidence=0.6, min_tracking_confidence=0.55
             )
             last = time.monotonic()
@@ -207,11 +193,8 @@ class CameraGestureInput:
                 raised = False
                 fist = False
                 pinch = False
-                hands_xy = []
                 if result.multi_hand_landmarks:
                     detected = True
-                    hands_xy = [(h.landmark[9].x, h.landmark[9].y) for h in result.multi_hand_landmarks[:2]]
-                    # Gestos y puntero siguen usando solo la mano principal (la primera).
                     lm = result.multi_hand_landmarks[0].landmark
                     # Seguimiento focal en la punta del dedo índice (LM 8) para que el lápiz apunte donde apunta el dedo
                     hand_x, hand_y = lm[8].x, lm[8].y
@@ -231,7 +214,6 @@ class CameraGestureInput:
                     moving_up = self._previous_hand_y - hand_y > 0.035
                     self.hand_detected = detected
                     self.hand_x, self.hand_y = hand_x, hand_y
-                    self.hands_xy = hands_xy
                     self.hand_raised = raised
                     self.open_palm = raised
                     self.pinch_active = pinch

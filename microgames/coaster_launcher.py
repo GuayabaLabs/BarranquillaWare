@@ -15,68 +15,6 @@ from core.state_machine import BaseState
 from core.audio_manager import AudioManager
 from core.camera_gestures import CameraGestureInput
 
-_COASTER_MODULE_CACHE: dict[str, object] = {}
-
-
-def _get_cached_coaster_module(coaster_dir: str, coaster_file: str):
-    """Carga y cachea el módulo Coaster una sola vez preservando almacen y recursos pesados."""
-    abs_file = os.path.abspath(coaster_file)
-    cached = _COASTER_MODULE_CACHE.get(abs_file)
-    if cached is not None:
-        return cached
-
-    if coaster_dir not in sys.path:
-        sys.path.insert(0, coaster_dir)
-    spec = importlib.util.spec_from_file_location("legacy_coaster", coaster_file)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
-
-    # Cachear recursos pesados (fondoBase, barra, tarjeta, fondos de nivel y fuentes)
-    # dentro de module.almacen para no recomputarlos/recargarlos en lanzamientos sucesivos.
-    almacen = module.almacen
-    orig_crear_fondo = module.crearFondo
-    orig_crear_barra = module.crearBarra
-    orig_cargar_tarjeta = module.cargarTarjeta
-    orig_cargar_fondo_nivel = module.cargarFondoNivel
-    orig_cargar_fuente = module.cargarFuente
-
-    def _cached_crear_fondo():
-        if "_cached_fondo_base" not in almacen:
-            almacen["_cached_fondo_base"] = orig_crear_fondo()
-        return almacen["_cached_fondo_base"]
-
-    def _cached_crear_barra():
-        if "_cached_barra" not in almacen:
-            almacen["_cached_barra"] = orig_crear_barra()
-        return almacen["_cached_barra"]
-
-    def _cached_cargar_tarjeta():
-        if "tarjeta" not in almacen:
-            almacen["tarjeta"] = orig_cargar_tarjeta()
-        return almacen["tarjeta"]
-
-    def _cached_cargar_fondo_nivel(i):
-        fondos_cache = almacen.setdefault("_cached_fondos_nivel", {})
-        if i not in fondos_cache:
-            fondos_cache[i] = orig_cargar_fondo_nivel(i)
-        return fondos_cache[i]
-
-    def _cached_cargar_fuente(n):
-        fuentes_cache = almacen.setdefault("_cached_fuentes", {})
-        if n not in fuentes_cache:
-            fuentes_cache[n] = orig_cargar_fuente(n)
-        return fuentes_cache[n]
-
-    module.crearFondo = _cached_crear_fondo
-    module.crearBarra = _cached_crear_barra
-    module.cargarTarjeta = _cached_cargar_tarjeta
-    module.cargarFondoNivel = _cached_cargar_fondo_nivel
-    module.cargarFuente = _cached_cargar_fuente
-
-    _COASTER_MODULE_CACHE[abs_file] = module
-    return module
-
 
 class CoasterLauncherState(BaseState):
     def __init__(self, on_complete_callback: Optional[Callable[[bool], None]] = None, calibration_only: bool = False) -> None:
@@ -105,7 +43,12 @@ class CoasterLauncherState(BaseState):
             self.error = "No se encontró el juego de Coaster"
             return
         try:
-            module = _get_cached_coaster_module(coaster_dir, coaster_file)
+            if coaster_dir not in sys.path:
+                sys.path.insert(0, coaster_dir)
+            spec = importlib.util.spec_from_file_location("legacy_coaster", coaster_file)
+            module = importlib.util.module_from_spec(spec)
+            assert spec and spec.loader
+            spec.loader.exec_module(module)
             self.legacy_level_count = len(module.niveles)
             self.legacy_surface = pygame.Surface((module.ancho, module.alto))
             self.game = module.Juego(usarCamara=True, pantalla=self.legacy_surface, auto_flip=False)
@@ -209,7 +152,12 @@ class CoasterCalibrationState(BaseState):
             if not os.path.exists(folder):
                 folder = os.path.join(root, "Project-TBD", "JuegoMontañaRusa")
             path = os.path.join(folder, "Coaster.py")
-            self.module = _get_cached_coaster_module(folder, path)
+            if folder not in sys.path:
+                sys.path.insert(0, folder)
+            spec = importlib.util.spec_from_file_location("legacy_coaster_calibration", path)
+            self.module = importlib.util.module_from_spec(spec)
+            assert spec and spec.loader
+            spec.loader.exec_module(self.module)
             self.camera = self.module.Camara(0)
             if not self.camera.abrir():
                 self.error = "No se pudo abrir la cámara"

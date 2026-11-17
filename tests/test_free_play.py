@@ -10,8 +10,8 @@ from scenes.free_play import FreePlayScene
 def test_free_play_flow():
     print("Iniciando suite de verificación del Modo Libre (Catálogo de Minijuegos)...")
     scene = FreePlayScene(character_id="westcol")
-    assert len(scene.games_data) == 15
-    assert len(scene.card_rects) == 8
+    assert len(scene.games_data) == 8, "Deben haber 8 minijuegos en el catálogo"
+    assert len(scene.card_rects) == 8, "Deben haber 8 rectángulos de tarjetas en la cuadrícula"
     assert hasattr(scene, "boss_card_rect"), "Falta la tarjeta de la Etapa Jefe"
     print("[OK] FreePlayScene inicializada con cuadrícula de 8 minijuegos y Etapa Jefe dorada.")
 
