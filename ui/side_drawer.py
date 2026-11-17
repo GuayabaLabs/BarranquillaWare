@@ -81,6 +81,7 @@ class SideNavDrawer:
         self.pressed_item_id: Optional[str] = None
         self.tab_hovered: bool = False
         self.tab_pressed: bool = False
+        self.focus_index: Optional[int] = None
 
         # Sección de trofeos que se muestra al tocar Logros
         from core.asset_manager import AssetManager
@@ -166,9 +167,70 @@ class SideNavDrawer:
         self.audio.play_click()
 
     def is_blocking(self) -> bool:
-        return self.anim_t > 0.05
+        return self.is_open or self.anim_t > 0.05
+
+    def camera_dwell_target(self, pos):
+        """Solo activa controles visibles, nunca el fondo del panel."""
+        if self._get_tab_rect().collidepoint(pos):
+            return ("drawer", "toggle")
+        if not self.is_open or self.anim_t < 0.95:
+            return None
+        if self.seccionActual != "botones":
+            if self.rectBotonCerrar(self._get_panel_x()).collidepoint(pos):
+                return ("drawer", self.seccionActual, "close")
+            return None
+        for item in self.nav_items:
+            if self._get_item_screen_rect(item).collidepoint(pos):
+                return ("drawer", item["id"])
+        return None
+
+    def _focus_item(self, index: int) -> None:
+        self.focus_index = index % len(self.nav_items)
+        item_id = self.nav_items[self.focus_index]["id"]
+        if self.hovered_item_id != item_id:
+            self.audio.play_hover()
+            self.button_shimmer[item_id] = 0.0
+        self.hovered_item_id = item_id
+
+    def _activate_item(self, item_id: str) -> None:
+        self.active_tab = item_id
+        self.audio.play_click()
+        if self.on_nav_selected:
+            self.on_nav_selected(item_id)
+
+    def _handle_keyboard(self, key: int) -> bool:
+        if key == pygame.K_TAB:
+            self.toggle()
+            if self.is_open and self.seccionActual == "botones":
+                self._focus_item(0)
+            return True
+        if not self.is_open:
+            return False
+        if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE, pygame.K_LEFT, pygame.K_a):
+            if self.seccionActual != "botones":
+                self.seccionActual = "botones"
+                self.hoverBotonCerrar = False
+                self._focus_item(self.focus_index or 0)
+            else:
+                self.toggle()
+            return True
+        if key in (pygame.K_UP, pygame.K_w, pygame.K_DOWN, pygame.K_s):
+            if self.seccionActual == "botones":
+                step = -1 if key in (pygame.K_UP, pygame.K_w) else 1
+                self._focus_item(0 if self.focus_index is None else self.focus_index + step)
+            return True
+        if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_RIGHT, pygame.K_d):
+            if self.seccionActual == "botones":
+                self._focus_item(self.focus_index or 0)
+                self._activate_item(self.nav_items[self.focus_index]["id"])
+            return True
+        return False
 
     def handle_event(self, event: pygame.event.Event) -> bool:
+        if event.type == pygame.KEYDOWN and self._handle_keyboard(event.key):
+            return True
+        if event.type == pygame.MOUSEMOTION:
+            self.focus_index = None
         tab_rect = self._get_tab_rect()
         panel_x = self._get_panel_x()
         panel_rect = pygame.Rect(panel_x, self.panel_top_y, self.panel_w, self.panel_h)
@@ -235,10 +297,7 @@ class SideNavDrawer:
                 self.pressed_item_id = None
                 for item in self.nav_items:
                     if item["id"] == clicked_id and self._get_item_screen_rect(item).collidepoint(event.pos):
-                        self.active_tab = clicked_id
-                        self.audio.play_click()
-                        if self.on_nav_selected:
-                            self.on_nav_selected(clicked_id)
+                        self._activate_item(clicked_id)
                         return True
 
             if self.is_open and panel_rect.collidepoint(event.pos):
@@ -690,8 +749,8 @@ class SideNavDrawer:
 
         grid_y = top + 348
         metrics = [
-            ("Seguidores", pdata.get("seguidores", "0")),
-            ("Likes", pdata.get("likes", "0")),
+            ("Seguidores", pdata.get("followers_text", pdata.get("seguidores", "0"))),
+            ("Likes", pdata.get("likes_text", pdata.get("likes", "0"))),
             ("Campaña", pdata.get("niveles", "0/4")),
             ("Trofeos", pdata.get("trofeos", "0/4")),
         ]

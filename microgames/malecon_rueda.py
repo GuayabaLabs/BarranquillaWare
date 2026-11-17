@@ -6,6 +6,8 @@ import pygame
 from core.microgame import BaseMicrogame
 
 class MaleconRuedaMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"accion": pygame.K_SPACE}
     """
     Microjuego 5: '¡Frena en la Cima!' (Gran Malecón del Río - Rueda Luna del Río).
     - Consigna: ¡FRENA EN LA CIMA!
@@ -204,7 +206,7 @@ class MaleconRuedaMicrogame(BaseMicrogame):
             cab_col = (255, 215, 60) if is_vip else (240, 80, 80)
             if is_vip and not self.stopped:
                 # Destello de cabina VIP
-                pulse = math.sin(self.timer * 10.0) * 0.5 + 0.5
+                pulse = math.sin(self.river_wave_timer * 10.0) * 0.5 + 0.5
                 cab_col = (255, int(190 + 65 * pulse), int(40 + 80 * pulse))
 
             # Dibujar cabina siempre nivelada verticalmente

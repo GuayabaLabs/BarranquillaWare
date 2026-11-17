@@ -115,12 +115,17 @@ def brillo(color, r):
     # halo de luz suave, como pigmento claro que se corre en el papel mojado
     clave = ("brillo", color, r)
     if clave not in almacenFuegos:
-        k = 3
-        g = pygame.Surface((2 * r * k, 2 * r * k), pygame.SRCALPHA)
-        g.fill((*color, 0))
-        for i in range(r * k, 0, -2):
-            pygame.draw.circle(g, (*color, int(200 * (1 - i / (r * k)) ** 1.6)), (r * k, r * k), i)
-        almacenFuegos[clave] = pygame.transform.smoothscale(g, (2 * r, 2 * r))
+        r = max(1, int(r))
+        size = 2 * r
+        import numpy as np
+        coords = np.linspace(-1.0, 1.0, size, dtype=np.float32)
+        xx, yy = np.meshgrid(coords, coords)
+        dist = np.sqrt(xx * xx + yy * yy)
+        alpha = np.where(dist < 1.0, 200.0 * np.power(np.maximum(0.0, 1.0 - dist), 1.6), 0.0)
+        g = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.surfarray.pixels3d(g)[:] = color
+        pygame.surfarray.pixels_alpha(g)[:] = alpha.astype(np.uint8)
+        almacenFuegos[clave] = g
     return almacenFuegos[clave]
 
 

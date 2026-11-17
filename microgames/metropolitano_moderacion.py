@@ -10,6 +10,8 @@ from core.settings import CHARACTER_DISPLAY_NAMES
 
 
 class MetropolitanoModeracionMicrogame(BaseMicrogame):
+    CAMERA_POINTER = True  # El lapicero apunta el martillo; pellizcar golpea.
+    CAMERA_DWELL_CLICK = False  # No golpear por mirar un mensaje inocente.
     """
     Nivel 3 — Estadio Metropolitano Roberto Meléndez
     Microjuego: ¡Modera la Barra Brava!

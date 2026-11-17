@@ -2,6 +2,7 @@ import math
 import random
 from typing import Optional, Callable, List, Dict, Any
 import pygame
+from core import input_state
 
 from core.microgame import BaseMicrogame
 
@@ -9,6 +10,8 @@ INK_DARK = (78, 51, 35)
 
 
 class AeropuertoAterrizajeMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"eje_x": (pygame.K_LEFT, pygame.K_RIGHT)}
     """
     Microjuego 6: '¡Aterriza en Modo Avión!' (Aeropuerto Internacional Ernesto Cortissoz).
     - Temática social: Modo Avión al aterrizar — no te distraigas con notificaciones en momentos críticos.
@@ -157,7 +160,8 @@ class AeropuertoAterrizajeMicrogame(BaseMicrogame):
     def update_game(self, dt: float) -> None:
         self.elapsed_anim += dt
         if not self.landed:
-            keys = pygame.key.get_pressed()
+            # Control por teclado suave
+            keys = input_state.get_pressed()
             speed = 880.0
             if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                 self.plane_x -= speed * dt

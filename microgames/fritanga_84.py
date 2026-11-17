@@ -127,6 +127,7 @@ class Fritanga84Microgame(BaseMicrogame):
                           "de lo que de verdad importa."]
     fraseRedes = "Usa las redes pa' compartir lo bueno, no pa' pelear."
 
+    CAMERA_POINTER = False  # Sus gestos propios voltean, sirven y entregan el patillazo.
     def __init__(
         self,
         character_id: str = "westcol",
@@ -914,18 +915,14 @@ class Fritanga84Microgame(BaseMicrogame):
             caja = boton.union(caja)
         return caja.inflate(40, 30)
 
-    def revisarGestosAviso(self) -> None:
+    def revisarGestosAviso(self, dt: float = 1 / 60) -> None:
         camara = getattr(self, "camara", None)
-        if not camara or not camara.enabled:
+        if not camara or not camara.enabled or self.tiempoAviso < 0.6:
+            self.reset_binary_camera_choice()
             return
-        palma = camara.consume_hand_raise()
-        puno = camara.consume_fist()
-        if self.tiempoAviso < 0.6:
-            return
-        if palma:
-            self.elegirOpcion(1)
-        elif puno:
-            self.elegirOpcion(0)
+        choice = self.poll_binary_camera_choice(camara, dt)
+        if choice is not None:
+            self.elegirOpcion(choice)
 
     def zonaServir(self) -> pygame.Rect:
         return pygame.Rect(self.cajaBotellon.x - 20, self.cajaBotellon.y, self.cajaBotellon.w + 120,
@@ -1382,7 +1379,7 @@ class Fritanga84Microgame(BaseMicrogame):
                 self.tiempoAviso += dt
                 self.trol["t"] += dt
                 self.actualizarLive(dt)
-                self.revisarGestosAviso()
+                self.revisarGestosAviso(dt)
                 return
             self.avanzarMensajes(dt)
             if self.secuencia:

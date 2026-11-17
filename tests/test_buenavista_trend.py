@@ -240,3 +240,49 @@ def test_survival_victory_at_30_seconds_and_full_render():
     assert results == [True]
 
     game.cleanup()
+
+
+def test_camera_mode_prevents_double_penalty_and_grants_invulnerability():
+    """Valida despenalización de doble error y ventana de gracia de 0.35s con cámara activa."""
+    from types import SimpleNamespace
+
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    game.phase = game.PHASE_PLAY
+    game.camera_input = SimpleNamespace(
+        enabled=True,
+        is_hand_present=lambda: True,
+        consume_finger=lambda _lane: False,
+    )
+
+    # 1. Nota ya marcada como missed en carril 0: un dedo activado poco después no resta 2da vida.
+    note = game.musical_events[0]
+    note.spawned = True
+    note.state = "falling"
+    game.song_elapsed = note.impact_time + game.good_window + 0.02
+    game.update_game(0.016)
+    assert note.state == "missed"
+    assert game.lives == 4
+    assert game.invulnerability_timer == pytest.approx(0.35, abs=0.02)
+
+    # Incluso tras expirar la invulnerabilidad, una nota recién marcada missed en ese carril no doble-penaliza.
+    game.invulnerability_timer = 0.0
+    game.wrong_press_cooldown = 0.0
+    game._process_lane_press(note.lane)
+    assert game.lives == 4
+
+    # 2. Pulsación errónea en otro carril activa cooldown ampliado (0.42s) e invulnerabilidad (0.35s).
+    other_lane = (note.lane + 1) % 4
+    game.musical_events = [ev for ev in game.musical_events if ev.lane != other_lane]
+    game._process_lane_press(other_lane)
+    assert game.lives == 3
+    assert game.wrong_press_cooldown == pytest.approx(0.42, abs=0.01)
+    assert game.invulnerability_timer == pytest.approx(0.35, abs=0.01)
+
+    # Durante la ventana de invulnerabilidad, otra nota que se pase tampoco descuenta corazón.
+    note2 = next(ev for ev in game.musical_events if ev is not note and ev.state != "missed")
+    note2.spawned = True
+    note2.state = "falling"
+    game._mark_note_missed(note2, reason="¡SE PASÓ!")
+    assert game.lives == 3
+
+    game.cleanup()

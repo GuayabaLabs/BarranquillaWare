@@ -17,6 +17,7 @@ CHARACTER_DISPLAY_NAMES: Dict[str, str] = {
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "music_enabled": True,
     "sound_enabled": True,
+    "camera_enabled": True,
     "music_volume": 0.65,
     "sfx_volume": 0.8,
     "brightness": 1.0,

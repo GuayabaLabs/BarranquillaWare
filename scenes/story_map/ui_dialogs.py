@@ -333,7 +333,9 @@ class AvisoTrofeo:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.cajaCerrar.collidepoint(event.pos):
                 self.cerrar()
-        elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
+        elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE, pygame.K_x):
+            self.cerrar()
+        elif event.type == pygame.JOYBUTTONDOWN and event.button in (0, 1, 2, 3, 6, 7):
             self.cerrar()
 
     def posicionVuelo(self) -> Tuple[float, float, float]:

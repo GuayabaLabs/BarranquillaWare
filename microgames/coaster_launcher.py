@@ -14,6 +14,7 @@ import pygame
 from core.state_machine import BaseState
 from core.audio_manager import AudioManager
 from core.camera_gestures import CameraGestureInput
+from core.settings import SettingsManager
 
 _COASTER_MODULE_CACHE: dict[str, object] = {}
 
@@ -108,7 +109,9 @@ class CoasterLauncherState(BaseState):
             module = _get_cached_coaster_module(coaster_dir, coaster_file)
             self.legacy_level_count = len(module.niveles)
             self.legacy_surface = pygame.Surface((module.ancho, module.alto))
-            self.game = module.Juego(usarCamara=True, pantalla=self.legacy_surface, auto_flip=False)
+            use_camera = (SettingsManager.get_instance().get("camera_enabled", True)
+                          and os.environ.get("SDL_VIDEODRIVER") != "dummy")
+            self.game = module.Juego(usarCamara=use_camera, pantalla=self.legacy_surface, auto_flip=False)
         except Exception as exc:
             self.error = f"No se pudo abrir Coaster: {exc}"
 
@@ -201,6 +204,9 @@ class CoasterCalibrationState(BaseState):
         self.small = pygame.font.SysFont("Arial, sans-serif", 20, bold=True)
 
     def enter(self, params: Optional[dict] = None) -> None:
+        if not SettingsManager.get_instance().get("camera_enabled", True):
+            self.error = "Activa la cámara en Opciones antes de calibrar."
+            return
         self._shared_camera = CameraGestureInput.get_instance()
         self._shared_camera.suspend()
         try:

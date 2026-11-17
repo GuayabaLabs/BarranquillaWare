@@ -13,6 +13,7 @@ from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
 from core.camera import Camera2D
 from ui.button import UIButton
+from ui.focus_nav import FocusNavigator
 from ui.social_hud import SocialHUD
 from ui.side_drawer import SideNavDrawer
 from tools.map_dev_tool import MapDevTool, get_bezier_points
@@ -85,6 +86,21 @@ class StoryMapScene(BaseState):
     _CACHED_WORLD_MAP: Optional[pygame.Surface] = None
     _CACHED_BASE_WORLD_MAP: Optional[pygame.Surface] = None
     ENTRY_PROXIMITY_RADIUS: float = 120.0
+    # Mapa controlado exclusivamente por teclado, gamepad o mouse/click (sin cámara ni dwell-click).
+    CAMERA_POINTER: bool = False
+    CAMERA_DWELL_CLICK: bool = False
+    # LB o Select abren la navegación; Start/B conservan su acción de volver/pausa.
+    GAMEPAD_BUTTON_KEYS = {4: pygame.K_TAB, 6: pygame.K_TAB}
+
+    # Nodo amarillo de entrada de cada nivel jugable (ids de config/map_poi_layout.json).
+    POI_ENTRY_NODES: Dict[str, int] = {
+        "uninorte": 71,
+        "buenavista": 76,
+        "metropolitano": 55,
+        "aeropuerto": 35,
+        "malecon": 63,
+        "aleta": 59,
+    }
     def __init__(
         self,
         character_id: str = "westcol",
@@ -306,8 +322,8 @@ class StoryMapScene(BaseState):
             "character_id": self.character_id,
             "nombre": CHARACTER_DISPLAY_NAMES.get(self.character_id, "Protagonista"),
             "rol": "Influencer Consciente de Curramba",
-            "seguidores": metricas.get("seguidores", "0"),
-            "likes": metricas.get("likes", "0"),
+            "seguidores": metricas.get("followers_text", metricas.get("seguidores", "0")),
+            "likes": metricas.get("likes_text", metricas.get("likes", "0")),
             "trofeos": f"{len(trofeos_obtenidos)}/{len(trofeosMapa)}",
             "niveles": f"{self._count_completed_campaign_levels(completed_microgames)}/{len(STORY_CAMPAIGN_ORDER)}",
         }
@@ -623,38 +639,45 @@ class StoryMapScene(BaseState):
     def _repair_quadrant_seams(self) -> None:
         """
         Aplica el shader sutil de papel acuarela / pergamino arrugado y viñeta cálida
-        para cohesionar toda la lámina base sin difuminado ancho ni deformación en runtime
-        (las costuras de los cuadrantes ya están reparadas de forma limpia en los PNG base).
+        para cohesionar toda la lámina base sin difuminado ancho ni deformación en runtime.
         """
         import numpy as np
 
-        arr = pygame.surfarray.pixels3d(self.world_map).astype(np.float32)
-
-        # Shader sutil de papel acuarela / pergamino arrugado y viñeta cálida unificadora
         w, h = self.world_w, self.world_h
-        rng = np.random.default_rng(42)
-        grain = rng.normal(0.0, 2.8, size=(w, h, 1)).astype(np.float32)
+        sw, sh = max(1, w // 4), max(1, h // 4)
 
-        xs = np.linspace(0.0, 1.0, w, dtype=np.float32)[:, None, None]
-        ys = np.linspace(0.0, 1.0, h, dtype=np.float32)[None, :, None]
-        # Pliegues orgánicos muy suaves tipo mapa ilustrado
-        creases = (
+        xs = np.linspace(0.0, 1.0, sw, dtype=np.float32)[:, None]
+        ys = np.linspace(0.0, 1.0, sh, dtype=np.float32)[None, :]
+        creases_small = (
             np.sin(xs * 24.0 + ys * 13.0) * 2.4
             + np.cos(xs * 11.0 - ys * 21.0) * 2.0
         )
-
-        # Leve viñeta cálida en los márgenes exteriores del mapa
         edge_x = np.minimum(xs * (w / 55.0), (1.0 - xs) * (w / 55.0))
         edge_y = np.minimum(ys * (h / 55.0), (1.0 - ys) * (h / 55.0))
-        edge_mask = np.clip(1.0 - np.minimum(edge_x, edge_y), 0.0, 1.0)
+        edge_small = np.clip(1.0 - np.minimum(edge_x, edge_y), 0.0, 1.0)
 
-        arr += grain + creases
-        # Tinte cálido sepia muy sutil en bordes exteriores
-        arr[:, :, 0] -= edge_mask[:, :, 0] * 10.0
-        arr[:, :, 1] -= edge_mask[:, :, 0] * 14.0
-        arr[:, :, 2] -= edge_mask[:, :, 0] * 22.0
+        # Escalar suavemente la textura de pliegues/viñeta a tamaño completo (baja frecuencia)
+        delta_small = np.zeros((sw, sh, 3), dtype=np.float32)
+        delta_small[:, :, 0] = creases_small - edge_small * 10.0
+        delta_small[:, :, 1] = creases_small - edge_small * 14.0
+        delta_small[:, :, 2] = creases_small - edge_small * 22.0
 
-        pygame.surfarray.pixels3d(self.world_map)[:] = np.clip(arr, 0, 255).astype(np.uint8)
+        # Usar tile de grano 256x256 repetido en lugar de generar millones de números aleatorios
+        rng = np.random.default_rng(42)
+        grain_tile = rng.normal(0.0, 2.8, size=(256, 256, 1)).astype(np.int16)
+        gx = np.arange(w) % 256
+        gy = np.arange(h) % 256
+        grain = grain_tile[np.ix_(gx, gy, [0])]
+
+        # Upsample bilinear rápido vía numpy repeat/indexing
+        ix = (np.arange(w, dtype=np.int32) * sw) // w
+        iy = (np.arange(h, dtype=np.int32) * sh) // h
+        delta_full = delta_small[np.ix_(ix, iy)].astype(np.int16) + grain
+
+        arr = pygame.surfarray.pixels3d(self.world_map)
+        res = arr.astype(np.int16) + delta_full
+        arr[:] = np.clip(res, 0, 255).astype(np.uint8)
+        del arr
 
     def _init_poi_effects(self) -> None:
         """Inicializa el registro y efectos interactivos de todos los puntos de interés clave."""
@@ -1558,9 +1581,10 @@ class StoryMapScene(BaseState):
 
         microgame = microgame_cls(**kwargs)
         if stages and idx + 1 < len(stages):
-            # Ronda intermedia del nivel: no mostrar mensaje entre minijuegos, sino cuando se completa el nivel completo
-            microgame.show_outro_banner = False
-            microgame.outro_duration = 0.35
+            # Ronda intermedia del nivel: mostrar resultado breve ("¡Ganaste!" / "¡Perdiste!") y pasar rápido a la siguiente ronda
+            microgame.show_outro_banner = True
+            microgame.outro_duration = 1.25
+            microgame.skip_outro_story_card = True
         elif stages and idx + 1 == len(stages):
             # Última ronda que completa el nivel
             microgame.show_outro_banner = True
@@ -2104,6 +2128,11 @@ class StoryMapScene(BaseState):
             return None
         if poi_info.get("nodoParada") in node_map:
             return poi_info["nodoParada"]
+        # Nodo amarillo oficial fijado a mano: evita que la heurística de distancia
+        # escoja un nodo vecino si se mueve un edificio o la red vial.
+        fixed_nid = self.POI_ENTRY_NODES.get(poi_key)
+        if fixed_nid is not None and fixed_nid in node_map:
+            return fixed_nid
         poi_rect = poi_info["rect"]
         center = (poi_rect.centerx, poi_rect.centery)
 
@@ -2295,6 +2324,8 @@ class StoryMapScene(BaseState):
         playable_stop_ids = set(stop_node_map.keys())
         hovered_node_id = getattr(self, "hovered_stop_node_id", None)
 
+        if not hasattr(self, "_stop_glow_cache"):
+            self._stop_glow_cache = {}
         pulse = math.sin(self.timer * 3.5) * 0.5 + 0.5
         for n in nodes:
             sx = n["x"] - cam_x
@@ -2306,9 +2337,13 @@ class StoryMapScene(BaseState):
                         poi_key is not None and getattr(self, f"{poi_key}_hover", False)
                     )
                     glow_r = int((19 if is_node_hover else 14) + 4 * pulse)
-                    glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-                    glow_alpha = int((125 if is_node_hover else 70) + 50 * pulse)
-                    pygame.draw.circle(glow_surf, (255, 210, 75, min(220, glow_alpha)), (glow_r, glow_r), glow_r)
+                    glow_alpha = min(220, int((125 if is_node_hover else 70) + 50 * pulse))
+                    g_key = (glow_r, (glow_alpha // 16) * 16)
+                    glow_surf = self._stop_glow_cache.get(g_key)
+                    if glow_surf is None:
+                        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+                        pygame.draw.circle(glow_surf, (255, 210, 75, g_key[1]), (glow_r, glow_r), glow_r)
+                        self._stop_glow_cache[g_key] = glow_surf
                     surface.blit(glow_surf, (sx - glow_r, sy - glow_r))
                     outer_r = 12 if is_node_hover else 9
                     mid_r = 9 if is_node_hover else 7
@@ -2486,6 +2521,10 @@ class StoryMapScene(BaseState):
 
         # Interacción con el modal de Victoria del Carnaval
         if self.show_victory_modal:
+            if not hasattr(self, "_victory_focus"):
+                self._victory_focus = FocusNavigator(lambda: [self.btn_vic_explore, self.btn_vic_menu])
+            if self._victory_focus.handle_event(event):
+                return
             if self.btn_vic_explore.handle_event(event):
                 return
             if self.btn_vic_menu.handle_event(event):
@@ -2499,6 +2538,10 @@ class StoryMapScene(BaseState):
         if self.quest_card_open:
             if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_m):
                 self._close_quest_card()
+                return
+            # Teclado / mando: Enter, Espacio o A juegan el nivel directamente.
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.btn_quest_play.activate()
                 return
             consumed_play = self.btn_quest_play.handle_event(event)
             consumed_close = self.btn_quest_close.handle_event(event)
@@ -2524,7 +2567,7 @@ class StoryMapScene(BaseState):
             return
 
         # Interacción con la barra de navegación lateral izquierda (SideNavDrawer)
-        if hasattr(self, "side_drawer") and self.side_drawer.handle_event(event):
+        if not self.menu_open and hasattr(self, "side_drawer") and self.side_drawer.handle_event(event):
             return
 
         # Interacción con SocialHUD superior (clic en la píldora de Logros)
@@ -2547,6 +2590,13 @@ class StoryMapScene(BaseState):
             # Click fuera del Drawer para cerrar
             if event.type == pygame.MOUSEBUTTONDOWN and event.pos[0] < drawer_x:
                 self._toggle_menu()
+                return
+
+            # Teclado / mando: recorrer los botones del Drawer
+            if event.type == pygame.KEYDOWN:
+                if not hasattr(self, "_drawer_focus"):
+                    self._drawer_focus = FocusNavigator(lambda: self.drawer_buttons)
+                self._drawer_focus.handle_event(event)
                 return
 
             # Delegar eventos a los botones del Drawer con offset de coordenadas
@@ -2672,6 +2722,60 @@ class StoryMapScene(BaseState):
                             return
         elif event.type == pygame.MOUSEMOTION:
             self.camera.update_drag(event.pos)
+
+    def camera_dwell_target(self, pos):
+        """Permite permanencia en controles y destinos, sin hacer clic en terreno vacío."""
+        if self.avisoTrofeo.estaOcupado():
+            if getattr(self.avisoTrofeo, "abierto", False) and self.avisoTrofeo.cajaCerrar.collidepoint(pos):
+                return ("trophy_close",)
+            return None
+        if self.paloma_dialog_open:
+            bw, bh = self.dialog_box_surf.get_size()
+            box = pygame.Rect((self.screen_w - bw) // 2 + 85, self.screen_h - bh - 18, bw, bh)
+            return ("dialog", self.paloma_dialog_page_idx) if box.collidepoint(pos) else None
+        if self.show_intro_dialog:
+            return ("intro",) if 400 < pos[0] < 1520 and 500 < pos[1] < 1040 else None
+        if self.show_victory_modal:
+            for name, btn in (("explore", self.btn_vic_explore), ("menu", self.btn_vic_menu)):
+                if btn.rect.collidepoint(pos):
+                    return ("victory", name)
+            return None
+        if self.quest_card_open:
+            for name, btn in (("play", self.btn_quest_play), ("close", self.btn_quest_close)):
+                if btn.rect.collidepoint(pos):
+                    return ("quest", name)
+            return None
+        if self.menu_open:
+            if self.menu_anim_t > 0.95:
+                drawer_x = int(self.screen_w - self.drawer_w * self.menu_anim_t)
+                for index, btn in enumerate(self.drawer_buttons):
+                    if btn.rect.move(drawer_x, 0).collidepoint(pos):
+                        return ("settings", index)
+            return None
+        target = self.side_drawer.camera_dwell_target(pos)
+        if target is not None or self.side_drawer.is_blocking():
+            return target
+        if self.btn_menu_toggle.rect.inflate(20, 20).collidepoint(pos):
+            return ("settings", "open")
+        pill = self.social_hud.pills.get("logros")
+        if pill is not None and pill.rect.collidepoint(pos):
+            return ("achievements",)
+        if hasattr(self, "weather_pill_rect") and self.weather_pill_rect.collidepoint(pos):
+            return ("weather",)
+        if self._is_screen_pos_over_map_hud(pos):
+            return None
+        callout = getattr(self, "callout_active_poi", None)
+        if (callout in STORY_PLAYABLE_POIS and self._get_active_entry_poi() == callout
+                and self.callout_anim_t > 0.02 and self.level_preview.contains_screen_pos(pos)):
+            return ("preview", callout)
+        if self.player_is_moving:
+            return None
+        world = (pos[0] + self.camera.x, pos[1] + self.camera.y)
+        for poi in STORY_PLAYABLE_POIS:
+            if self.poi_registry[poi]["rect"].collidepoint(world):
+                return ("destination", poi)
+        node = self._find_node_near_world_pos(world, max_dist=28.0)
+        return ("node", node["id"]) if node is not None else None
 
     def update(self, dt: float) -> None:
         self.timer += dt
@@ -2958,8 +3062,12 @@ class StoryMapScene(BaseState):
         self._render_player_avatar(surface, cam_x, cam_y)
 
         # 4. Renderizar efectos dinámicos de niveles principales y secretos.
-        progress = self.settings.get_story_progress()
-        completed_games = progress.get("completed_microgames", [])
+        raw_progress = self.settings.data.get("story_progress")
+        completed_games = raw_progress.get("completed_microgames", []) if isinstance(raw_progress, dict) else []
+        if not hasattr(self, "_glow_alpha_cache"):
+            self._glow_alpha_cache = {}
+        if not hasattr(self, "_night_halo_cache"):
+            self._night_halo_cache = {}
 
         for p_key in STORY_PLAYABLE_POIS:
             p_info = self.poi_registry.get(p_key)
@@ -2973,8 +3081,12 @@ class StoryMapScene(BaseState):
                 is_hovered = getattr(self, f"{p_key}_hover", False)
                 pulse = math.sin(self.timer * 2.5 + (0.8 if p_key == 'metropolitano' else 0.0)) * 0.5 + 0.5
                 glow_alpha = int(140 + 75 * pulse) if not is_hovered else 240
-                glow_copy = self.poi_ground_glow.copy()
-                glow_copy.set_alpha(glow_alpha)
+                alpha_bucket = (glow_alpha // 12) * 12
+                glow_copy = self._glow_alpha_cache.get(alpha_bucket)
+                if glow_copy is None:
+                    glow_copy = self.poi_ground_glow.copy()
+                    glow_copy.set_alpha(alpha_bucket)
+                    self._glow_alpha_cache[alpha_bucket] = glow_copy
                 surface.blit(glow_copy, glow_copy.get_rect(center=(p_screen_x + p_rect.width // 2, p_screen_y + p_rect.height - 10)))
 
                 sparkle_list = self.poi_sparkles.get(p_key, [])

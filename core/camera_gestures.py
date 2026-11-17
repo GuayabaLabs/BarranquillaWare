@@ -48,6 +48,7 @@ class CameraGestureInput:
         self.hand_x = 0.5
         self.hand_y = 0.5
         self.hand_detected = False
+        self.pointing_direction: Optional[tuple[float, float]] = None
         self.pinch_active = False
         self._pinch_just_pressed = False
         self._previous_pinch = False
@@ -61,6 +62,9 @@ class CameraGestureInput:
         self._previous_hand_y = 0.5
 
     def start(self) -> bool:
+        from core.settings import SettingsManager
+        if not SettingsManager.get_instance().get("camera_enabled", True):
+            return False
         if os.environ.get("SDL_VIDEODRIVER") == "dummy":
             return False
         self.suspended = False
@@ -84,8 +88,20 @@ class CameraGestureInput:
         self._thread.start()
         return True
 
+    def set_enabled(self, enabled: bool) -> None:
+        """Guarda la elección del usuario y la aplica a todos los juegos."""
+        from core.settings import SettingsManager
+        SettingsManager.get_instance().set("camera_enabled", bool(enabled))
+        if enabled:
+            self.resume()
+        else:
+            self.suspend()
+
     def keep_alive(self, retry_interval: float = 2.0) -> None:
         """Reintenta abrir la cámara si falló, con pausa para evitar bucles rápidos."""
+        from core.settings import SettingsManager
+        if not SettingsManager.get_instance().get("camera_enabled", True):
+            return
         if self.suspended or not HAVE_CAMERA or self.enabled:
             return
         if time.monotonic() - self._last_start_attempt >= retry_interval:
@@ -106,7 +122,9 @@ class CameraGestureInput:
         self.enabled = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=0.4)
-        self._thread = None
+        # No arrancar otro capturador mientras el anterior aún libera la webcam.
+        if not self._thread or not self._thread.is_alive():
+            self._thread = None
         with self._lock:
             self._finger_pressed = [False] * 4
             self._finger_just_pressed = [False] * 4
@@ -144,6 +162,27 @@ class CameraGestureInput:
         with self._lock:
             return self.pinch_active or bool(self._previous_fist)
 
+    def is_pinching(self) -> bool:
+        """Pellizco sostenido, separado de los eventos de un fotograma."""
+        with self._lock:
+            return bool(self.enabled and self.hand_detected and self.pinch_active)
+
+    def is_fist(self) -> bool:
+        """Puño cerrado sostenido."""
+        with self._lock:
+            return bool(self.enabled and self.hand_detected and self._previous_fist)
+
+    def is_open_palm(self) -> bool:
+        """Palma abierta sostenida, excluyendo pellizco o puño."""
+        with self._lock:
+            return bool(
+                self.enabled
+                and self.hand_detected
+                and self.open_palm
+                and not self.pinch_active
+                and not self._previous_fist
+            )
+
     def is_hand_present(self) -> bool:
         with self._lock:
             return self.hand_detected
@@ -164,6 +203,33 @@ class CameraGestureInput:
         with self._lock:
             return self.hand_x, self.hand_y
 
+    def get_pointing_direction(self) -> Optional[tuple[float, float]]:
+        """Dirección cardinal (dx, dy) al apuntar con los dedos arriba/abajo/izquierda/derecha."""
+        with self._lock:
+            return self.pointing_direction if (self.enabled and self.hand_detected) else None
+
+    @staticmethod
+    def _detect_pointing_direction(lm) -> Optional[tuple[float, float]]:
+        """Detecta hacia qué dirección cardinal apunta el índice (con anular y meñique plegados)."""
+        def dist(a, b):
+            return ((a.x - b.x) ** 2 + (a.y - b.y) ** 2) ** 0.5
+
+        wrist = lm[0]
+        index_ext = dist(lm[8], wrist) > dist(lm[6], wrist) * 1.18
+        ring_folded = dist(lm[16], wrist) < dist(lm[14], wrist) * 1.14
+        pinky_folded = dist(lm[20], wrist) < dist(lm[18], wrist) * 1.14
+        if not (index_ext and ring_folded and pinky_folded):
+            return None
+        vx = lm[8].x - lm[5].x
+        vy = lm[8].y - lm[5].y
+        if max(abs(vx), abs(vy)) < 0.055:
+            return None
+        if max(abs(vx), abs(vy)) < min(abs(vx), abs(vy)) * 1.4:
+            return None
+        if abs(vx) >= abs(vy):
+            return (1.0, 0.0) if vx > 0 else (-1.0, 0.0)
+        return (0.0, 1.0) if vy > 0 else (0.0, -1.0)
+
     def _run(self) -> None:
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
@@ -172,9 +238,10 @@ class CameraGestureInput:
             self.enabled = False
             cap.release()
             return
+        hands = None
         try:
             hands = mp.solutions.hands.Hands(
-                static_image_mode=False, max_num_hands=1,
+                static_image_mode=False, max_num_hands=2,
                 min_detection_confidence=0.6, min_tracking_confidence=0.55
             )
             last = time.monotonic()
@@ -196,9 +263,13 @@ class CameraGestureInput:
                 raised = False
                 fist = False
                 pinch = False
+                pointing_dir = None
                 if result.multi_hand_landmarks:
                     detected = True
                     lm = result.multi_hand_landmarks[0].landmark
+                    # Preferir la mano derecha (en imagen espejada) para apuntar direcciones en el mapa.
+                    right_hand_lm = max(result.multi_hand_landmarks[:2], key=lambda h: h.landmark[9].x).landmark
+                    pointing_dir = self._detect_pointing_direction(right_hand_lm)
                     # Seguimiento focal en la punta del dedo índice (LM 8) para que el lápiz apunte donde apunta el dedo
                     hand_x, hand_y = lm[8].x, lm[8].y
 
@@ -212,11 +283,12 @@ class CameraGestureInput:
                         extended_fingers[i] = lm[tip].y < lm[pip].y - 0.012
                         piano_fingers[i] = lm[tip].y > lm[pip].y + 0.012
                     raised = sum(extended_fingers) >= 4
-                    fist = sum(piano_fingers) >= 3
+                    fist = bool(piano_fingers[0] and sum(piano_fingers) >= 3)
                 with self._lock:
                     moving_up = self._previous_hand_y - hand_y > 0.035
                     self.hand_detected = detected
                     self.hand_x, self.hand_y = hand_x, hand_y
+                    self.pointing_direction = pointing_dir
                     self.hand_raised = raised
                     self.open_palm = raised
                     self.pinch_active = pinch
@@ -236,9 +308,16 @@ class CameraGestureInput:
                             self._cooldowns[i] = 0.22
                         self._previous[i] = piano_fingers[i]
                 time.sleep(0.01)
-            hands.close()
         except Exception as exc:
             self.error = f"Error de MediaPipe: {exc}"
             self.available = False
+            self.enabled = False
+            with self._lock:
+                self.hand_detected = False
         finally:
+            if hands is not None and hasattr(hands, "close"):
+                try:
+                    hands.close()
+                except Exception:
+                    pass
             cap.release()

@@ -2,6 +2,7 @@ import math
 import random
 from typing import Optional, Callable
 import pygame
+from core import input_state
 
 from core.microgame import BaseMicrogame
 
@@ -9,6 +10,8 @@ INK_DARK = (78, 51, 35)
 
 
 class MallorquinPhotoMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"eje_x": (pygame.K_LEFT, pygame.K_RIGHT), "eje_y": (pygame.K_UP, pygame.K_DOWN), "accion": pygame.K_SPACE}
     """
     Microjuego 3: '¡Fotografía al Flamenco!' (Ecorreserva Ciénaga de Mallorquín).
     - Temática social: Vive y observa el momento real sin filtros antes de postear por likes.
@@ -44,6 +47,7 @@ class MallorquinPhotoMicrogame(BaseMicrogame):
         self.flamingo_base_y: float = float(random.randint(320, 560))
         self.flamingo_speed: float = random.uniform(640.0, 780.0)
         self.flamingo_phase: float = random.uniform(0.0, math.pi * 2)
+        self.flamingo_y: float = self.flamingo_base_y + math.sin(self.flamingo_phase) * 36.0
         self.flamingo_w: int = 140
         self.flamingo_h: int = 110
 
@@ -161,7 +165,8 @@ class MallorquinPhotoMicrogame(BaseMicrogame):
 
     def update_game(self, dt: float) -> None:
         if not self.photo_taken:
-            keys = pygame.key.get_pressed()
+            # Control suave por teclado si no se usa mouse
+            keys = input_state.get_pressed()
             speed = 900.0
             if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                 self.reticle_x = max(100.0, self.reticle_x - speed * dt)

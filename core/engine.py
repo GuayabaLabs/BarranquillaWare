@@ -184,37 +184,101 @@ class Engine:
 
     def _translate_joystick_event(self, event: pygame.event.Event) -> list:
         """Traduce eventos de gamepad a teclado virtual para compatibilidad universal."""
+        from core import input_state
         translated = []
-        if event.type == pygame.JOYBUTTONDOWN:
-            if event.button == 0:
-                translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE, "unicode": " "}))
-            elif event.button in (1, 6, 7):
-                translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE, "unicode": ""}))
-            elif event.button in (2, 3):
-                translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RETURN, "unicode": "\r"}))
-        elif event.type == pygame.JOYHATMOTION:
+        current = self.state_machine.current_state
+        custom_keys = getattr(current, "GAMEPAD_BUTTON_KEYS", None) or {}
+        input_state.set_input_device("gamepad")
+
+        def _emit(key_type: int, key: int) -> None:
+            if key_type == pygame.KEYDOWN:
+                input_state.VIRTUAL_KEYS.add(key)
+            else:
+                input_state.VIRTUAL_KEYS.discard(key)
+            data = {"key": key, "mod": 0, "scancode": 0, "gamepad": True}
+            if key_type == pygame.KEYDOWN:
+                data["unicode"] = " " if key == pygame.K_SPACE else ""
+            translated.append(pygame.event.Event(key_type, data))
+
+        if event.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP):
+            key_type = pygame.KEYDOWN if event.type == pygame.JOYBUTTONDOWN else pygame.KEYUP
+            if event.button in custom_keys:
+                _emit(key_type, custom_keys[event.button])
+                return translated
+            btn_map = {0: pygame.K_SPACE, 1: pygame.K_ESCAPE, 2: pygame.K_RETURN, 3: pygame.K_RETURN, 6: pygame.K_ESCAPE, 7: pygame.K_ESCAPE}
+            if event.button in btn_map:
+                _emit(key_type, btn_map[event.button])
+            return translated
+
+        if not hasattr(self, "_joy_held_dirs"):
+            self._joy_held_dirs = {"hat": set(), "axis_x": None, "axis_y": None}
+
+        if event.type == pygame.JOYHATMOTION:
             hx, hy = event.value
+            desired = set()
             if hx < 0:
-                translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_LEFT, "unicode": ""}))
+                desired.add(pygame.K_LEFT)
             elif hx > 0:
-                translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RIGHT, "unicode": ""}))
+                desired.add(pygame.K_RIGHT)
             if hy > 0:
-                translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_UP, "unicode": ""}))
+                desired.add(pygame.K_UP)
             elif hy < 0:
-                translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_DOWN, "unicode": ""}))
+                desired.add(pygame.K_DOWN)
+            prev = self._joy_held_dirs["hat"]
+            for k in prev - desired:
+                _emit(pygame.KEYUP, k)
+            for k in desired - prev:
+                _emit(pygame.KEYDOWN, k)
+            self._joy_held_dirs["hat"] = desired
         elif event.type == pygame.JOYAXISMOTION:
-            deadzone = 0.45
-            if event.axis == 0:
-                if event.value < -deadzone:
-                    translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_LEFT, "unicode": ""}))
-                elif event.value > deadzone:
-                    translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RIGHT, "unicode": ""}))
-            elif event.axis == 1:
-                if event.value < -deadzone:
-                    translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_UP, "unicode": ""}))
-                elif event.value > deadzone:
-                    translated.append(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_DOWN, "unicode": ""}))
+            enter_dz, exit_dz = 0.50, 0.30
+            for axis, name, neg_k, pos_k in (
+                (0, "axis_x", pygame.K_LEFT, pygame.K_RIGHT),
+                (1, "axis_y", pygame.K_UP, pygame.K_DOWN),
+            ):
+                if event.axis != axis:
+                    continue
+                prev_k = self._joy_held_dirs[name]
+                if prev_k is None:
+                    new_k = neg_k if event.value < -enter_dz else pos_k if event.value > enter_dz else None
+                else:
+                    if event.value < -enter_dz:
+                        new_k = neg_k
+                    elif event.value > enter_dz:
+                        new_k = pos_k
+                    elif abs(event.value) < exit_dz:
+                        new_k = None
+                    else:
+                        new_k = prev_k
+                if new_k != prev_k:
+                    if prev_k is not None:
+                        _emit(pygame.KEYUP, prev_k)
+                    if new_k is not None:
+                        _emit(pygame.KEYDOWN, new_k)
+                    self._joy_held_dirs[name] = new_k
         return translated
+
+    def _dispatch_event(self, event: pygame.event.Event) -> None:
+        """Despacha un evento de entrada respetando la pausa global de microjuegos."""
+        if (event.type in (pygame.KEYDOWN, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP)
+                and not getattr(event, "gamepad", False)):
+            from core import input_state
+            input_state.set_input_device("keyboard")
+        current = self.state_machine.current_state
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and hasattr(current, "open_pause_menu"):
+            current.open_pause_menu()
+            return
+        self.state_machine.handle_event(event)
+
+    def _dispatch_input_event(self, event: pygame.event.Event) -> None:
+        current = self.state_machine.current_state
+        self._dispatch_event(event)
+        if event.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP, pygame.JOYHATMOTION, pygame.JOYAXISMOTION):
+            handles_raw = getattr(current, "handles_raw_gamepad", None)
+            if callable(handles_raw) and handles_raw(event):
+                return
+            for virt_evt in self._translate_joystick_event(event):
+                self._dispatch_event(virt_evt)
 
     def run(self) -> None:
         self.is_running = True
@@ -250,18 +314,7 @@ class Engine:
                 if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
                     event = self._map_mouse_event(event)
 
-                # Pausa global de minijuegos: el estado de pausa reemplaza al
-                # juego y congela su actualización sin duplicar lógica en cada clase.
-                current = self.state_machine.current_state
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and hasattr(current, "open_pause_menu"):
-                    current.open_pause_menu()
-                    continue
-
-                self.state_machine.handle_event(event)
-
-                if event.type in (pygame.JOYBUTTONDOWN, pygame.JOYHATMOTION, pygame.JOYAXISMOTION):
-                    for virt_evt in self._translate_joystick_event(event):
-                        self.state_machine.handle_event(virt_evt)
+                self._dispatch_input_event(event)
 
             # 1.5. Inyección de eventos ópticos del Puntero Lapicero MediaPipe (Hover & Clic)
             if os.environ.get("SDL_VIDEODRIVER") != "dummy":
@@ -298,11 +351,10 @@ class Engine:
         }
         matrix = matrices.get(mode)
 
-        # Renderizado del puntero lapicero cinético en capas superiores si hay mano detectada
-        self._render_camera_cursor(self.virtual_surface)
-
         if self.enable_gl and self.gl_renderer is not None:
             self.state_machine.render(self.virtual_surface)
+            # El lapicero va DESPUÉS de la escena para que no quede oculto debajo del fondo.
+            self._render_camera_cursor(self.virtual_surface)
 
             part_bytes = b""
             part_count = 0
@@ -326,6 +378,7 @@ class Engine:
             self.state_machine.render(self.virtual_surface)
             if has_sw_particles:
                 particles.render_software(self.virtual_surface)
+            self._render_camera_cursor(self.virtual_surface)
 
             self._apply_visual_settings(self.virtual_surface, brightness, matrix, intensity)
 
@@ -370,10 +423,43 @@ class Engine:
             scaled = pygame.transform.scale(small, (w, h))
             surface.blit(scaled, (0, 0))
 
+    def _camera_pointer_allowed(self) -> bool:
+        """El lapicero se apaga en menús de navegación, en el mapa y en microjuegos con cámara o gestos propios."""
+        current = self.state_machine.current_state
+        if getattr(current, "CAMERA_ACTIONS", None):
+            return False
+        # Desactivar el cursor de cámara totalmente en el mapa y en todos los menús de navegación/configuración
+        menu_scene_names = (
+            "StoryMapScene",
+            "MainMenuScene",
+            "ModeSelectScene",
+            "CharacterSelectScene",
+            "LoadGameScene",
+            "FreePlayScene",
+            "ArcadeModeScene",
+            "MapSettingsState",
+            "SlideTransitionState",
+        )
+        if current.__class__.__name__ in menu_scene_names:
+            return False
+        return bool(getattr(current, "CAMERA_POINTER", True))
+
     def _update_camera_cursor_interaction(self, dt: float) -> None:
         """Actualiza el lapicero óptico MediaPipe y simula eventos de MOUSEMOTION y MOUSEBUTTONDOWN por Hover o Gesto."""
-        if not getattr(self, "camera_input", None) or not self.camera_input.enabled or not self.camera_input.is_hand_present():
+        current = self.state_machine.current_state
+        if getattr(current, "CAMERA_ACTIONS", None) and hasattr(current, "update_camera_actions"):
+            current.update_camera_actions(getattr(self, "camera_input", None))
+        if hasattr(current, "update_camera_walk"):
+            current.update_camera_walk(getattr(self, "camera_input", None), dt)
+        if (
+            not getattr(self, "camera_input", None)
+            or not self.camera_input.enabled
+            or not self.camera_input.is_hand_present()
+            or not self._camera_pointer_allowed()
+        ):
             self.cam_hover_time = 0.0
+            self._cam_dwell_target = None
+            self._cam_dwell_fired = False
             return
 
         hand_x, hand_y = self.camera_input.get_position()
@@ -391,6 +477,15 @@ class Engine:
         motion_evt = pygame.event.Event(pygame.MOUSEMOTION, {"pos": virt_pos, "rel": (0, 0), "buttons": (0, 0, 0)})
         self.state_machine.handle_event(motion_evt)
 
+        resolver = getattr(current, "camera_dwell_target", None)
+        target = resolver(virt_pos) if callable(resolver) else None
+        if callable(resolver) and target != getattr(self, "_cam_dwell_target", None):
+            self.cam_hover_time = 0.0
+            self.cam_hover_anchor_x = self.cam_cursor_x
+            self.cam_hover_anchor_y = self.cam_cursor_y
+            self._cam_dwell_target = target
+            self._cam_dwell_fired = False
+
         # Lógica de Hover por Tiempo (Dwell Time):
         dist_anchor = ((self.cam_cursor_x - self.cam_hover_anchor_x) ** 2 + (self.cam_cursor_y - self.cam_hover_anchor_y) ** 2) ** 0.5
         if dist_anchor < self.cam_hover_tolerance:
@@ -403,8 +498,11 @@ class Engine:
         if self.cam_click_cooldown > 0.0:
             self.cam_click_cooldown = max(0.0, self.cam_click_cooldown - dt)
 
-        # Confirmación por Hover completado (0.7s) o por Gesto de Pellizco
-        hover_triggered = self.cam_hover_time >= self.cam_hover_duration and self.cam_click_cooldown <= 0.0
+        dwell_ok = (target is not None and not getattr(self, "_cam_dwell_fired", False)
+                    if callable(resolver) else bool(getattr(current, "CAMERA_DWELL_CLICK", True)))
+        if not dwell_ok:
+            self.cam_hover_time = 0.0
+        hover_triggered = dwell_ok and self.cam_hover_time >= self.cam_hover_duration and self.cam_click_cooldown <= 0.0
         gesture_triggered = self.camera_input.consume_click() and self.cam_click_cooldown <= 0.0
 
         if hover_triggered or gesture_triggered:
@@ -416,10 +514,17 @@ class Engine:
 
             self.cam_click_cooldown = 0.55  # Evitar doble disparo inmediato
             self.cam_hover_time = 0.0
+            if callable(resolver):
+                self._cam_dwell_fired = True
 
     def _render_camera_cursor(self, surface: pygame.Surface) -> None:
         """Dibuja el lapicero y el medidor radial de hover cuando MediaPipe tiene una mano fijada."""
-        if not getattr(self, "camera_input", None) or not self.camera_input.enabled or not self.camera_input.is_hand_present():
+        if (
+            not getattr(self, "camera_input", None)
+            or not self.camera_input.enabled
+            or not self.camera_input.is_hand_present()
+            or not self._camera_pointer_allowed()
+        ):
             return
 
         cx, cy = int(self.cam_cursor_x), int(self.cam_cursor_y)

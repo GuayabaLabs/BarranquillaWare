@@ -17,6 +17,8 @@ from microgames.malecon_rueda import MaleconRuedaMicrogame
 from microgames.metropolitano_penalty import MetropolitanoPenaltyMicrogame
 from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
+from microgames.curramgram_go import CurramGramGoMicrogame
+from microgames.emoji_catch import EmojiCatchMicrogame
 from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.uninorte_concentrate import UninorteConcentrateMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
@@ -219,6 +221,22 @@ class FreePlayScene(BaseState):
                 "theme_color": (212, 66, 98),
                 "cls": TrojaBaileMicrogame,
             },
+            {
+                "id": "curramgram_go",
+                "title": "CURRAMGRAM GO!",
+                "district": "AEROPUERTO CORTISSOZ",
+                "desc": "Llega a la puerta 7 sin exponer a nadie: verifica antes de publicar.",
+                "theme_color": (85, 170, 215),
+                "cls": CurramGramGoMicrogame
+            },
+            {
+                "id": "emoji_catch",
+                "title": "EMOJI CATCH: BALANCE!",
+                "district": "TU FEED · SALUD MENTAL",
+                "desc": "Bloquea a los haters y atrapa lo positivo sin perder el balance.",
+                "theme_color": (150, 95, 205),
+                "cls": EmojiCatchMicrogame
+            }
         ]
 
         # 3. Cargar assets acuarela de tarjetas, cintas, estrellas y sellos
@@ -327,16 +345,37 @@ class FreePlayScene(BaseState):
             self.character_id = params["character_id"]
         self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
 
+    def _handle_focus_key(self, key: int) -> bool:
+        moves = {pygame.K_LEFT: -1, pygame.K_a: -1, pygame.K_RIGHT: 1,
+                 pygame.K_d: 1, pygame.K_UP: -4, pygame.K_w: -4,
+                 pygame.K_DOWN: 4, pygame.K_s: 4, pygame.K_TAB: 1}
+        count = len(self.card_rects)
+        if key in moves:
+            self.selected_card_pos = (0 if self.selected_card_pos < 0 else
+                                      (self.selected_card_pos + moves[key]) % (count + 1))
+            return True
+        if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE) and self.selected_card_pos >= 0:
+            if self.selected_card_pos == count:
+                self._launch_boss_stage()
+            else:
+                self._launch_game(self._visible_indices[self.selected_card_pos])
+            return True
+        return False
+
     def handle_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.MOUSEMOTION:
+            self.selected_card_pos = -1
         if event.type == pygame.KEYDOWN:
+            if self._handle_focus_key(event.key):
+                return
             if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 self._on_back_clicked()
                 return
-            if event.key in (pygame.K_PAGEUP, pygame.K_LEFT, pygame.K_a):
+            if event.key in (pygame.K_PAGEUP,):
                 self.audio.play_click()
                 self.prev_page()
                 return
-            if event.key in (pygame.K_PAGEDOWN, pygame.K_RIGHT, pygame.K_d):
+            if event.key in (pygame.K_PAGEDOWN,):
                 self.audio.play_click()
                 self.next_page()
                 return
@@ -372,6 +411,8 @@ class FreePlayScene(BaseState):
             character_id=self.character_id,
             on_complete_callback=self._on_game_complete,
         )
+        boss_game.pause_restart_callback = self._launch_boss_stage
+        boss_game.pause_menu_callback = lambda: self._on_game_complete(False)
         boss_game.pause_return_callback = lambda: self._on_game_complete(False)
         self._active_microgame = boss_game
         if hasattr(self, "state_machine") and self.state_machine:
@@ -384,6 +425,8 @@ class FreePlayScene(BaseState):
             character_id=self.character_id,
             on_complete_callback=self._on_game_complete,
         )
+        microgame.pause_restart_callback = lambda: self._launch_game(game_idx)
+        microgame.pause_menu_callback = lambda: self._on_game_complete(False)
         microgame.pause_return_callback = lambda: self._on_game_complete(False)
         self._active_microgame = microgame
 
@@ -450,7 +493,8 @@ class FreePlayScene(BaseState):
         for slot_idx, rect in enumerate(self.card_rects):
             game_idx = self._visible_indices[slot_idx]
             g_data = self.games_data[game_idx]
-            is_hover = rect.collidepoint(mouse_pos)
+            is_hover = (rect.collidepoint(mouse_pos) if self.selected_card_pos < 0
+                        else slot_idx == self.selected_card_pos)
             is_cleared = g_data["id"] in completed_games
             lift_y = int(round(self._hover_lifts.get(game_idx, 0.0)))
             draw_rect = rect.move(0, lift_y)
@@ -550,7 +594,8 @@ class FreePlayScene(BaseState):
         surface.blit(card_surf, rect)
 
     def _render_boss_card(self, surface: pygame.Surface, mouse_pos: Tuple[int, int]) -> None:
-        b_hover = self.boss_card_rect.collidepoint(mouse_pos)
+        b_hover = (self.boss_card_rect.collidepoint(mouse_pos) if self.selected_card_pos < 0
+                   else self.selected_card_pos == len(self.card_rects))
         lift = int(round(self._boss_hover_lift))
         draw_rect = self.boss_card_rect.move(0, lift)
 

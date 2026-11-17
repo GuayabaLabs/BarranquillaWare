@@ -12,6 +12,9 @@ from microgames.buenavista_trend.beatmap import MusicalNoteEvent, IMITADORA_BEAT
 
 
 class BuenavistaTrendMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
+    # Carriles de izquierda a derecha con el mando: X, A, Y, B.
+    GAMEPAD_BUTTON_KEYS = {2: pygame.K_d, 0: pygame.K_f, 3: pygame.K_j, 1: pygame.K_k}
     """
     Microjuego de ritmo y supervivencia: «El Trend en Buenavista» (Inspirado en Piano Tiles).
     - Ubicación: Centro Comercial Buenavista, Barranquilla.
@@ -62,6 +65,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.held_keys: Set[int] = set()
         self.wrong_press_cooldown: float = 0.0
         self.wrong_press_protection_interval: float = 0.22  # Intervalo de protección para pulsaciones erróneas
+        self.camera_wrong_press_protection_interval: float = 0.42  # Cooldown ampliado en modo cámara
+        self.invulnerability_timer: float = 0.0
+        self.camera_invulnerability_duration: float = 0.35  # Ventana de gracia tras perder corazón con cámara
 
         # Estado de reproducción musical sincronizada
         self.music_started: bool = False
@@ -490,6 +496,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         # 2. Actualizar temporizadores de protección y efectos
         if self.wrong_press_cooldown > 0.0:
             self.wrong_press_cooldown = max(0.0, self.wrong_press_cooldown - dt)
+        if self.invulnerability_timer > 0.0:
+            self.invulnerability_timer = max(0.0, self.invulnerability_timer - dt)
 
         for i in range(4):
             if self.lane_press_timers[i] > 0.0:
@@ -633,6 +641,22 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 self._mark_note_missed(candidate, reason="¡MUY PRONTO!")
                 return
 
+        if self._is_camera_hand_active():
+            recently_missed = any(
+                ev.lane == lane_idx
+                and ev.penalized
+                and (
+                    ev.state == "missed"
+                    or (
+                        ev.state == "done"
+                        and 0.0 <= (self.song_elapsed - ev.impact_time) <= (self.good_window + 0.35)
+                    )
+                )
+                for ev in self.musical_events
+            )
+            if recently_missed:
+                return
+
         # Si no había nota válida en ese carril (carril incorrecto o pulsación al vacío):
         self._apply_wrong_press_penalty(lane_idx, reason="¡CARRIL INCORRECTO!")
 
@@ -692,14 +716,26 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         cy = float(min(self.hit_line_y, int(note.y)))
         self._deduct_single_life(feedback_text=reason, pos=(cx, cy))
 
+    def _is_camera_hand_active(self) -> bool:
+        """Indica si el control por dedos con cámara MediaPipe está activo y detectando mano."""
+        cam = getattr(self, "camera_input", None)
+        return bool(cam is not None and getattr(cam, "enabled", False) and cam.is_hand_present())
+
     def _apply_wrong_press_penalty(self, lane_idx: int, reason: str) -> None:
         """
         Descuenta una vida por pulsar un carril incorrecto o fuera de tiempo,
         respetando el intervalo de protección para evitar penalizaciones múltiples injustas.
         """
+        camera_active = self._is_camera_hand_active()
         if self.wrong_press_cooldown > 0.0:
             return
-        self.wrong_press_cooldown = self.wrong_press_protection_interval
+        if camera_active and self.invulnerability_timer > 0.0:
+            return
+        self.wrong_press_cooldown = (
+            self.camera_wrong_press_protection_interval
+            if camera_active
+            else self.wrong_press_protection_interval
+        )
 
         # Si hay una nota en OTRO carril exactamente dentro de la ventana de impacto en este instante,
         # la marcamos como penalizada para que el jugador no reciba doble castigo por equivocarse de tecla.
@@ -719,9 +755,13 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         """Descuenta exactamente 1 corazón, activa vibración visual, destello rojizo y verifica derrota."""
         if self.is_finished or self.lives <= 0:
             return
+        if self._is_camera_hand_active() and self.invulnerability_timer > 0.0:
+            return
 
         lost_heart_idx = self.lives - 1
         self.lives -= 1
+        if self._is_camera_hand_active():
+            self.invulnerability_timer = self.camera_invulnerability_duration
         self.misses_count += 1
         self.combo = 0
 
@@ -1212,6 +1252,15 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             return
         surface.blit(self.pantallaVivo, self.cajaPantalla.move(ox, oy))
 
+        gamepad_badges = (
+            ("X", (64, 152, 232)),
+            ("A", (74, 186, 108)),
+            ("Y", (234, 192, 54)),
+            ("B", (224, 78, 86)),
+        )
+        if getattr(self, "fuenteMando", None) is None:
+            self.fuenteMando = self.assets.get_font("Arial Black, Impact, sans-serif", 22, bold=True)
+
         for i, letra in enumerate(self.LANE_LABELS):
             centro = (self.lane_centers_x[i] + ox, self.hit_line_y + oy)
             prendida = self.lane_press_timers[i] > 0.0
@@ -1220,6 +1269,14 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             color = (190, 70, 40) if prendida else (92, 46, 118)
             texto = self.textoConBorde(self.fuenteTecla, letra, color, color, 2)
             surface.blit(texto, texto.get_rect(center=(centro[0], centro[1] - 2)))
+
+            btn_lbl, btn_col = gamepad_badges[i]
+            bx, by = centro[0], centro[1] + 44
+            r = 17 if prendida else 15
+            pygame.draw.circle(surface, (255, 248, 236), (bx, by), r + 3)
+            pygame.draw.circle(surface, btn_col, (bx, by), r)
+            btn_txt = self.fuenteMando.render(btn_lbl, True, (255, 255, 255))
+            surface.blit(btn_txt, btn_txt.get_rect(center=(bx, by - 1)))
 
         arriba = (self.cajaPantalla.top + self.playable_clip_rect.top) // 2 + oy + 6
         if self.cargarPastillasVivo():
