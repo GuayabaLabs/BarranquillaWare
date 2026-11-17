@@ -414,6 +414,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         self.cleanup()
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(False)
         # La cámara pertenece al motor y se comparte con el resto de escenas.
 
     def finish_game(self, won: bool) -> None:
@@ -1440,6 +1442,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         surface.fill((8, 6, 12))
 
         pregunta = "¿Y toda esa gente que te estaba mirando?"
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(0.4 <= t < 0.4 + len(pregunta) / 24.0)
         if t < 2.9:
             letras = min(len(pregunta), int(max(0.0, t - 0.4) * 24))
             if letras > 0:

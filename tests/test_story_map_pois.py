@@ -88,6 +88,11 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     scene._on_microgame_complete(True)
     assert scene.current_level_stage_idx == 0
     assert "uninorte" in settings.get_story_progress()["unlocked_locations"]
+    if scene.avisoTrofeo.estaOcupado():
+        assert scene.paloma_dialog_open is False
+        scene.avisoTrofeo.cerrar()
+        for _ in range(40):
+            scene.update(0.05)
     assert scene.paloma_dialog_open is True
     assert scene.paloma_dialog_pages == PALOMA_STORY_DIALOGS["uninorte"]["post_win_pages"]
     scene.advance_paloma_dialog()

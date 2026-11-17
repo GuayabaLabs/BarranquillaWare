@@ -332,6 +332,7 @@ class StoryMapScene(BaseState):
     def iniciarTrofeos(self) -> None:
         """Prepara los trofeos escondidos del mapa y la ventana que avisa al ganarlos."""
         self.avisoTrofeo = AvisoTrofeo(self.screen_w, self.screen_h)
+        self.palomaPendiente = None
         # Nodos seguidos que el personaje ha pisado junto a cada monumento
         self.rachaGlorieta = {trofeo["id"]: [] for trofeo in trofeosMapa}
         self.side_drawer.ponerTrofeos(trofeosMapa, self.leerTrofeosObtenidos())
@@ -1695,16 +1696,23 @@ class StoryMapScene(BaseState):
                     self._spawn_carnaval_celebration()
 
             post_win_pages = dlg_cfg.get("post_win_pages", [])
-            if post_win_pages:
-                self.open_paloma_dialog(
-                    pages=post_win_pages,
-                    speaker=dlg_cfg.get("speaker", "PALOMA DE CURRAMBA"),
-                    badge=f"★ {dlg_cfg.get('level_badge', poi_info.get('title', ''))} COMPLETADO ★",
-                    on_finish=_after_post_win_dialog,
-                    voice_prefix=f"{dlg_cfg.get('voice_clip_prefix', '')}_win"
-                )
+
+            def abrirPalomaVictoria() -> None:
+                if post_win_pages:
+                    self.open_paloma_dialog(
+                        pages=post_win_pages,
+                        speaker=dlg_cfg.get("speaker", "PALOMA DE CURRAMBA"),
+                        badge=f"★ {dlg_cfg.get('level_badge', poi_info.get('title', ''))} COMPLETADO ★",
+                        on_finish=_after_post_win_dialog,
+                        voice_prefix=f"{dlg_cfg.get('voice_clip_prefix', '')}_win"
+                    )
+                else:
+                    _after_post_win_dialog()
+
+            if hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado():
+                self.palomaPendiente = abrirPalomaVictoria
             else:
-                _after_post_win_dialog()
+                abrirPalomaVictoria()
         else:
             # Derrota: regresar al mapa y mostrar mensaje cálido de ánimo de la Paloma
             if hasattr(self, "state_machine") and self.state_machine:
@@ -2815,6 +2823,10 @@ class StoryMapScene(BaseState):
             self.side_drawer.update(dt)
         if hasattr(self, "avisoTrofeo"):
             self.avisoTrofeo.update(dt)
+            pendiente = getattr(self, "palomaPendiente", None)
+            if pendiente is not None and not self.avisoTrofeo.estaOcupado():
+                self.palomaPendiente = None
+                pendiente()
 
         # Actualizar confeti del Carnaval
         for cf in self.carnaval_confetti:
