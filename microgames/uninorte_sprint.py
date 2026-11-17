@@ -1,12 +1,16 @@
 import math
 import random
-from typing import Optional, Callable, List, Tuple, Dict
+from typing import Optional, Callable, List, Tuple, Dict, Any
 import pygame
 import numpy as np
 from PIL import Image
 
 from core.microgame import BaseMicrogame
 from core.camera_gestures import CameraGestureInput
+
+# Caché compartida a nivel de módulo para reutilizar spritesheets recortados, fondos y audios .ogg
+_SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
+_SOUND_CACHE: Dict[Tuple[Any, ...], List[pygame.mixer.Sound]] = {}
 
 class CharacterModel:
     """
@@ -198,21 +202,36 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.iniciarNotificaciones()
 
     def _load_pasillo_sounds(self) -> None:
-        """Carga el pool de audios reactivos de choque en el pasillo."""
-        filenames = [
+        """Carga (o reutiliza desde caché) el pool de audios reactivos de choque en el pasillo."""
+        filenames = (
             "aja_estas_ciego_audio_pasillo_microjuego.ogg",
             "erda_audio_pasillo_microjuego.ogg",
-            "que_pasa_valemia_audio_pasillo_microjuego.ogg"
-        ]
+            "que_pasa_valemia_audio_pasillo_microjuego.ogg",
+        )
         sfx_vol = getattr(self.audio, "sfx_volume", 0.85)
+        mixer_cfg = pygame.mixer.get_init()
+        if mixer_cfg is None:
+            return
+        cache_key = ("pasillo", mixer_cfg, filenames)
+        cached = _SOUND_CACHE.get(cache_key)
+        if cached is not None:
+            for snd in cached:
+                snd.set_volume(sfx_vol)
+            self.hit_sounds.extend(cached)
+            return
+
+        loaded: List[pygame.mixer.Sound] = []
         for fname in filenames:
             path = f"assets/{fname}"
             try:
                 snd = pygame.mixer.Sound(path)
                 snd.set_volume(sfx_vol)
+                loaded.append(snd)
                 self.hit_sounds.append(snd)
             except Exception as e:
                 print(f"[UninorteSprint] Aviso al cargar sonido {fname}: {e}")
+        if loaded:
+            _SOUND_CACHE[cache_key] = loaded
 
     def _play_random_pasillo_voice(self) -> None:
         """Reproduce aleatoriamente una de las frases caribeñas al chocar."""
@@ -238,6 +257,11 @@ class UninorteSprintMicrogame(BaseMicrogame):
         2. 'fondo_uninorte_completo.png'
         3. 'fondo_uninorte_tramo_1.png' y 'fondo_uninorte_tramo_2.png'
         """
+        cache_key = ("bg_chunks", self.screen_w, self.screen_h, self.world_height)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
         bg_full = None
         bg_t1 = None
         bg_t2 = None
@@ -246,7 +270,9 @@ class UninorteSprintMicrogame(BaseMicrogame):
         try:
             raw_crossy = self.assets.load_surface("fondo_minijuego_crossy.png", has_alpha=False)
             bg_full = pygame.transform.smoothscale(raw_crossy, (self.screen_w, self.world_height))
-            return bg_full, None, None
+            res = (bg_full, None, None)
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             pass
 
@@ -268,18 +294,29 @@ class UninorteSprintMicrogame(BaseMicrogame):
         except Exception:
             pass
 
-        return bg_full, bg_t1, bg_t2
+        res = (bg_full, bg_t1, bg_t2)
+        if bg_full is not None or bg_t1 is not None or bg_t2 is not None:
+            _SURFACE_CACHE[cache_key] = res
+        return res
 
     def _load_optional_ui(self, filename: str, target_h: int) -> Optional[pygame.Surface]:
+        cache_key = ("optional_ui", filename, target_h)
+        if cache_key in _SURFACE_CACHE:
+            return _SURFACE_CACHE[cache_key]
         try:
             surf = self.assets.load_surface(filename, has_alpha=True)
             scale = target_h / float(surf.get_height())
             tw = int(surf.get_width() * scale)
-            return pygame.transform.smoothscale(surf, (tw, target_h))
+            res = pygame.transform.smoothscale(surf, (tw, target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             return None
 
     def _load_player_chibi(self) -> Optional[pygame.Surface]:
+        cache_key = ("player_chibi", self.character_id)
+        if cache_key in _SURFACE_CACHE:
+            return _SURFACE_CACHE[cache_key]
         chibi_file = f"{self.character_id}_chibi.png"
         try:
             raw = self.assets.load_surface(chibi_file, has_alpha=True)
@@ -288,13 +325,17 @@ class UninorteSprintMicrogame(BaseMicrogame):
             cropped = raw.subsurface(rects[0]) if rects else raw
             target_h = 135
             target_w = int(cropped.get_width() * (target_h / float(cropped.get_height())))
-            return pygame.transform.smoothscale(cropped, (target_w, target_h))
+            res = pygame.transform.smoothscale(cropped, (target_w, target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             try:
                 raw = self.assets.load_surface("westcol_chibi.png", has_alpha=True)
                 target_h = 135
                 target_w = int(raw.get_width() * (target_h / float(raw.get_height())))
-                return pygame.transform.smoothscale(raw, (target_w, target_h))
+                res = pygame.transform.smoothscale(raw, (target_w, target_h))
+                _SURFACE_CACHE[cache_key] = res
+                return res
             except Exception:
                 return None
 
@@ -306,8 +347,13 @@ class UninorteSprintMicrogame(BaseMicrogame):
         Fila superior = Piernas cerradas (frame 0)
         Fila inferior = Piernas abiertas (frame 1)
         """
-        models: List[CharacterModel] = []
         target_h = 140
+        cache_key = ("char_models", target_h)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return [CharacterModel(frames=list(frames), native_direction=nd) for frames, nd in cached]
+
+        models: List[CharacterModel] = []
 
         sheet_specs = [
             {
@@ -343,9 +389,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
                     frames = []
                     for box in [ch["top"], ch["bot"]]:
                         bx, by, bw, bh = box
-                        crop = arr[by:by+bh, bx:bx+bw].copy()
-                        crop_img = Image.fromarray(crop)
-                        surf = pygame.image.fromstring(crop_img.tobytes(), crop_img.size, "RGBA").convert_alpha()
+                        crop = np.ascontiguousarray(arr[by:by+bh, bx:bx+bw])
+                        surf = pygame.image.frombuffer(crop.tobytes(), (bw, bh), "RGBA").convert_alpha()
                         tw = int(bw * (target_h / float(bh)))
                         scaled = pygame.transform.smoothscale(surf, (tw, target_h))
                         frames.append(scaled)
@@ -354,23 +399,31 @@ class UninorteSprintMicrogame(BaseMicrogame):
             except Exception as e:
                 print(f"[UninorteSprint] Error al extraer modelos de {filename}: {e}")
 
+        if models:
+            _SURFACE_CACHE[cache_key] = [(tuple(m.frames), m.native_direction) for m in models]
         return models
 
     def _extract_icon_sprites(self) -> List[pygame.Surface]:
+        target_size = 50
+        cache_key = ("icon_sprites", target_size)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return list(cached)
+
         icons = []
-        path = "assets/spritesheet_iconos_redes_sociales.png"
         icon_boxes = [
             (551, 27, 155, 155), (885, 27, 152, 160), (1208, 28, 150, 159),
             (1369, 29, 149, 157), (718, 32, 154, 150), (23, 34, 169, 149),
             (1051, 36, 145, 148), (376, 37, 160, 146)
         ]
-        target_size = 50
         try:
             full_surf = self.assets.load_surface("spritesheet_iconos_redes_sociales.png", has_alpha=True)
             for (ix, iy, iw, ih) in icon_boxes:
                 sub = full_surf.subsurface(pygame.Rect(ix, iy, iw, ih))
                 scaled = pygame.transform.smoothscale(sub, (target_size, target_size))
                 icons.append(scaled)
+            if icons:
+                _SURFACE_CACHE[cache_key] = tuple(icons)
         except Exception as e:
             print(f"[UninorteSprint] Error cargando iconos: {e}")
 

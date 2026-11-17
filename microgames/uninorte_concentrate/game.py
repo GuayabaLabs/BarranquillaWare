@@ -1,10 +1,10 @@
 import math
+import os
 import random
 from typing import Optional, Callable, List, Tuple, Dict, Any
 import pygame
 import numpy as np
 from PIL import Image
-from collections import deque
 
 from core.microgame import BaseMicrogame
 from core.camera_gestures import CameraGestureInput
@@ -15,6 +15,9 @@ from microgames.uninorte_concentrate.entities import (
     ProgressBar,
     ScoreManager,
 )
+
+# Caché compartida a nivel de módulo para evitar recorte/flood-fill/escalado repetido al reabrir
+_SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 
 class UninorteConcentrateMicrogame(BaseMicrogame):
@@ -53,8 +56,13 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
     def setup_game(self) -> None:
         self.camera_input = CameraGestureInput.get_instance()
-        if not self.camera_input.enabled:
-            self.camera_input.start()
+        if (
+            os.environ.get("SDL_VIDEODRIVER") != "dummy"
+            and self.camera_input.available
+            and not self.camera_input.enabled
+            and not self.camera_input.suspended
+        ):
+            self.camera_input.keep_alive(retry_interval=2.0)
         # 1. Fondo ilustrado de biblioteca Uninorte
         self.bg_surface = self._load_background()
 
@@ -105,11 +113,17 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
     def _load_pencil_cursor_sprite(self, target_w: int = 84) -> pygame.Surface:
         """Carga y procesa el sprite oficial del Lapicero de BarranquillaWare ('puntero_lapiz.png')."""
+        cache_key = ("pencil", target_w)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
         try:
             raw = self.assets.load_surface("puntero_lapiz.png", has_alpha=True)
             scale = target_w / float(max(1, raw.get_width()))
             target_h = int(raw.get_height() * scale)
-            return pygame.transform.smoothscale(raw, (target_w, target_h))
+            res = pygame.transform.smoothscale(raw, (target_w, target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             fb = pygame.Surface((target_w, target_w), pygame.SRCALPHA)
             pygame.draw.polygon(fb, (255, 215, 60), [(0, 0), (target_w, target_w // 2), (target_w // 2, target_w)])
@@ -131,6 +145,11 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
                 idx = i
                 break
 
+        cache_key = ("char_cursor", idx, target_h)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             sheet = self.assets.load_surface(
                 "spritesheet_punteros_concentracion_microjuego.png", has_alpha=True
@@ -144,7 +163,9 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
                 sub = sub.subsurface(bbox).copy()
             scale = target_h / float(max(1, sub.get_height()))
             tw = int(sub.get_width() * scale)
-            return pygame.transform.smoothscale(sub, (tw, target_h))
+            res = pygame.transform.smoothscale(sub, (tw, target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             # Fallback limpio
             fb = pygame.Surface((target_h, target_h), pygame.SRCALPHA)
@@ -152,73 +173,106 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             return fb
 
     def _load_background(self) -> pygame.Surface:
+        cache_key = ("bg", self.screen_w, self.screen_h)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
         try:
             raw = self.assets.load_surface("fondo_concentracion_microjuego.png", has_alpha=False)
-            return pygame.transform.smoothscale(raw, (self.screen_w, self.screen_h))
+            res = pygame.transform.smoothscale(raw, (self.screen_w, self.screen_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             surf = pygame.Surface((self.screen_w, self.screen_h))
             surf.fill((245, 225, 200))
             return surf
 
+    @staticmethod
+    def _flood_fill_border_bg_mask(bg: np.ndarray) -> np.ndarray:
+        """
+        Propagación vectorizada en NumPy por segmentos horizontales y verticales desde los 4 bordes.
+        Produce la máscara exacta de flood-fill 4-conectada sin bucles píxel-a-píxel en Python.
+        """
+        ch, cw = bg.shape
+        vis = np.zeros((ch, cw), dtype=bool)
+        vis[0, :] = bg[0, :]
+        vis[-1, :] = bg[-1, :]
+        vis[:, 0] = bg[:, 0]
+        vis[:, -1] = bg[:, -1]
+
+        h_starts = bg.copy()
+        h_starts[:, 1:] &= ~bg[:, :-1]
+        h_ids = np.cumsum(h_starts.ravel(), dtype=np.int32).reshape(ch, cw)
+        h_ids[~bg] = 0
+        n_h = int(h_ids.max()) + 1
+
+        v_starts = bg.copy()
+        v_starts[1:, :] &= ~bg[:-1, :]
+        v_ids = np.cumsum(v_starts.T.ravel(), dtype=np.int32).reshape(cw, ch).T
+        v_ids[~bg] = 0
+        n_v = int(v_ids.max()) + 1
+
+        h_hit = np.zeros(n_h, dtype=bool)
+        v_hit = np.zeros(n_v, dtype=bool)
+        frontier = vis.copy()
+        while frontier.any():
+            h_hit[h_ids[frontier]] = True
+            h_hit[0] = False
+            vis2 = vis | h_hit[h_ids]
+            new_h = vis2 & ~vis
+            vis = vis2
+            frontier2 = frontier | new_h
+            if not frontier2.any():
+                break
+            v_hit[v_ids[frontier2]] = True
+            v_hit[0] = False
+            vis3 = vis | v_hit[v_ids]
+            frontier = vis3 & ~vis
+            vis = vis3
+        return vis
+
     def _load_clean_student_sprite(self, filename: str, target_h: int) -> pygame.Surface:
         """
-        Carga el sprite del estudiante, elimina automáticamente cualquier fondo damero blanco/gris
-        en archivos RGB mediante flood-fill desde los bordes y lo escala preservando proporción.
+        Carga el sprite del estudiante, recorta primero crop_box, elimina automáticamente cualquier
+        fondo damero blanco/gris en archivos RGB mediante flood-fill vectorizado con NumPy desde
+        los bordes, escala preservando proporción y cachea el resultado en memoria.
         """
+        cache_key = ("student", filename, target_h)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
         try:
             path = self.assets._resolve_path(filename)
-            pil_img = Image.open(path).convert("RGBA")
-            arr = np.array(pil_img)
-            h, w, _ = arr.shape
+            pil_img = Image.open(path)
+            # Recorte consistente basado en los límites de tinta oscura antes de procesar píxeles
+            x0 = min(140, pil_img.width)
+            y0 = min(5, pil_img.height)
+            x1 = min(1270, pil_img.width)
+            y1 = min(1112, pil_img.height)
+            if x1 > x0 and y1 > y0:
+                pil_img = pil_img.crop((x0, y0, x1, y1))
+            cropped_arr = np.array(pil_img.convert("RGBA"))
+            ch, cw, _ = cropped_arr.shape
 
             # Si menos del 5% de los píxeles son transparentes, tiene fondo damero cocido
-            if (arr[:, :, 3] < 15).sum() < (h * w * 0.05):
-                r = arr[:, :, 0].astype(np.int16)
-                g = arr[:, :, 1].astype(np.int16)
-                b = arr[:, :, 2].astype(np.int16)
-                sat = np.maximum(np.maximum(r, g), b) - np.minimum(np.minimum(r, g), b)
-                lum = np.minimum(np.minimum(r, g), b)
+            if (cropped_arr[:, :, 3] < 15).sum() < (ch * cw * 0.05):
+                rgb = cropped_arr[:, :, :3]
+                sat = rgb.max(axis=2) - rgb.min(axis=2)
+                lum = rgb.min(axis=2)
 
                 # El damero exterior tiene saturación casi nula (<= 12) y alta luminosidad (>= 210),
                 # mientras que el personaje está rodeado por un borde oscuro continuo.
                 is_bg = (sat <= 12) & (lum >= 210)
-                visited = np.zeros((h, w), dtype=bool)
-                q = deque()
+                visited = self._flood_fill_border_bg_mask(is_bg)
+                cropped_arr[visited, 3] = 0
 
-                for x in range(w):
-                    if is_bg[0, x]:
-                        visited[0, x] = True
-                        q.append((0, x))
-                    if is_bg[h - 1, x]:
-                        visited[h - 1, x] = True
-                        q.append((h - 1, x))
-                for y in range(h):
-                    if is_bg[y, 0] and not visited[y, 0]:
-                        visited[y, 0] = True
-                        q.append((y, 0))
-                    if is_bg[y, w - 1] and not visited[y, w - 1]:
-                        visited[y, w - 1] = True
-                        q.append((y, w - 1))
-
-                while q:
-                    cy, cx = q.popleft()
-                    for ny, nx in ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)):
-                        if 0 <= ny < h and 0 <= nx < w and not visited[ny, nx] and is_bg[ny, nx]:
-                            visited[ny, nx] = True
-                            q.append((ny, nx))
-
-                arr[visited, 3] = 0
-
-            # Recorte consistente basado en los límites de tinta oscura para que los 3 estados
-            # calzen en el mismo centro exacto sin saltar al alternar poses
-            crop_box = (140, 5, 1270, 1112)
-            cropped_arr = arr[crop_box[1]:crop_box[3], crop_box[0]:crop_box[2], :]
-            ch, cw, _ = cropped_arr.shape
             surf = pygame.image.frombuffer(cropped_arr.tobytes(), (cw, ch), "RGBA").convert_alpha()
 
             scale = target_h / float(ch)
             target_w = int(cw * scale)
-            return pygame.transform.smoothscale(surf, (target_w, target_h))
+            res = pygame.transform.smoothscale(surf, (target_w, target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             fallback = pygame.Surface((int(target_h * 1.05), target_h), pygame.SRCALPHA)
             pygame.draw.rect(fallback, (74, 105, 132), fallback.get_rect(), border_radius=24)
@@ -229,6 +283,11 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         Extrae las 6 nubes de redes sociales organizadas en cuadrícula 3x2:
         1. Instagram, 2. TikTok, 3. YouTube, 4. X, 5. Facebook, 6. WhatsApp.
         """
+        cache_key = ("clouds", target_h)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return list(cached)
+
         sprites: List[pygame.Surface] = []
         try:
             sheet = self.assets.load_surface(
@@ -252,6 +311,7 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
                     scale = target_h / float(max(1, sub.get_height()))
                     tw = int(sub.get_width() * scale)
                     sprites.append(pygame.transform.smoothscale(sub, (tw, target_h)))
+            _SURFACE_CACHE[cache_key] = tuple(sprites)
         except Exception:
             for col_rgb in Distraction.NETWORK_COLORS:
                 fb = pygame.Surface((160, target_h), pygame.SRCALPHA)
@@ -260,6 +320,10 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         return sprites
 
     def _load_focus_bar_frame(self, target_w: int = 760) -> pygame.Surface:
+        cache_key = ("focus_bar", target_w)
+        cached = _SURFACE_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
         try:
             cropped = self.assets.load_cropped_surface(
                 "barra_enfoque_concentracion_microjuego.png", alpha_threshold=20
@@ -267,18 +331,25 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             orig_w, orig_h = cropped.get_size()
             scale = target_w / float(max(1, orig_w))
             target_h = int(orig_h * scale)
-            return pygame.transform.smoothscale(cropped, (target_w, target_h))
+            res = pygame.transform.smoothscale(cropped, (target_w, target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             fb = pygame.Surface((target_w, 160), pygame.SRCALPHA)
             pygame.draw.rect(fb, (90, 50, 75), fb.get_rect(), width=6, border_radius=24)
             return fb
 
     def _load_optional_ui(self, filename: str, target_h: int) -> Optional[pygame.Surface]:
+        cache_key = ("optional_ui", filename, target_h)
+        if cache_key in _SURFACE_CACHE:
+            return _SURFACE_CACHE[cache_key]
         try:
             surf = self.assets.load_cropped_surface(filename, alpha_threshold=15)
             scale = target_h / float(max(1, surf.get_height()))
             tw = int(surf.get_width() * scale)
-            return pygame.transform.smoothscale(surf, (tw, target_h))
+            res = pygame.transform.smoothscale(surf, (tw, target_h))
+            _SURFACE_CACHE[cache_key] = res
+            return res
         except Exception:
             return None
 

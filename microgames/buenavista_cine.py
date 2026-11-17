@@ -40,7 +40,7 @@ class ShhAudioDetector:
         self._lock = threading.Lock()
 
     def start(self) -> None:
-        if not HAVE_AUDIO_LIBS or self.running:
+        if os.environ.get("SDL_AUDIODRIVER") == "dummy" or not HAVE_AUDIO_LIBS or self.running:
             return
         self.running = True
 

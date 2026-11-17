@@ -191,3 +191,29 @@ def test_camera_gestures_drive_keyboard_only_microgames():
     cam.present = False
     plane.update_camera_actions(cam)
     assert not input_state.VIRTUAL_KEYS
+
+
+def test_headless_camera_never_starts_thread(monkeypatch):
+    from core.camera_gestures import CameraGestureInput
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    camera = CameraGestureInput()
+    assert camera.start() is False
+    assert camera._thread is None
+
+
+def test_free_play_keyboard_launches_second_page_and_boss(monkeypatch):
+    from scenes.free_play import FreePlayScene
+    pygame.init()
+    pygame.display.set_mode((1920, 1080))
+    scene = FreePlayScene()
+    calls = []
+    monkeypatch.setattr(scene, "_launch_game", lambda idx: calls.append(idx))
+    monkeypatch.setattr(scene, "_launch_boss_stage", lambda: calls.append("boss"))
+    scene.handle_event(_key(pygame.K_PAGEDOWN))
+    scene.handle_event(_key(pygame.K_DOWN))
+    scene.handle_event(_key(pygame.K_RETURN))
+    assert calls == [scene._visible_indices[0]]
+    for _ in range(len(scene.card_rects)):
+        scene.handle_event(_key(pygame.K_TAB))
+    scene.handle_event(_key(pygame.K_RETURN))
+    assert calls[-1] == "boss"

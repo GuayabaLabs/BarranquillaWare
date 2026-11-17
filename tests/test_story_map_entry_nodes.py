@@ -49,9 +49,9 @@ class TestStoryMapEntryNodes(unittest.TestCase):
             self._park(entry["id"])
             self.scene.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE}))
             self.assertEqual(self.scene.active_poi, poi, f"{poi}: no abrió desde su nodo")
-            # Vecinos cercanos: SPACE no abre nada.
+            # Vecinos sin entrada propia: SPACE no abre nada.
             for n in nodes:
-                if n["id"] == entry["id"]:
+                if n["id"] in self.scene._get_playable_stop_node_map():
                     continue
                 if math.hypot(n["x"] - entry["x"], n["y"] - entry["y"]) > 250:
                     continue

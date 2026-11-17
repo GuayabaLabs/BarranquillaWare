@@ -199,6 +199,7 @@ class MainMenuScene(BaseState):
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.sync_audio_buttons()
+        self.audio.play_bgm("7am_ancpg_ost_main_menu.ogg")
 
     def _build_logros_lines(self) -> List[str]:
         """Resumen de la última partida guardada y estado de cada logro."""

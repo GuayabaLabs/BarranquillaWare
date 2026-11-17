@@ -280,6 +280,42 @@ class AudioManager:
     def play_miss(self) -> None:
         self.play_sfx(self._miss_sound, 0.95)
 
+    def play_voice(
+        self,
+        clip_name: str,
+        volume_scale: float = 1.0,
+        fallback_sound: Optional[pygame.mixer.Sound] = None,
+    ) -> Optional[pygame.mixer.Channel]:
+        """
+        Reproduce una línea de voz localizada (ej. 'coronaste.ogg', 'ombe_casi.ogg')
+        buscando en 'assets/voces/' y luego en 'assets/'.
+        Si el archivo no existe o falla la carga, recurre limpiamente a fallback_sound
+        (como el sfx procedural de victoria o derrota) garantizando 0 crashes.
+        """
+        if not self.sound_enabled:
+            return None
+
+        # Intentar ubicar y reproducir archivo de voz
+        voice_paths = [
+            os.path.join(self.base_assets_dir, "voces", clip_name),
+            os.path.join(self.base_assets_dir, clip_name),
+        ]
+
+        loaded_sound = None
+        for path in voice_paths:
+            if os.path.exists(path):
+                try:
+                    loaded_sound = pygame.mixer.Sound(path)
+                    break
+                except Exception:
+                    pass
+
+        if loaded_sound is not None:
+            return self.play_sfx(loaded_sound, volume_scale)
+        elif fallback_sound is not None:
+            return self.play_sfx(fallback_sound, volume_scale)
+        return None
+
     def get_pitched_sound(self, sound: pygame.mixer.Sound, pitch_factor: float) -> pygame.mixer.Sound:
         """
         Modula dinámicamente el tono (pitch) de un Sound mediante remuestreo de numpy.

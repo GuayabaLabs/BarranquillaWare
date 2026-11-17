@@ -130,3 +130,11 @@ def test_victory_condition_at_30_seconds():
     assert game_completed == [True]
 
     microgame.cleanup()
+
+
+def test_headless_shh_detector_does_not_open_microphone(monkeypatch):
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    detector = ShhAudioDetector()
+    detector.start()
+    assert detector.running is False
+    assert detector._stream is None

@@ -5,6 +5,7 @@ permisos, el adaptador queda inactivo y el juego conserva sus controles normales
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from typing import Optional
@@ -61,6 +62,8 @@ class CameraGestureInput:
         self._previous_hand_y = 0.5
 
     def start(self) -> bool:
+        if os.environ.get("SDL_VIDEODRIVER") == "dummy":
+            return False
         self.suspended = False
         if self.enabled:
             return True
