@@ -258,6 +258,11 @@ class StoryMapScene(BaseState):
                 "completada": "malecon" in unlocked_locations or "coaster" in completed_microgames,
             },
         ]
+        misiones.append({
+            "id": "aleta", "titulo": "Aleta del Tiburón",
+            "desc": "Atiende los fritos sin engancharte con el trol.",
+            "completada": "aleta" in unlocked_locations or "fritanga_84" in completed_microgames,
+        })
         self.side_drawer.ponerMisiones(misiones)
 
         # Mensajes narrativos y alertas de redes
@@ -304,7 +309,7 @@ class StoryMapScene(BaseState):
             "seguidores": metricas.get("seguidores", "0"),
             "likes": metricas.get("likes", "0"),
             "trofeos": f"{len(trofeos_obtenidos)}/{len(trofeosMapa)}",
-            "niveles": f"{self._count_completed_campaign_levels(completed_microgames)}/4",
+            "niveles": f"{self._count_completed_campaign_levels(completed_microgames)}/{len(STORY_CAMPAIGN_ORDER)}",
         }
         self.side_drawer.ponerPerfil(perfil)
 

@@ -1,9 +1,10 @@
+import argparse
+from pathlib import Path
 import os
 import subprocess
 import pygame
 
-def process_audio_files():
-    downloads_dir = r"C:\Users\USUARIO\Downloads"
+def process_audio_files(downloads_dir):
     dest_voces = "assets/voces"
     dest_assets = "assets"
     os.makedirs(dest_voces, exist_ok=True)
@@ -18,7 +19,7 @@ def process_audio_files():
     ]
 
     print("=== PROCESAMIENTO Y LIMPIEZA ACÚSTICA DE VOCES DE SEOR ===")
-    
+
     for filename in files:
         src = os.path.join(downloads_dir, filename)
         dst_v = os.path.join(dest_voces, filename)
@@ -62,4 +63,6 @@ def process_audio_files():
             print(f"✓ {filename}: Duración limpia = {snd.get_length():.2f}s (Carga exitosa)")
 
 if __name__ == "__main__":
-    process_audio_files()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source", nargs="?", type=Path, default=Path.home() / "Downloads")
+    process_audio_files(parser.parse_args().source)

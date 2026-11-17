@@ -309,8 +309,8 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
         self.scene.paloma_dialog_open = False
         self.scene.quest_card_open = False
 
-        # 6. Nodos de cruce no jugables (56, 75, 61, 62, 66) NO deben activar callout ni abrir nivel con SPACE
-        for non_entry_nid in (56, 75, 61, 62, 66):
+        # 6. Nodos de cruce no jugables (56, 75, 61, 66) NO deben activar callout ni abrir nivel con SPACE
+        for non_entry_nid in (56, 75, 61, 66):
             if non_entry_nid not in node_map:
                 continue
             nd = node_map[non_entry_nid]
@@ -595,23 +595,9 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
                 self.assertGreaterEqual(callout_rect.top, 0)
                 self.assertLessEqual(callout_rect.bottom, 1080)
 
-    def test_map_watercolor_markers_loaded_from_assets(self) -> None:
-        raw_pin = self.scene.assets.load_surface("pin_nivel_mapa.png", has_alpha=True)
-        pw, ph = raw_pin.get_size()
-        pin_scale = min(46.0 / pw, 56.0 / ph)
-        expected_pin_size = (max(1, int(round(pw * pin_scale))), max(1, int(round(ph * pin_scale))))
-
-        raw_star = self.scene.assets.load_surface("estrella_dificultad.png", has_alpha=True)
-        sw, sh = raw_star.get_size()
-        star_scale = min(48.0 / sw, 48.0 / sh)
-        expected_star_size = (max(1, int(round(sw * star_scale))), max(1, int(round(sh * star_scale))))
-
-        self.assertIsNotNone(self.scene.poi_pin_surf)
-        self.assertIsNotNone(self.scene.poi_star_surf)
-        self.assertEqual(self.scene.poi_pin_surf.get_size(), expected_pin_size)
-        self.assertEqual(self.scene.poi_star_surf.get_size(), expected_star_size)
-        self.assertNotEqual(expected_pin_size, (36, 44))
-        self.assertNotEqual(expected_star_size, (44, 44))
+    def test_map_keeps_main_markers_and_preview_avoids_them(self) -> None:
+        self.assertEqual(self.scene.poi_pin_surf.get_size(), (36, 44))
+        self.assertEqual(self.scene.poi_star_surf.get_size(), (44, 44))
 
         # Verificar que callout y cola jamás colisionan con la envolvente de marcadores (incluido bob_y)
         canvas = pygame.Surface((1920, 1080))

@@ -184,3 +184,10 @@ if __name__ == "__main__":
     test_story_map_integration()
     test_drawer_tabs_and_sections()
     print("\n[ÉXITO] Todas las pruebas empíricas pasaron satisfactoriamente.")
+
+
+def test_profile_and_missions_include_fritanga():
+    from scenes.story_map_data import STORY_CAMPAIGN_ORDER
+    scene = StoryMapScene(character_id="westcol")
+    assert scene.side_drawer.perfil_data["niveles"].endswith(f"/{len(STORY_CAMPAIGN_ORDER)}")
+    assert "aleta" in {mission["id"] for mission in scene.side_drawer.misiones}

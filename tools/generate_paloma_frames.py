@@ -6,7 +6,7 @@ def create_paloma_frames():
     base_path = "assets/paloma_dialog.png"
     if not os.path.exists(base_path):
         raise FileNotFoundError(f"No se encontró el asset base: {base_path}")
-        
+
     base = Image.open(base_path).convert("RGBA")
     arr_base = np.array(base)
     h_img, w_img, _ = arr_base.shape
@@ -19,9 +19,9 @@ def create_paloma_frames():
     def make_mouth_frame(max_gap=0):
         if max_gap == 0:
             return base.copy()
-            
+
         out = arr_base.copy()
-        
+
         for x in range(742, 960):
             seam = get_seam_y(x)
             rel = (x - 742.0) / (955.0 - 742.0)
@@ -29,11 +29,11 @@ def create_paloma_frames():
                 gap = max_gap * np.sin(rel * np.pi)
             else:
                 gap = 0
-                
+
             shift = int(round(gap))
             if shift <= 0:
                 continue
-                
+
             # 1. Cavidad bucal profunda
             for y in range(int(seam), int(seam + shift)):
                 norm_y = (y - seam) / float(shift)
@@ -43,21 +43,21 @@ def create_paloma_frames():
                     tongue_top = 0.35 + 0.35 * (tongue_x_rel ** 2)
                     if norm_y >= tongue_top:
                         is_tongue = True
-                        
+
                 if is_tongue:
                     # Lengua coral cálida
                     out[y, x] = [238, 102, 82, 255]
                 else:
                     # Cavidad interior ciruela/rubí profundo
                     out[y, x] = [72, 20, 48, 255]
-                    
+
             # 2. Desplazamiento de mandíbula inferior y borde
             for y in range(540, int(seam), -1):
                 if y + shift < h_img:
                     r, g, b, a = arr_base[y, x]
                     if a > 0:
                         out[y + shift, x] = arr_base[y, x]
-                        
+
         return Image.fromarray(out)
 
     def make_blink_frame():
@@ -66,7 +66,7 @@ def create_paloma_frames():
         draw = ImageDraw.Draw(img)
         cx, cy = 595, 435
         r_iris = 60
-        
+
         # Párpado con color lavanda de la cabeza
         draw.ellipse([cx - r_iris, cy - r_iris, cx + r_iris, cy + r_iris], fill=(216, 192, 238, 255))
         # Sombra sutil de acuarela en el borde superior del párpado
