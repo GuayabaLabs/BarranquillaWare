@@ -9,6 +9,10 @@ INK_DARK = (78, 51, 35)
 
 
 class VentanaColoresMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"dedos": (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4)}
+    # Colores del mando Xbox: B rojo, Y amarillo, X azul, A verde.
+    GAMEPAD_BUTTON_KEYS = {1: pygame.K_1, 3: pygame.K_2, 2: pygame.K_3, 0: pygame.K_4}
     """
     Microjuego 4: '¡Armoniza los Cristales!' (Monumento Ventana al Mundo).
     - Temática social: Verifica los hechos reales (color real) antes de compartir información.
@@ -185,7 +189,7 @@ class VentanaColoresMicrogame(BaseMicrogame):
         right_x = cx + gap // 2
 
         floor_h = (bot_y - top_y) // 4
-        pulse = math.sin(self.timer * 8.0) * 0.5 + 0.5
+        pulse = math.sin((self.time_limit - self.time_left) * 8.0) * 0.5 + 0.5
 
         for i in range(4):
             py = top_y + i * floor_h

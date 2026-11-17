@@ -26,6 +26,8 @@ from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
+from microgames.curramgram_go import CurramGramGoMicrogame
+from microgames.emoji_catch import EmojiCatchMicrogame
 
 
 INK_DARK = (78, 51, 35)       # #4E3323
@@ -78,6 +80,8 @@ class ArcadeModeScene(BaseState):
             MetropolitanoModeracionMicrogame,
             PunchAlertMicrogame,
             BuenavistaCineMicrogame,
+            CurramGramGoMicrogame,
+            EmojiCatchMicrogame,
         ]
 
         # Estado del juego Arcade
@@ -245,7 +249,8 @@ class ArcadeModeScene(BaseState):
         if params and "character_id" in params:
             self.character_id = params["character_id"]
             self._load_character_sprite()
-        self._restart_arcade()
+        if not (params and params.get("resume_round")):
+            self._restart_arcade()
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.phase == self.STATE_GAME_OVER:
@@ -287,6 +292,11 @@ class ArcadeModeScene(BaseState):
 
     def _compute_arcade_time_limit(self, chosen_cls: Type[BaseMicrogame]) -> float:
         """Calcula una ventana justa según la categoría del microjuego y el multiplicador actual."""
+        if chosen_cls is CurramGramGoMicrogame:
+            # La ruta completa y sus seis casos requieren su ventana original.
+            return 120.0
+        if chosen_cls is EmojiCatchMicrogame:
+            return max(18.0, 30.0 / self.speed_multiplier)
         if chosen_cls is BatallaFloresBossMicrogame:
             return 15.0
         if chosen_cls is MetropolitanoModeracionMicrogame:
@@ -326,8 +336,12 @@ class ArcadeModeScene(BaseState):
             )
             microgame.time_limit = fair_time
             microgame.time_left = fair_time
+            if chosen_cls in (CurramGramGoMicrogame, EmojiCatchMicrogame):
+                # Estos juegos llevan su propio reloj, sincronizado con la barra común.
+                microgame.game.tiempo = fair_time
 
         microgame.pause_return_callback = self._exit_arcade
+        microgame.pause_menu_callback = self._exit_arcade
         self._active_microgame = microgame
 
         if hasattr(self, "state_machine") and self.state_machine:
@@ -370,7 +384,7 @@ class ArcadeModeScene(BaseState):
             self.screenshake_time = 0.25
 
         if hasattr(self, "state_machine") and self.state_machine:
-            self.state_machine.change_state(self)
+            self.state_machine.change_state(self, {"resume_round": True})
 
     def _enter_game_over(self) -> None:
         self.phase = self.STATE_GAME_OVER

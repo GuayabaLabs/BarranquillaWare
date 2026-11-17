@@ -1,13 +1,23 @@
 import os
 import sys
+from pathlib import Path
 
 # Asegurar que el directorio raíz esté en sys.path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from core.engine import Engine
-from scenes.main_menu import MainMenuScene
+def _prefer_project_python() -> None:
+    """Usa el entorno del juego sin cambiar las dependencias del Python global."""
+    root = Path(__file__).resolve().parent
+    environment = root / ".venv"
+    executable = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if executable.is_file() and Path(sys.prefix).resolve() != environment.resolve():
+        os.execv(str(executable), [str(executable), str(root / "main.py"), *sys.argv[1:]])
 
 def main() -> None:
+    _prefer_project_python()
+    from core.engine import Engine
+    from scenes.main_menu import MainMenuScene
+
     # Al ejecutar el juego, limpiar el modo dummy heredado de pruebas.
     for driver in ("SDL_AUDIODRIVER", "SDL_VIDEODRIVER"):
         if os.environ.get(driver) == "dummy":

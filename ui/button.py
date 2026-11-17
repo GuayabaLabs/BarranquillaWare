@@ -32,6 +32,7 @@ class UIButton:
         # Estados de interacción
         self.is_hovered: bool = False
         self.is_pressed: bool = False
+        self.is_focused: bool = False  # Foco de teclado/mando (ver ui/focus_nav.py)
 
         # Animación de escala (Game Feel)
         self.current_scale: float = 1.0
@@ -47,6 +48,23 @@ class UIButton:
         """Actualiza la posición central del botón y su rectángulo de colisión."""
         self.center_x, self.center_y = center_pos
         self.rect.center = (self.center_x, self.center_y)
+
+    def set_focus(self, focused: bool) -> None:
+        """Marca el botón como seleccionado por teclado/mando."""
+        if focused and not self.is_focused:
+            self.audio.play_hover()
+            self.shimmer_progress = 0.0
+        self.is_focused = focused
+
+    def activate(self) -> None:
+        """Equivale a un clic completo (Enter / Espacio / botón A)."""
+        if self.is_toggle:
+            self.toggle_state = not self.toggle_state
+        self.audio.play_click()
+        self.shimmer_progress = 0.0
+        self.current_scale = 0.94
+        if self.on_click:
+            self.on_click()
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame.MOUSEMOTION:
@@ -83,7 +101,7 @@ class UIButton:
         if self.is_pressed:
             self.target_scale = 0.94
             target_offset = 3.0
-        elif self.is_hovered:
+        elif self.is_hovered or self.is_focused:
             self.target_scale = 1.05
             target_offset = -2.0
         else:

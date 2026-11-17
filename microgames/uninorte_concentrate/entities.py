@@ -6,6 +6,7 @@ import math
 import random
 from typing import Optional, List, Tuple, Dict
 import pygame
+from core import input_state
 
 
 class Student:
@@ -281,7 +282,7 @@ class VirtualCursor:
         })
 
     def update(self, dt: float, clouds: Optional[List[Distraction]] = None) -> None:
-        keys = pygame.key.get_pressed()
+        keys = input_state.get_pressed()
         ix = 0.0
         iy = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -338,12 +339,13 @@ class VirtualCursor:
             r["alpha"] -= 1200.0 * dt
         self.ripples = [r for r in self.ripples if r["alpha"] > 5.0]
 
-    def get_pop_targets(self, clouds: List[Distraction]) -> List[Distraction]:
+    def get_pop_targets(self, clouds: List[Distraction], extra_radius: float = 0.0) -> List[Distraction]:
         hit_list: List[Distraction] = []
+        effective_radius = self.aoe_radius + extra_radius
         for c in clouds:
             if c.state in (Distraction.STATE_APPROACHING, Distraction.STATE_ATTACHED):
                 dist = math.hypot(c.x - self.tip_x, c.y - self.tip_y)
-                if dist <= (self.aoe_radius + c.hit_radius * 0.45):
+                if dist <= (effective_radius + c.hit_radius * 0.45):
                     hit_list.append(c)
         return hit_list
 
@@ -404,11 +406,12 @@ class ProgressBar:
         self.track_w = int(fw * 0.669)
         self.track_h = int(fh * 0.368)
 
-    def update(self, dt: float, is_studying: bool) -> bool:
+    def update(self, dt: float, is_studying: bool, rate_multiplier: float = 1.0) -> bool:
         self.sparkle_phase += dt * 6.0
         just_completed = False
         if is_studying and not self.completed:
-            self.progress = min(100.0, self.progress + self.fill_rate_per_sec * dt)
+            effective_rate = self.fill_rate_per_sec * max(0.1, rate_multiplier)
+            self.progress = min(100.0, self.progress + effective_rate * dt)
             if self.progress >= 100.0:
                 self.progress = 100.0
                 self.completed = True

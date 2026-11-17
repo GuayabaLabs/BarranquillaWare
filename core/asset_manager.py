@@ -24,7 +24,17 @@ semillasTrofeo = (
 
 
 def _flood_fill_fondo(fondo: np.ndarray, semillas) -> np.ndarray:
-    """Flood-fill scanline conectado únicamente a los bordes/semillas en numpy puro."""
+    """Flood-fill scanline conectado únicamente a los bordes/semillas."""
+    if cv2 is not None:
+        h, w = fondo.shape
+        img = np.ascontiguousarray(fondo, dtype=np.uint8) * 255
+        mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+        flags = 4 | (255 << 8) | cv2.FLOODFILL_MASK_ONLY
+        for sx, sy in semillas:
+            if 0 <= sx < w and 0 <= sy < h and img[sy, sx] == 255 and mask[sy + 1, sx + 1] == 0:
+                cv2.floodFill(img, mask, (int(sx), int(sy)), 128, flags=flags)
+        return mask[1:-1, 1:-1] != 0
+
     from collections import deque
 
     h, w = fondo.shape
@@ -62,33 +72,43 @@ def _flood_fill_fondo(fondo: np.ndarray, semillas) -> np.ndarray:
     return visitado
 
 
+_SMOOTH_KERNEL_3X3 = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]], dtype=np.float32) / 16.0
+
+
 def borrarFondo(foto, fondo, borde, semillas=((0, 0),)):
     # Borra el fondo conectado con la orilla de la imagen (o con puntos semillas)
-    # usando flood-fill conectado en numpy y suavizado de contorno sin perforar interiores.
+    # usando flood-fill conectado y suavizado de contorno sin perforar interiores.
     if foto.get_masks()[3] == 0:
         foto = foto.convert_alpha()
     fondo_hw = np.asarray(fondo, dtype=bool).T
     visitado = _flood_fill_fondo(fondo_hw, semillas)
-    dibujo = (~visitado).astype(np.float32) * 255.0
 
-    # Erosión 3x3 opcional (quita el filito claro de la orilla) + suavizado 3x3
-    if borde >= 3:
+    if cv2 is not None:
+        dibujo = (~visitado).astype(np.float32) * 255.0
+        if borde >= 3:
+            dibujo = cv2.erode(dibujo, np.ones((3, 3), dtype=np.uint8), borderType=cv2.BORDER_REPLICATE)
+        dibujo = cv2.filter2D(dibujo, -1, _SMOOTH_KERNEL_3X3, borderType=cv2.BORDER_REPLICATE)
+        alfa_u8 = np.clip(dibujo, 0, 255).astype(np.uint8)
+    else:
+        dibujo = (~visitado).astype(np.float32) * 255.0
+        # Erosión 3x3 opcional (quita el filito claro de la orilla) + suavizado 3x3
+        if borde >= 3:
+            pad = np.pad(dibujo, 1, mode="edge")
+            h, w = dibujo.shape
+            dibujo = np.minimum.reduce([
+                pad[dy:dy + h, dx:dx + w]
+                for dy in range(3)
+                for dx in range(3)
+            ])
+
         pad = np.pad(dibujo, 1, mode="edge")
         h, w = dibujo.shape
-        dibujo = np.minimum.reduce([
-            pad[dy:dy + h, dx:dx + w]
-            for dy in range(3)
-            for dx in range(3)
-        ])
-
-    pad = np.pad(dibujo, 1, mode="edge")
-    h, w = dibujo.shape
-    dibujo = (
-        1.0 * pad[0:h, 0:w] + 2.0 * pad[0:h, 1:w + 1] + 1.0 * pad[0:h, 2:w + 2] +
-        2.0 * pad[1:h + 1, 0:w] + 4.0 * pad[1:h + 1, 1:w + 1] + 2.0 * pad[1:h + 1, 2:w + 2] +
-        1.0 * pad[2:h + 2, 0:w] + 2.0 * pad[2:h + 2, 1:w + 1] + 1.0 * pad[2:h + 2, 2:w + 2]
-    ) / 16.0
-    alfa_u8 = np.clip(dibujo, 0, 255).astype(np.uint8)
+        dibujo = (
+            1.0 * pad[0:h, 0:w] + 2.0 * pad[0:h, 1:w + 1] + 1.0 * pad[0:h, 2:w + 2] +
+            2.0 * pad[1:h + 1, 0:w] + 4.0 * pad[1:h + 1, 1:w + 1] + 2.0 * pad[1:h + 1, 2:w + 2] +
+            1.0 * pad[2:h + 2, 0:w] + 2.0 * pad[2:h + 2, 1:w + 1] + 1.0 * pad[2:h + 2, 2:w + 2]
+        ) / 16.0
+        alfa_u8 = np.clip(dibujo, 0, 255).astype(np.uint8)
 
     alfa = pygame.surfarray.pixels_alpha(foto)
     alfa[:] = alfa_u8.T

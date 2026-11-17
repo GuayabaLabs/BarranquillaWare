@@ -129,6 +129,11 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.audio.play_bgm("contraRelojMusic.mp3")
 
     def setup_game(self) -> None:
+        self._last_walk_finger: Optional[int] = None
+        self._walk_finger_idle: float = 0.0
+        self._walk_step_buffer: float = 0.0
+        self._walk_step_flash: float = 0.0
+        self._walk_feedback_font = self.assets.cargarFuenteCuento(24)
         self.camera_input = CameraGestureInput.get_instance()
         if not self.camera_input.enabled:
             self.camera_input.start()
@@ -548,12 +553,24 @@ class UninorteSprintMicrogame(BaseMicrogame):
             })
 
     def update_game(self, dt: float) -> None:
-        camera_action = False
-        if getattr(self, "camera_input", None):
-            # Una palma abierta nueva o un cierre nuevo equivalen a una acción.
-            camera_action = self.camera_input.consume_hand_raise() or self.camera_input.consume_fist()
-        if camera_action and not self.is_jumping and self.jump_cooldown <= 0.0:
+        self._walk_step_flash = max(0.0, self._walk_step_flash - dt)
+        self._walk_step_buffer = max(0.0, self._walk_step_buffer - dt)
+        self._walk_finger_idle += dt
+        if self._walk_finger_idle >= 0.65:
+            self._last_walk_finger = None
+        if getattr(self, "camera_input", None) and self.camera_input.enabled and self.camera_input.is_hand_present():
+            f0 = self.camera_input.consume_finger(0)
+            f1 = self.camera_input.consume_finger(1)
+            tapped = 0 if (f0 and self._last_walk_finger != 0) else 1 if (f1 and self._last_walk_finger != 1) else None
+            if tapped is not None:
+                self._last_walk_finger = tapped
+                self._walk_finger_idle = 0.0
+                self._walk_step_buffer = 0.35
+        if self._walk_step_buffer > 0.0 and not self.is_jumping and self.jump_cooldown <= 0.0:
             self._jump_forward()
+            if self.is_jumping:
+                self._walk_step_flash = 0.25
+            self._walk_step_buffer = 0.0
         # Hit-Stop / Freeze frame al impactar
         if self.freeze_frames > 0:
             self.freeze_frames -= 1
@@ -1009,7 +1026,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
                 self.ultimoUpdate = pygame.time.get_ticks()
                 if self.canalTictac is not None:
                     self.canalTictac.unpause()
-                self.revisarGestosAviso()
+                self.revisarGestosAviso(dt)
                 return
             self.tiempoJugado += dt
             self.revisarLlegadaNoti()
@@ -1029,6 +1046,9 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.notiActual = self.notificaciones[len(self.momentosNoti) % len(self.notificaciones)]
         self.iconoNoti = random.choice(self.icon_sprites) if self.icon_sprites else None
         self.avisoAbierto = True
+        self._walk_step_buffer = 0.0
+        self._last_walk_finger = None
+        self.reset_binary_camera_choice()
         self.tiempoAviso = 0.0
         self.opcionAviso = 1
         self.ultimoUpdate = pygame.time.get_ticks()
@@ -1036,21 +1056,18 @@ class UninorteSprintMicrogame(BaseMicrogame):
         if hasattr(self.audio, "play_click"):
             self.audio.play_click()
 
-    def revisarGestosAviso(self) -> None:
+    def revisarGestosAviso(self, dt: float = 1 / 60) -> None:
         camara = getattr(self, "camera_input", None)
-        if not camara or not camara.enabled:
+        if not camara or not camara.enabled or self.tiempoAviso < 0.6:
+            self.reset_binary_camera_choice()
             return
-        palma = camara.consume_hand_raise()
-        puno = camara.consume_fist()
-        if self.tiempoAviso < 0.6:
-            return
-        if palma:
-            self.elegirOpcionAviso(1)
-        elif puno:
-            self.elegirOpcionAviso(0)
+        choice = self.poll_binary_camera_choice(camara, dt)
+        if choice is not None:
+            self.elegirOpcionAviso(choice)
 
     def elegirOpcionAviso(self, opcion: int) -> None:
         self.avisoAbierto = False
+        self.reset_binary_camera_choice()
         self.callarTictac()
         if opcion == 0:
             self.tiempoDistraido = self.duracionDistraccion
@@ -1107,8 +1124,26 @@ class UninorteSprintMicrogame(BaseMicrogame):
         super().render(surface)
         if getattr(self, "avisoAbierto", False) and self.phase == self.PHASE_PLAY:
             self.dibujarAviso(surface)
+        elif self.phase == self.PHASE_PLAY and getattr(self, "camera_input", None) and self.camera_input.enabled:
+            self._draw_walking_feedback(surface)
         if getattr(self, "canalTictac", None) is not None and pygame.time.get_ticks() - self.ultimoUpdate > 150:
             self.canalTictac.pause()
+
+    def _draw_walking_feedback(self, surface: pygame.Surface) -> None:
+        if not hasattr(self, "_walk_feedback_paper"):
+            paper = self.assets.load_cropped_surface("tarjeta_slot_partida.png")
+            self._walk_feedback_paper = pygame.transform.smoothscale(paper, (540, 86))
+        surface.blit(self._walk_feedback_paper, (690, 108))
+        for idx, (x, lbl) in enumerate(((760, "ÍNDICE"), (845, "MEDIO"))):
+            active = self._last_walk_finger == idx
+            col = (113, 182, 155) if (active and self._walk_step_flash > 0) else (190, 161, 211) if active else (215, 204, 192)
+            pygame.draw.circle(surface, col, (x, 148), 22)
+            pygame.draw.circle(surface, (104, 74, 65), (x, 148), 22, 2)
+            t = self._walk_feedback_font.render(lbl, True, (78, 51, 35))
+            surface.blit(t, t.get_rect(center=(x, 180)))
+        msg = "¡Paso!" if self._walk_step_flash > 0 else "Alterna índice y medio para caminar"
+        label = self._walk_feedback_font.render(msg, True, (78, 51, 35))
+        surface.blit(label, label.get_rect(center=(1050, 150)))
 
     def partirEnLineas(self, fuente, texto: str, anchoMax: int) -> list:
         lineas = []
@@ -1169,10 +1204,19 @@ class UninorteSprintMicrogame(BaseMicrogame):
             texto = self.textoConBorde(self.fuenteBotonAviso, etiquetas[i], (255, 248, 236), contorno)
             surface.blit(texto, texto.get_rect(center=(boton.centerx, boton.centery - 3)))
 
-        ayuda = "Flechas para elegir y Enter para aceptar"
+        ayuda = "Cruceta o flechas para elegir · A o Enter para aceptar"
         camara = getattr(self, "camera_input", None)
         if camara and camara.enabled:
-            ayuda += "  ·  Palma: seguir  ·  Puño: revisar"
+            ayuda = "Pellizco/puño (mantén): revisar · Palma abierta (mantén): seguir"
+            progress_pair = getattr(self, "_choice_hold_progress", (0.0, 0.0))
+            for index, progress in enumerate(progress_pair):
+                rect = self.botonesAviso()[index]
+                bar = pygame.Rect(rect.left + 30, rect.bottom + 10, rect.width - 60, 10)
+                pygame.draw.rect(surface, (225, 210, 192), bar, border_radius=5)
+                fill = bar.copy()
+                fill.width = int(bar.width * min(1.0, progress))
+                if fill.width:
+                    pygame.draw.rect(surface, (132, 91, 160) if index == 0 else (78, 151, 121), fill, border_radius=5)
         texto = self.textoConBorde(self.fuenteAyudaAviso, ayuda, (255, 248, 236), (70, 50, 40))
         surface.blit(texto, texto.get_rect(center=(960, 975)))
 

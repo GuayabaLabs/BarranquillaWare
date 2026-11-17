@@ -1,5 +1,6 @@
 import os
 import pygame
+import pytest
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame.init()
@@ -7,6 +8,9 @@ pygame.display.set_mode((1920, 1080))
 
 from core.settings import SettingsManager
 from scenes.arcade_mode import ArcadeModeScene
+from microgames.curramgram_go import CurramGramGoMicrogame
+from microgames.emoji_catch import EmojiCatchMicrogame
+from microgames.punch_alert import PunchAlertMicrogame
 
 def test_arcade_mode_flow():
     print("Iniciando suite de verificación del Modo Arcade WarioWare...")
@@ -83,3 +87,146 @@ def test_arcade_mode_flow():
 
 if __name__ == "__main__":
     test_arcade_mode_flow()
+
+
+def test_arcade_result_survives_real_state_transition(monkeypatch):
+    from core.microgame import BaseMicrogame
+    from core.state_machine import StateMachine
+    settings = SettingsManager.get_instance()
+    monkeypatch.setitem(settings.data, "arcade_high_score", 0)
+    monkeypatch.setattr(settings, "save", lambda: None)
+    scene = ArcadeModeScene()
+    machine = StateMachine()
+    machine.change_state(scene)
+    scene.score = 3
+    scene.lives = 1
+    scene.round_num = 5
+    scene.speed_multiplier = 1.3
+    class RoundGame(BaseMicrogame):
+        def __init__(self, character_id="westcol", on_complete_callback=None):
+            super().__init__(on_complete_callback=on_complete_callback)
+    scene.microgame_pool = [RoundGame]
+    scene._launch_next_microgame()
+    game = machine.current_state
+    game.phase = game.PHASE_PLAY
+    game.time_left = 0.01
+    machine.update(0.02)
+    assert game.phase == game.PHASE_OUTRO
+    machine.render(pygame.Surface((1920, 1080)))
+    machine.update(game.outro_duration + 0.01)
+    assert machine.current_state is scene
+    assert scene.phase == scene.STATE_RESULT
+    assert scene.score == 3
+    assert scene.lives == 0
+    assert scene.round_num == 6
+    machine.update(scene.result_duration + 0.01)
+    assert scene.phase == scene.STATE_GAME_OVER
+    assert settings.get_arcade_high_score() == 3
+    machine.render(pygame.Surface((1920, 1080)))
+    exited = []
+    scene.on_exit_callback = lambda: exited.append(True)
+    scene.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE}))
+    assert exited == [True]
+
+
+def test_arcade_win_keeps_score_when_returning(monkeypatch):
+    from core.microgame import BaseMicrogame
+    from core.state_machine import StateMachine
+    scene = ArcadeModeScene()
+    machine = StateMachine()
+    machine.change_state(scene)
+    class RoundGame(BaseMicrogame):
+        def __init__(self, character_id="westcol", on_complete_callback=None):
+            super().__init__(on_complete_callback=on_complete_callback)
+    scene.microgame_pool = [RoundGame]
+    scene._launch_next_microgame()
+    game = machine.current_state
+    game.finish_game(True)
+    machine.update(game.outro_duration + 0.01)
+    assert machine.current_state is scene
+    assert scene.score == 1
+    assert scene.round_num == 2
+    assert scene.phase == scene.STATE_RESULT
+
+
+def test_arcade_launches_and_renders_malecon_after_another_round():
+    from core.microgame import BaseMicrogame
+    from core.state_machine import StateMachine
+    from microgames.malecon_rueda import MaleconRuedaMicrogame
+    class FirstRound(BaseMicrogame):
+        def __init__(self, character_id="westcol", on_complete_callback=None):
+            super().__init__(on_complete_callback=on_complete_callback)
+    scene = ArcadeModeScene()
+    machine = StateMachine()
+    machine.change_state(scene)
+    scene.microgame_pool = [FirstRound]
+    machine.update(scene.interstitial_duration + 0.01)
+    first = machine.current_state
+    first.finish_game(True)
+    machine.update(first.outro_duration + 0.01)
+    machine.update(scene.result_duration + 0.01)
+    scene.microgame_pool = [MaleconRuedaMicrogame]
+    machine.update(scene.interstitial_duration + 0.01)
+    assert isinstance(machine.current_state, MaleconRuedaMicrogame)
+    canvas = pygame.Surface((1920, 1080))
+    machine.render(canvas)
+    machine.current_state.phase = BaseMicrogame.PHASE_PLAY
+    machine.update(0.1)
+    machine.render(canvas)
+    assert scene.score == 1 and scene.round_num == 2
+
+
+def test_all_registered_arcade_games_render_on_entry():
+    scene = ArcadeModeScene()
+    canvas = pygame.Surface((1920, 1080))
+    for cls in scene.microgame_pool:
+        game = cls()
+        game.render(canvas)
+        game.phase = game.PHASE_PLAY
+        if game.paloma_intro:
+            game.paloma_intro.done = True
+        game.render(canvas)
+        if hasattr(game, "cleanup"):
+            game.cleanup()
+
+
+@pytest.mark.parametrize("game_class", [
+    CurramGramGoMicrogame,
+    EmojiCatchMicrogame,
+    PunchAlertMicrogame,
+])
+def test_arcade_real_game_loss_reaches_score_screen(game_class, monkeypatch):
+    from core.state_machine import StateMachine
+    settings = SettingsManager.get_instance()
+    monkeypatch.setitem(settings.data, "arcade_high_score", 0)
+    monkeypatch.setattr(settings, "save", lambda: None)
+    scene = ArcadeModeScene()
+    assert game_class in scene.microgame_pool
+    machine = StateMachine()
+    machine.change_state(scene)
+    scene.score = 2
+    scene.lives = 1
+    scene.microgame_pool = [game_class]
+    scene._launch_next_microgame()
+    game = machine.current_state
+    assert isinstance(game, game_class)
+    assert game.time_left == game.time_limit
+    if hasattr(game, "game"):
+        assert game.game.tiempo == game.time_limit
+    if game.paloma_intro:
+        game.paloma_intro.done = True
+    canvas = pygame.Surface((1920, 1080))
+    game.finish_game(False)
+    machine.render(canvas)
+    machine.update(game.outro_duration + 0.1)
+    assert machine.current_state is scene
+    assert scene.lives == 0 and scene.score == 2
+    machine.render(canvas)
+    machine.update(scene.result_duration + 0.1)
+    assert scene.phase == scene.STATE_GAME_OVER
+    assert settings.get_arcade_high_score() == 2
+    machine.render(canvas)
+    game.update(game.outro_duration + 0.1)
+    assert scene.lives == 0 and scene.score == 2  # El callback no se repite.
+    scene._restart_arcade()
+    assert scene.lives == 4 and scene.score == 0

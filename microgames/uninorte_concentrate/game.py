@@ -21,6 +21,7 @@ _SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 
 class UninorteConcentrateMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
     """
     Microjuego «¡Concéntrate, llave!» — Nivel 1: Uninorte
     - Duración: 25 segundos.
@@ -109,6 +110,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         self.watercolor_particles: List[Dict[str, Any]] = []
         self.screen_trauma: float = 0.0
         self._attach_sfx_cooldown: float = 0.0
+        self._gesture_pos_freeze_timer: float = 0.0
+        self._frozen_cam_pos: Optional[Tuple[float, float]] = None
 
     def _load_pencil_cursor_sprite(self, target_w: int = 84) -> pygame.Surface:
         """Carga y procesa el sprite oficial del Lapicero de BarranquillaWare ('puntero_lapiz.png')."""
@@ -414,10 +417,10 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
                 "decay": random.uniform(320.0, 520.0)
             })
 
-    def _trigger_pop_action(self) -> None:
-        """Ejecuta el reventón del cursor cuando el jugador presiona Espacio."""
+    def _trigger_pop_action(self, extra_radius: float = 0.0) -> None:
+        """Ejecuta el reventón del cursor cuando el jugador presiona Espacio o hace gesto."""
         self.cursor.trigger_pop_Wave()
-        hit_clouds = self.cursor.get_pop_targets(self.clouds)
+        hit_clouds = self.cursor.get_pop_targets(self.clouds, extra_radius=extra_radius)
 
         if hit_clouds:
             for c in hit_clouds:
@@ -483,21 +486,46 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
     def update_game(self, dt: float) -> None:
         if getattr(self, "camera_input", None) and self.camera_input.enabled and self.camera_input.is_hand_present():
+            # Acción de clic cinético: pellizco de dedos o puño cerrado (apretar)
+            pinch_hit = self.camera_input.consume_click()
+            fist_hit = hasattr(self.camera_input, "consume_fist") and self.camera_input.consume_fist()
+            gesture_active = (
+                getattr(self.camera_input, "is_pinching", lambda: False)()
+                or getattr(self.camera_input, "is_fist", lambda: False)()
+            )
+
             # Control óptico de MediaPipe: mueve el lapicero en pantalla independiente del ratón del sistema
             hand_x, hand_y = self.camera_input.get_position()
             target_x = max(48.0, min(self.screen_w - 48.0, hand_x * self.screen_w))
             target_y = max(48.0, min(self.screen_h - 48.0, hand_y * self.screen_h))
-            
-            # Suavizado cinético (LERP) para evitar temblor de cámara
-            smooth = min(1.0, dt * 24.0)
-            self.cursor.x += (target_x - self.cursor.x) * smooth
-            self.cursor.y += (target_y - self.cursor.y) * smooth
-            self.cursor.vx = 0.0
-            self.cursor.vy = 0.0
 
-            # Acción de clic cinético: pellizco de dedos o puño
-            if self.camera_input.consume_click():
-                self._trigger_pop_action()
+            # Si se acaba de disparar el gesto de pellizco o puño, congelar temporalmente la posición
+            # para amortiguar el micro-desplazamiento involuntario de la mano/dedo al contraerse.
+            if pinch_hit or fist_hit:
+                self._gesture_pos_freeze_timer = 0.22
+                self._frozen_cam_pos = (self.cursor.x, self.cursor.y)
+                # Radio de tolerancia ampliado a +40px para garantizar el pop de la distracción
+                self._trigger_pop_action(extra_radius=40.0)
+
+            if self._gesture_pos_freeze_timer > 0.0:
+                self._gesture_pos_freeze_timer -= dt
+                if self._frozen_cam_pos is not None:
+                    target_x, target_y = self._frozen_cam_pos
+            elif gesture_active:
+                # Si la mano sigue contraída/sostenida, reducir la velocidad de movimiento para estabilizar
+                smooth = min(1.0, dt * 6.0)
+                self.cursor.x += (target_x - self.cursor.x) * smooth
+                self.cursor.y += (target_y - self.cursor.y) * smooth
+                self.cursor.vx = 0.0
+                self.cursor.vy = 0.0
+            else:
+                self._frozen_cam_pos = None
+                # Suavizado cinético estándar (LERP)
+                smooth = min(1.0, dt * 24.0)
+                self.cursor.x += (target_x - self.cursor.x) * smooth
+                self.cursor.y += (target_y - self.cursor.y) * smooth
+                self.cursor.vx = 0.0
+                self.cursor.vy = 0.0
         self.elapsed_play_time += dt
 
         # 1. Spawner de distracciones (+70% de cadencia y densidad)
@@ -527,7 +555,14 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
         # 3. Actualizar estudiante y barra de progreso (nunca retrocede)
         self.student.update(dt)
-        just_finished_task = self.progress_bar.update(dt, self.student.is_studying)
+        # Si la cámara está activa, llenar la barra un 15% más rápido para compensar la motricidad gestual
+        cam_active = bool(
+            getattr(self, "camera_input", None)
+            and self.camera_input.enabled
+            and self.camera_input.is_hand_present()
+        )
+        fill_multiplier = 1.15 if cam_active else 1.0
+        just_finished_task = self.progress_bar.update(dt, self.student.is_studying, rate_multiplier=fill_multiplier)
         if just_finished_task:
             self.student.trigger_celebration()
             self.score_manager.award_task_completion_bonus((self.student.base_x, self.student.base_y - 180.0))

@@ -14,6 +14,7 @@ _SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
 _AUDIO_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 class PunchAlertMicrogame(BaseMicrogame):
+    CAMERA_POINTER = False  # Usa la cámara directamente
     """
     Minijuego Punch-Alert: El Despachador de Notificaciones (Estilo WarioWare / Béisbol).
     Compatible 100% con el sistema de niveles / escenas (StoryMap, ArcadeMode, FreePlay)
@@ -621,8 +622,16 @@ class PunchAlertMicrogame(BaseMicrogame):
 
             notif_center_y = notif["y"] + (notif["h"] * 0.5)
 
+            # Margen de gracia con cámara para absorber la latencia de captura
+            cam_active = bool(
+                getattr(self, "camera_input", None)
+                and self.camera_input.enabled
+                and self.camera_input.is_hand_present()
+            )
+            margin = 35.0 if cam_active else 0.0
+
             # Requisito de encaje: el centro de la tarjeta debe estar dentro de la caja (hit_zone_y_min..hit_zone_y_max)
-            if self.hit_zone_y_min <= notif_center_y <= self.hit_zone_y_max:
+            if (self.hit_zone_y_min - margin) <= notif_center_y <= (self.hit_zone_y_max + margin):
                 hit_connected = True
                 self.is_whiff_penalized = False
                 # Reproducir la voz del personaje al pegarle a la notificación
@@ -727,7 +736,8 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def update_game(self, dt: float) -> None:
         """Actualiza física, estado de Sweet Spot, ondas expansivas, trauma y partículas."""
-        if getattr(self, "camera_input", None) and self.camera_input.consume_punch():
+        cam = getattr(self, "camera_input", None)
+        if cam and cam.enabled and (cam.consume_punch() or cam.consume_fist()):
             self.trigger_punch()
         self.pulse_clock += dt * 10.0
 

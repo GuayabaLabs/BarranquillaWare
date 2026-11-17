@@ -2,10 +2,13 @@ import math
 import random
 from typing import Optional, Callable, List
 import pygame
+from core import input_state
 
 from core.microgame import BaseMicrogame
 
 class BatallaFloresBossMicrogame(BaseMicrogame):
+    # Control por movimiento: gestos de cámara -> teclas del juego (ver BaseMicrogame).
+    CAMERA_ACTIONS = {"eje_x": (pygame.K_LEFT, pygame.K_RIGHT), "accion": pygame.K_SPACE}
     """
     Etapa Jefe (Boss Stage): '¡LA GRAN GUACHERNA Y BATALLA DE FLORES!'
     - Tiempo límite extendido: 15.0 segundos.
@@ -207,7 +210,7 @@ class BatallaFloresBossMicrogame(BaseMicrogame):
         subphase = self._get_current_boss_subphase()
 
         # 1. Movimiento del Jugador
-        keys = pygame.key.get_pressed()
+        keys = input_state.get_pressed()
         move_dir = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             move_dir -= 1.0
