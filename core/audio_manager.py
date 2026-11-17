@@ -247,6 +247,26 @@ class AudioManager:
         sound.set_volume(volume)
         return sound.play()
 
+    def sonarEscritura(self, escribiendo: bool) -> None:
+        canal = getattr(self, "canalEscritura", None)
+        if not escribiendo:
+            if canal is not None:
+                canal.fadeout(180)
+                self.canalEscritura = None
+            return
+        if canal is not None and canal.get_busy():
+            return
+        if getattr(self, "sonidoEscritura", None) is None:
+            ruta = os.path.join(self.base_assets_dir, "escribir.mp3")
+            try:
+                self.sonidoEscritura = pygame.mixer.Sound(ruta) if pygame.mixer.get_init() and os.path.exists(ruta) else False
+            except pygame.error:
+                self.sonidoEscritura = False
+        if not self.sonidoEscritura or not self.sound_enabled:
+            return
+        self.sonidoEscritura.set_volume(max(0.0, min(1.0, self.sfx_volume * 0.7)))
+        self.canalEscritura = self.sonidoEscritura.play(loops=-1)
+
     def play_hover(self) -> None:
         self.play_sfx(self._hover_sound, 0.55)
 
