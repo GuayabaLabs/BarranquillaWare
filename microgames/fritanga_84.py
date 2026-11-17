@@ -45,9 +45,9 @@ mensajesRabia = [
     "¡Así no se cocina, mi llave!", "¡Respira, que se te riega!", "¡Esa rabia te está saliendo cara!",
 ]
 reflexionesResponder = [
+    ["Ajá, ¿y pa' qué le respondes, mi llave?", "Él ganó seguidores con tu rabia", "y a ti se te estaba quemando la arepa."],
     ["¿Pa' qué le sigues respondiendo, mi llave?", "Mira el chat: todos gozando con tu pelea.",
      "La rabia en redes da vistas, pero el que se quema eres tú."],
-    ["Ajá, ¿y pa' qué le respondes, mi llave?", "Él ganó seguidores con tu rabia", "y a ti se te estaba quemando la arepa."],
     ["¿Pa' qué le contestas, si eso es justo lo que quiere?", "El que escribe esas cosas no busca conversar:",
      "busca verte caliente, y cada respuesta es leña pa' su candela."],
     ["¿Y pa' qué le respondes? Mientras peleabas,", "las manos se te fueron pal' celular",
@@ -232,6 +232,8 @@ class Fritanga84Microgame(BaseMicrogame):
         self.cancionTrol = self.cargarSonido(os.path.join(carpetaFritanga, "trol.mp3"))
         self.canalTrol = None
         self.sonidoError = self.cargarSonido("Error.mp3")
+        self.sonidoAy = self.cargarSonido(os.path.join(carpetaFritanga, "ay.mp3"))
+        self.agache = 0.0
         self.vocesRabia = [voz for voz in (self.cargarSonido(os.path.join(carpetaFritanga, "esteVale.mp3")),
                                            self.cargarSonido(os.path.join(carpetaFritanga, "cachaco.mp3")))
                            if voz is not None]
@@ -961,7 +963,10 @@ class Fritanga84Microgame(BaseMicrogame):
             self.decir("¡Todavía no!", arepa["x"], arepa["y"] - 70)
             return
         if arepa["lado"] == 1:
-            if self.rabia >= 0.6 and random.random() < (self.rabia - 0.5) * 1.6:
+            volar = (self.rabia - 0.5) * 1.6 if self.rabia >= 0.6 else 0.0
+            if self.respuestas >= 2 and self.rabia >= 0.3:
+                volar = max(volar, 0.4)
+            if random.random() < min(volar, 0.75):
                 arepa["seVuela"] = 0.8
                 arepa["direccion"] = random.choice((-1, 1))
                 self.decir(random.choice(mensajesRabia), arepa["x"], arepa["y"] - 90)
@@ -1187,8 +1192,28 @@ class Fritanga84Microgame(BaseMicrogame):
             self.salpicar(punta[0], punta[1], 6, True)
         self.pausaQuemada = self.duracionQuemada
         self.trigger_screenshake(14.0, 0.3)
-        if hasattr(self.audio, "play_miss"):
+        if self.sonidoAy is not None and hasattr(self.audio, "play_sfx"):
+            self.audio.play_sfx(self.sonidoAy)
+            self.agache = self.sonidoAy.get_length() + 0.2
+            self.ajustarMusica(0.25)
+        elif hasattr(self.audio, "play_miss"):
             self.audio.play_miss()
+
+    def ajustarMusica(self, factor: float) -> None:
+        try:
+            if not pygame.mixer.get_init() or not getattr(self.audio, "music_enabled", True):
+                return
+            base = getattr(self.audio, "music_volume", 0.7) * getattr(self.audio, "_bgm_volume_scale", 1.0)
+            pygame.mixer.music.set_volume(max(0.0, min(1.0, base * factor)))
+        except Exception:
+            pass
+
+    def actualizarAgache(self, dt: float) -> None:
+        if self.agache <= 0.0:
+            return
+        self.agache = max(0.0, self.agache - dt)
+        if self.agache <= 0.0:
+            self.ajustarMusica(1.0)
 
     def enfado(self) -> float:
         if self.arrebato <= 0.0:
@@ -1295,6 +1320,8 @@ class Fritanga84Microgame(BaseMicrogame):
                 return
         volumen = 0.0 if self.trol["estado"] == "aviso" or self.reflexion else \
             (0.22 + 0.5 * self.calor()) * self.refuerzoAceite + 0.5 * self.golpeAceite
+        if self.agache > 0.0:
+            volumen *= 0.2
         self.canalAceite.set_volume(max(0.0, min(1.0, volumen * getattr(self.audio, "sfx_volume", 0.8))))
         self.canalAceite.unpause()
 
@@ -1305,12 +1332,17 @@ class Fritanga84Microgame(BaseMicrogame):
             self.canalTrol.pause()
 
     def exit(self) -> None:
+        if getattr(self, "agache", 0.0) > 0.0:
+            self.agache = 0.0
+            self.ajustarMusica(1.0)
         if self.canalAceite is not None:
             self.canalAceite.stop()
             self.canalAceite = None
         if getattr(self, "canalTrol", None) is not None:
             self.canalTrol.stop()
             self.canalTrol = None
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(False)
         self.reanudarMusica()
         super().exit()
 
@@ -1356,6 +1388,7 @@ class Fritanga84Microgame(BaseMicrogame):
 
         if self.phase == self.PHASE_PLAY and not self.is_finished:
             self.animarCelular(dt)
+            self.actualizarAgache(dt)
             self.actualizarSonido()
             self.avanzarDestaque(dt)
             if self.tutorialPendiente and self.listo:
@@ -1891,6 +1924,8 @@ class Fritanga84Microgame(BaseMicrogame):
             self.fuenteFinal = self.assets.cargarFuenteCuento(60)
         lineas = self.lineasFinales()
         horario = self.horarioFinal()
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(any(horario[i] <= t < horario[i] + len(linea) / 24.0 for i, linea in enumerate(lineas)))
         alto = self.fuenteFinal.get_linesize() + 20
         separacion = 50
         y = 540 - (alto * len(lineas) + separacion) // 2

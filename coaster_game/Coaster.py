@@ -73,16 +73,54 @@ cajaTinta = pygame.Rect(ancho - 16 - 270, 10, 270, 42)
 
 niveles = [
     dict(salida=(120, 210), meta=(980, 330), necesarias=2, tinta=1500, rueda=(557, 318),
-         monedas=[(400, 400), (620, 430), (820, 390)]),
+         monedas=[(400, 400), (620, 430), (820, 390)],
+         fantasma=[(220, 260), (320, 330), (420, 300), (470, 230), (420, 170), (340, 190), (330, 260),
+                   (420, 320), (540, 300), (600, 220), (560, 150), (480, 150), (470, 220), (560, 260)]),
     dict(salida=(110, 170), meta=(990, 300), necesarias=3, tinta=1500, rueda=(557, 318),
-         monedas=[(330, 430), (560, 500), (790, 390), (900, 340)]),
+         monedas=[(330, 430), (560, 500), (790, 390), (900, 340)],
+         fantasma=[(220, 230), (300, 330), (240, 420), (160, 380), (200, 300), (320, 280), (430, 340),
+                   (470, 450), (380, 500), (330, 430), (420, 380), (560, 360), (640, 280), (600, 190),
+                   (520, 200), (540, 280)]),
     dict(salida=(110, 160), meta=(1000, 420), necesarias=3, tinta=1900, hora="tarde", rueda=(557, 318),
-         monedas=[(570, 312), (660, 400), (570, 488), (480, 400)]),
+         monedas=[(570, 312), (660, 400), (570, 488), (480, 400)],
+         fantasma=[(230, 200), (330, 280), (420, 380), (560, 470), (700, 400), (690, 280), (570, 230),
+                   (460, 300), (500, 400), (600, 420), (640, 340), (580, 300), (540, 360)]),
     dict(salida=(110, 150), meta=(1000, 250), necesarias=3, tinta=1700, hora="noche", rueda=(557, 318),
-         monedas=[(380, 430), (570, 262), (780, 435), (900, 300)]),
+         monedas=[(380, 430), (570, 262), (780, 435), (900, 300)],
+         fantasma=[(220, 220), (330, 340), (260, 450), (350, 520), (470, 440), (420, 330), (520, 250),
+                   (640, 330), (600, 450), (700, 520), (800, 440), (740, 330), (820, 230), (880, 320),
+                   (830, 420), (760, 380)]),
     dict(salida=(110, 190), meta=(1010, 470), necesarias=5, tinta=1900,
-         monedas=[(300, 410), (450, 500), (620, 400), (770, 390), (900, 480), (990, 450)]),
+         monedas=[(300, 410), (450, 500), (620, 400), (770, 390), (900, 480), (990, 450)],
+         fantasma=[(240, 250), (340, 350), (300, 460), (420, 520), (520, 430), (470, 330), (580, 260),
+                   (700, 320), (680, 440), (580, 470), (560, 380), (650, 340), (740, 400), (720, 480)]),
 ]
+
+mensajeAlgoritmo = ("Tu camino no se mide en likes.", "Ve por tus monedas, no por los corazones.",
+                    "En redes, el algoritmo escoge la vía por ti.", "Aquí la vía la dibujas tú.")
+reflexionesFantasma = [
+    ("Cada corazón se sintió como un premio.", "Pero nadie te preguntó pa' dónde ibas tú."),
+    ("Esa vía no se hizo pa' que llegaras.", "Se hizo pa' que no te bajaras del carro."),
+    ("Se fue la tarde dando vueltas detrás de likes.", "Y tu meta ahí, quietecita, esperándote."),
+    ("De noche el scroll no tiene fondo, ¿oíste?", "El algoritmo no duerme, pero tú sí deberías."),
+    ("El mundo entero cabe en tu pantalla.", "Pero si otro traza tu ruta, no vas a conocerlo."),
+]
+reflexionesPropias = [
+    "Tú pusiste el rumbo. Las redes sirven cuando tú las usas, no cuando te usan a ti.",
+    "No todo lo que brilla en el feed lleva a algún lado. Escoger también es dejar pasar.",
+    "Cayó la tarde y no te dejaste llevar. Eso es tener la cabeza en su sitio, mi llave.",
+    "El scroll de la noche no tiene fondo, pero tú supiste cuándo bajarte del carro.",
+    "Llegaste a la Ventana al Mundo por tu propia vía, y desde aquí lo ves todo.",
+]
+reflexionFinal = (
+    "Las redes no son el problema.",
+    "El problema es cuando dejas que el algoritmo te trace la vía.",
+    "Él no quiere que llegues: quiere que te quedes, dando vueltas detrás de corazones.",
+    "Y la próxima vez que abras el celular, pregúntate: ¿esta vía la dibujé yo?",
+)
+duracionIntro = 10.0
+duracionDesvanecer = 1.0
+cFantasma = (126, 96, 176)
 
 
 def interpolar(a, b, t):
@@ -205,6 +243,8 @@ class Recorrido:
         self.quieto = 0.0
         self.tiempo = 0.0
         self.fuerzaG = 0.0
+        self.masLejos = 0.0
+        self.sinAvanzar = 0.0
         self.ubicar()
 
     def ubicar(self):
@@ -244,7 +284,12 @@ class Recorrido:
                 self.estado = "listo" if llego else "corta"
                 break
             self.quieto = self.quieto + h if abs(self.v) < 8 else 0.0
-            if self.quieto > 1.0:
+            if self.s > self.masLejos + 2.0:
+                self.masLejos = self.s
+                self.sinAvanzar = 0.0
+            else:
+                self.sinAvanzar += h
+            if self.quieto > 0.5 or self.sinAvanzar > 2.0:
                 self.estado = "atascado"
                 self.ubicar()
                 return
@@ -1894,6 +1939,258 @@ def botonPintado(caja, color, activo):
     return almacen[clave]
 
 
+def gestorAudio():
+    modulo = sys.modules.get("core.audio_manager")
+    if modulo is None or not hasattr(modulo, "AudioManager"):
+        return None
+    return modulo.AudioManager.get_instance()
+
+
+def cargarSonido(nombre):
+    clave = ("sonido", nombre)
+    if clave not in almacen:
+        sonido = None
+        if pygame.mixer.get_init():
+            for ruta in (os.path.join(carpeta, "elementos", nombre), os.path.join(os.path.dirname(carpeta), "assets", nombre)):
+                if sonido is None and os.path.exists(ruta):
+                    try:
+                        sonido = pygame.mixer.Sound(ruta)
+                    except pygame.error:
+                        sonido = None
+        almacen[clave] = sonido
+    return almacen[clave]
+
+
+def sonar(nombre):
+    sonido = cargarSonido(nombre)
+    if sonido is None:
+        return
+    gestor = gestorAudio()
+    if gestor is not None:
+        gestor.play_sfx(sonido)
+    else:
+        sonido.set_volume(0.8)
+        sonido.play()
+
+
+def sonarEscritura(escribiendo):
+    gestor = gestorAudio()
+    if gestor is not None and hasattr(gestor, "sonarEscritura"):
+        gestor.sonarEscritura(escribiendo)
+        return
+    canal = almacen.get("canalEscritura")
+    if not escribiendo:
+        if canal is not None:
+            canal.fadeout(180)
+            almacen["canalEscritura"] = None
+        return
+    if canal is not None and canal.get_busy():
+        return
+    sonido = cargarSonido("escribir.mp3")
+    if sonido is not None:
+        sonido.set_volume(0.55)
+        almacen["canalEscritura"] = sonido.play(loops=-1)
+
+
+def ponerMusica():
+    ruta = os.path.join(os.path.dirname(carpeta), "assets", "tranquilaMusic.mp3")
+    if not os.path.exists(ruta):
+        return
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        pygame.mixer.music.load(ruta)
+        pygame.mixer.music.set_volume(0.5)
+        pygame.mixer.music.play(loops=-1, fade_ms=600)
+    except pygame.error:
+        pass
+
+
+def callarMusica():
+    almacen["musicaCallada"] = bool(pygame.mixer.get_init() and pygame.mixer.music.get_busy())
+    if almacen["musicaCallada"]:
+        pygame.mixer.music.pause()
+
+
+def volverMusica():
+    if almacen.pop("musicaCallada", False):
+        pygame.mixer.music.unpause()
+    elif gestorAudio() is None:
+        ponerMusica()
+
+
+def buscarElemento(*nombres):
+    for nombre in nombres:
+        for ext in ("png", "jpg", "jpeg"):
+            ruta = os.path.join(carpeta, "elementos", f"{nombre}.{ext}")
+            if os.path.exists(ruta):
+                return ruta
+    return None
+
+
+def cargarTrazosFantasma():
+    if "trazosFantasma" in almacen:
+        return almacen["trazosFantasma"]
+    trazos = []
+    hoja = cargarElemento("trazoFantasma")
+    if hoja is not None and np is not None:
+        ocupadas = (pygame.surfarray.array_alpha(hoja) > 60).any(axis=1)
+        inicio = None
+        for x, hay in enumerate(list(ocupadas) + [False]):
+            if hay and inicio is None:
+                inicio = x
+            elif not hay and inicio is not None:
+                if x - inicio > 20:
+                    pieza = hoja.subsurface((inicio, 0, x - inicio, hoja.get_height()))
+                    pieza = pieza.subsurface(pieza.get_bounding_rect(min_alpha=10)).copy()
+                    trazos.append(pygame.transform.smoothscale_by(pieza, 26 / pieza.get_width()))
+                inicio = None
+    almacen["trazosFantasma"] = trazos
+    return trazos
+
+
+def cargarLuzAlgoritmo():
+    if "luzAlgoritmo" in almacen:
+        return almacen["luzAlgoritmo"]
+    luz = None
+    ruta = buscarElemento("luzAlgoritmo", "luzAlgortimo")
+    if ruta is not None and np is not None:
+        try:
+            foto = achicar(pygame.image.load(ruta).convert_alpha(), 500)
+            rgb = pygame.surfarray.array3d(foto).astype(np.float32)
+            minimo = rgb.min(axis=2)
+            w, h = foto.get_size()
+            peso = np.clip(250 - minimo, 0, None)
+            xs, ys = np.indices((w, h))
+            cx = float((xs * peso).sum() / max(peso.sum(), 1.0))
+            cy = float((ys * peso).sum() / max(peso.sum(), 1.0))
+            fila = minimo[int(cx):, int(cy)]
+            radio = next((i for i, v in enumerate(fila) if v < 160), 20)
+            dentro = (xs - cx) ** 2 + (ys - cy) ** 2 < radio ** 2
+            alfa = np.clip((250 - minimo) / 30, 0, 1)
+            alfa[dentro] = 1.0
+            color = 255 - (255 - rgb) / np.maximum(alfa, 0.05)[..., None]
+            color[dentro] = rgb[dentro]
+            pygame.surfarray.blit_array(foto, np.clip(color, 0, 255).astype(np.uint8))
+            pixeles = pygame.surfarray.pixels_alpha(foto)
+            pixeles[:] = (alfa * 255).astype(np.uint8)
+            del pixeles
+            caja = foto.get_bounding_rect(min_alpha=10)
+            foto = foto.subsurface(caja).copy()
+            escala = 13 / max(radio, 1)
+            luz = (pygame.transform.smoothscale_by(foto, escala), ((cx - caja.x) * escala, (cy - caja.y) * escala))
+        except pygame.error:
+            luz = None
+    almacen["luzAlgoritmo"] = luz
+    return luz
+
+
+def caminoFantasma(nivel):
+    clave = ("caminoFantasma", id(nivel))
+    if clave not in almacen:
+        puntos = nivel.get("fantasma")
+        almacen[clave] = armarCamino([nivel["salida"]] + list(puntos)) if puntos else []
+    return almacen[clave]
+
+
+def corazonesFantasma(nivel):
+    clave = ("corazonesFantasma", id(nivel))
+    if clave not in almacen:
+        camino = caminoFantasma(nivel)
+        if len(camino) < 5:
+            almacen[clave] = []
+        else:
+            via = Via(camino)
+            corazones = []
+            for f in (0.3, 0.6, 0.9):
+                opciones = [via.puntoEn(via.largo * min(0.97, max(0.05, f + d)))[0] for d in (0, -0.03, 0.03, -0.06, 0.06, -0.09, 0.09)]
+                corazones.append(next((p for p in opciones if all(math.dist(p, m) >= 64 for m in nivel["monedas"])), opciones[0]))
+            almacen[clave] = corazones
+    return almacen[clave]
+
+
+def imagenCorazon(alto=30):
+    clave = ("corazon", alto)
+    if clave not in almacen:
+        ruta = os.path.join(os.path.dirname(carpeta), "assets", "Piano", "corazonLleno.jpg")
+        img = None
+        if os.path.exists(ruta):
+            try:
+                foto = achicar(pygame.image.load(ruta).convert_alpha(), 300)
+                img = quitarBlanco(foto)
+                medida = (max(1, round(img.get_width() * alto / img.get_height())), alto)
+                img = conContorno(img, medida)
+            except pygame.error:
+                img = None
+        almacen[clave] = img
+    return almacen[clave]
+
+
+def dibujarCorazon(sup, centro, alto, t, semilla):
+    img = imagenCorazon(alto)
+    salto = math.sin(t * 2.6 + semilla * 1.7) * 3
+    punto = (centro[0], centro[1] + salto)
+    pegarBrillo(sup, punto, cCoral, int(alto * 0.9), 0.45 + 0.2 * math.sin(t * 3 + semilla))
+    if img is not None:
+        sup.blit(img, img.get_rect(center=(int(punto[0]), int(punto[1]))))
+        return
+    forma = [(punto[0] + x * alto * 0.55, punto[1] + y * alto * 0.55) for x, y, anillo in puntosFigura("corazon") if anillo == 0]
+    lavado(sup, forma, cCoralVivo, 235, 0.4)
+
+
+def dibujarViaFantasma(sup, camino, hora):
+    if len(camino) < 2:
+        return
+
+    def pintar(capa):
+        pintados = cargarTrazosFantasma()
+        if pintados:
+            via = Via(camino)
+            s, n = 13.0, 0
+            while s < via.largo - 13:
+                punto, tangente, _ = via.puntoEn(s)
+                giro = -math.degrees(math.atan2(tangente[1], tangente[0]))
+                trazo = pygame.transform.rotozoom(pintados[n % len(pintados)], giro, 1.0)
+                pegar(capa, trazo, trazo.get_rect(center=(round(punto[0]), round(punto[1]))).topleft)
+                s += 40
+                n += 1
+        else:
+            def trazos(lienzo, escalar, k):
+                for i in range(0, len(camino) - 4, 7):
+                    tramo = escalar(camino[i:i + 4])
+                    lineaRedonda(lienzo, (*cFantasma, 200), tramo, 6 * k)
+                    lineaRedonda(lienzo, (*mezclar(cFantasma, cCrema, 0.7), 230), tramo, 2 * k)
+
+            pintarSuave(capa, camino, 8, cFantasma, trazos)
+        entonar(capa, hora)
+
+    dibujarGuardado(sup, "viaFantasma", (id(camino), len(camino), hora), pintar)
+
+
+def dibujarPulsoFantasma(sup, camino, t):
+    if len(camino) < 5:
+        return
+    clave = ("viaFantasmaObjeto", id(camino))
+    if clave not in almacen:
+        almacen[clave] = Via(camino)
+    via = almacen[clave]
+    avance = (t * 170) % (via.largo + 220)
+    if avance <= via.largo:
+        punto = via.puntoEn(avance)[0]
+        pintada = cargarLuzAlgoritmo()
+        if pintada is not None:
+            luz, centro = pintada
+            latido = 1.0 + 0.08 * math.sin(t * 9)
+            if abs(latido - 1.0) > 0.01:
+                luz = pygame.transform.smoothscale_by(luz, latido)
+                centro = (centro[0] * latido, centro[1] * latido)
+            sup.blit(luz, (round(punto[0] - centro[0]), round(punto[1] - centro[1])))
+            return
+        pegarBrillo(sup, punto, cFantasma, 26, 0.85)
+        bolita = puntoNitido(mezclar(cFantasma, cCrema, 0.55), 5)
+        sup.blit(bolita, bolita.get_rect(center=(int(punto[0]), int(punto[1]))))
+
+
 class Boton:
     def __init__(self, caja, etiqueta, color, accion, icono=None):
         self.caja = pygame.Rect(caja)
@@ -1963,13 +2260,20 @@ class Juego:
         self.particulas = []
         self.caidos = []
         self.tutorialVisto = False
+        self.introVista = False
+        self.tIntro = 0.0
+        self.tDesvanecer = -10.0
+        self.capaIntro = None
+        self.finalVisto = False
+        self.esFinal = False
+        self.terminado = False
         self.pasosTut, self.paso = [], 0
         self.tarjeta = pygame.Rect(0, 0, 640, 250)
         self.estado = "calibrar" if self.modo == "camara" else "dibujar"
         self.cargarNivel(0)
         self.crearBotones()
         if self.estado == "dibujar":
-            self.iniciarTutorial()
+            self.mostrarIntro()
 
     # niveles y estados
     def cargarNivel(self, i):
@@ -1995,6 +2299,13 @@ class Juego:
         self.manosHasta = 0.0       # hasta cuándo los pasajeros tienen las manos arriba
         self.pulsoMonedas = 0.0     # brillo del contador de monedas
         self.tResultado = 0.0
+        self.siguioFantasma = False
+        self.coberturaFantasma = 0.0
+        self.estrellasSonadas = 0
+        self.corazonesTomados = set()
+        self.tRevelacion = 0.0
+        self.lineasRevelacion = []
+        self.doradasRevelacion = 1
 
     def crearBotones(self):
         self.botProbar = Boton((30, 618, 200, 62), "Probar", cVerde, self.probar, "flecha")
@@ -2014,14 +2325,31 @@ class Juego:
             return [self.botAdelante, self.botSaltar]
         if self.estado == "dibujar":
             return [self.botProbar, self.botDeshacer, self.botBorrar]
-        if self.estado == "resultado":
-            return [self.botRepetir] + ([self.botSiguiente] if self.resultado["gano"] else [])
+        if self.estado == "resultado" and not self.esFinal:
+            return [self.botRepetir] +([self.botSiguiente] if self.resultado["gano"] else [])
         return []
 
     def avisar(self, texto, segs=2.4):
         self.aviso, self.avisoHasta = texto, self.tiempo + segs
 
     def empezar(self):
+        if not self.introVista:
+            self.mostrarIntro()
+        elif not self.tutorialVisto:
+            self.iniciarTutorial()
+        else:
+            self.estado = "dibujar"
+
+    def mostrarIntro(self):
+        self.estado = "intro"
+        self.tIntro = self.tiempo
+        callarMusica()
+
+    def terminarIntro(self):
+        if self.estado == "intro":
+            self.tDesvanecer = self.tiempo
+            volverMusica()
+        self.introVista = True
         if not self.tutorialVisto:
             self.iniciarTutorial()
         else:
@@ -2048,7 +2376,14 @@ class Juego:
         self.pasosTut = [
             ("circulo", n["salida"], 64, "Aquí sale el carro. Tu vía empieza en este punto."),
             ("circulo", n["meta"], 64, "Esta es la meta. Cuando tu línea llegue hasta aquí, los carros salen solos."),
-            ("circulo", n["monedas"][0], 40, "Estas son las monedas. Pasa la vía por ellas para recogerlas."),
+            ("circulo", n["monedas"][0], 40, "Estas son las monedas: son tus metas, no los likes. Pasa la vía por ellas para recogerlas."),
+        ]
+        corazones = corazonesFantasma(n)
+        if corazones:
+            self.pasosTut.append(("circulo", corazones[1], 48,
+                                  "Esta vía punteada es la del algoritmo: te tienta con corazones, pero los likes "
+                                  "no te llevan a la meta. Si la sigues, pierdes."))
+        self.pasosTut += [
             ("caja", cajaMonedas, 0, "Aquí ves cuántas monedas llevas y cuántas necesitas para pasar el nivel."),
             ("caja", cajaTinta, 0, "Esta es la tinta. Se va gastando mientras dibujas."),
             ("caja", (20, 608, 664, 80), 0,
@@ -2127,10 +2462,37 @@ class Juego:
             return
         self.caminoViaje = camino
         self.viaje = Recorrido(via, self.nivel)
+        self.coberturaFantasma = self.coberturaAlgoritmo(camino)
+        self.siguioFantasma = False
+        self.corazonesTomados = set()
         self.estado = "viajando"
         self.trazoActivo = False
         self.llegando = False
         self.autoT = 0.0
+
+    def coberturaAlgoritmo(self, camino):
+        fantasma = caminoFantasma(self.nivel)
+        if len(fantasma) < 5 or len(camino) < 5:
+            return 0.0
+        muestraFantasma = fantasma[::2]
+        muestra = camino[::2]
+        cubiertos = 0
+        for fx, fy in muestraFantasma:
+            for x, y in muestra:
+                if (x - fx) ** 2 + (y - fy) ** 2 < 28 * 28:
+                    cubiertos += 1
+                    break
+        return cubiertos / len(muestraFantasma)
+
+    def tocaCorazon(self, corazon):
+        r = self.viaje
+        for punto, tangente in ((r.posAtras, r.tangAtras), (r.posFrente, r.tangFrente)):
+            dx, dy = corazon[0] - punto[0], corazon[1] - punto[1]
+            largo = dx * tangente[0] + dy * tangente[1]
+            alto = -dx * tangente[1] + dy * tangente[0]
+            if abs(largo) < 34 and -48 < alto < 8:
+                return True
+        return False
 
     # entrada
     def actualizarEntrada(self, delta):
@@ -2225,8 +2587,10 @@ class Juego:
                                     vida * random.uniform(0.6, 1), vida, random.choice(colores),
                                     random.randint(3, 6), grav, random.uniform(0, 50)])
 
-    def colocarResultado(self, gano, conTexto):
+    def colocarResultado(self, gano, conTexto, conReflexion=False):
         alt = 400 if gano else (280 if conTexto else 230)
+        if conReflexion:
+            alt += 56
         fondo = 330 + alt // 2
         self.altTarjeta = alt
         _, my = self.margenesTarjeta(640, alt)
@@ -2244,7 +2608,15 @@ class Juego:
         for m in r.nuevas:
             self.chispas(m[0], m[1], 14, [cOro, cOroOsc, cCrema], 180, 0.6, 300)
             self.pulsoMonedas = 1.0
+            sonar("obtener.mp3")
             self.letreros.append((m[0], m[1] - 34, self.tiempo, "+1"))
+        for i, corazon in enumerate(corazonesFantasma(self.nivel)):
+            if i not in self.corazonesTomados and self.tocaCorazon(corazon):
+                self.corazonesTomados.add(i)
+                if self.coberturaFantasma >= 0.75:
+                    sonar("fail.mp3")
+                self.chispas(corazon[0], corazon[1], 10, [cCoral, cCoralVivo, cCrema], 160, 0.6, 280)
+                self.letreros.append((corazon[0], corazon[1] - 34, self.tiempo, "+1", cCoral))
         if r.estado == "corriendo":
             # en una bajada empinada levantan las manos (y las dejan arriba un momento)
             if max(r.tangAtras[1], r.tangFrente[1]) > 0.35 and r.v > 150:
@@ -2258,8 +2630,10 @@ class Juego:
         tomadas = len(r.tomadas)
         total = len(self.nivel["monedas"])
         gano, titulo, texto, estrellas = False, "", "", 0
+        llego = r.estado == "listo" and tomadas >= self.nivel["necesarias"]
+        self.siguioFantasma = self.coberturaFantasma >= (0.85 if llego else 0.75)
         if r.estado == "listo":
-            if tomadas >= self.nivel["necesarias"]:
+            if tomadas >= self.nivel["necesarias"] and not self.siguioFantasma:
                 gano = True
                 estrellas = 1 + (tomadas == total) + (self.tintaUsada <= 0.7 * self.nivel["tinta"])
                 titulo = "¡Nivel superado!"
@@ -2279,10 +2653,34 @@ class Juego:
                     self.caidos.append(dict(x=punto[0], y=punto[1], vx=r.v * tg[0], vy=r.v * tg[1] - 80,
                                             ang=math.atan2(tg[1], tg[0]), giro=random.choice((-1, 1)) * 5))
                 self.chispas(r.posFrente[0], r.posFrente[1], 30, [cCrema, mezclar(cCrema, cMadera, 0.4), cCoral, cAmarillo], 260, 0.9, 400)
-        self.resultado = dict(gano=gano, titulo=titulo, texto=texto, estrellas=estrellas)
-        self.colocarResultado(gano, bool(texto))
+        reflexion = ""
+        if self.siguioFantasma:
+            gano, estrellas = False, 0
+            titulo = "Te llevó el algoritmo"
+            cuantos = len(self.corazonesTomados)
+            if r.estado == "listo":
+                texto = "Llegaste, pero por la vía que él escogió por ti."
+            elif cuantos:
+                texto = f"Te dio {cuantos} {'corazón' if cuantos == 1 else 'corazones'}, pero no llegaste a tu meta."
+            else:
+                texto = "Seguiste su vía y no llegaste a tu meta."
+            reflexion = reflexionesFantasma[self.numNivel % len(reflexionesFantasma)]
+        elif gano:
+            reflexion = reflexionesPropias[self.numNivel % len(reflexionesPropias)]
+        self.resultado = dict(gano=gano, titulo=titulo, texto=texto, estrellas=estrellas, reflexion=reflexion)
+        self.colocarResultado(gano, bool(texto), bool(reflexion) and not self.siguioFantasma)
         self.estado = "resultado"
         self.tResultado = self.tiempo
+        self.estrellasSonadas = 0
+        if self.siguioFantasma:
+            self.estado = "revelacion"
+            self.tRevelacion = self.tiempo
+            self.lineasRevelacion = self.lineasEscritas(reflexion)
+            self.doradasRevelacion = self.lineasDoradas(reflexion)
+        elif gano and self.numNivel == len(niveles) - 1 and not self.finalVisto:
+            self.finalVisto = True
+            self.esFinal = True
+            self.altTarjeta -= 70
         self.botRepetir.etiqueta = "Repetir" if gano else "Ajustar vía"
         self.botRepetir.icono = "atras" if gano else None      # mismo símbolo que deshacer
         self.botSiguiente.etiqueta = "Siguiente" if self.numNivel < len(niveles) - 1 else "Volver al mapa"
@@ -2299,6 +2697,27 @@ class Juego:
             self.actualizarDibujo(delta)
         elif self.estado == "viajando":
             self.actualizarViaje(delta)
+        elif self.estado == "revelacion":
+            if self.tiempo - self.tRevelacion >= self.horarioEscritura(self.lineasRevelacion)[-1] + 3.0:
+                self.pasarAlResultado()
+        elif self.estado == "intro" and self.tiempo - self.tIntro >= duracionIntro:
+            self.terminarIntro()
+        elif self.estado == "resultado" and self.resultado and self.resultado["gano"]:
+            llenas = sum(1 for i in range(self.resultado["estrellas"]) if self.tiempo - self.tResultado >= 0.9 + i * 0.6)
+            while self.estrellasSonadas < llenas:
+                self.estrellasSonadas += 1
+                sonar("obtener.mp3")
+            if self.esFinal and self.tiempo - self.tResultado >= 4.5:
+                self.estado = "revelacion"
+                self.tRevelacion = self.tiempo
+                self.lineasRevelacion = self.lineasEscritas(reflexionFinal)
+                self.doradasRevelacion = self.lineasDoradas(reflexionFinal)
+        if self.estado == "intro":
+            sonarEscritura(self.escribiendo(self.lineasEscritas(mensajeAlgoritmo), self.tiempo - self.tIntro))
+        elif self.estado == "revelacion":
+            sonarEscritura(self.escribiendo(self.lineasRevelacion, self.tiempo - self.tRevelacion))
+        else:
+            sonarEscritura(False)
         self.actualizarBotones(delta)
         for cd in self.caidos:
             cd["vy"] += gravedad * delta
@@ -2368,6 +2787,8 @@ class Juego:
         dibujarEntonado(s, cajaBandera, hora, lambda capa: dibujarBandera(capa, meta, self.tiempo))
         enMarcha = self.viaje is not None and self.estado in ("viajando", "resultado")
         camino = self.caminoViaje if enMarcha else self.camino
+        fantasma = caminoFantasma(self.nivel)
+        dibujarViaFantasma(s, fantasma, hora)
 
         def pintarVia(capa):
             dibujarVia(capa, camino)
@@ -2381,6 +2802,13 @@ class Juego:
         dibujarGuardado(s, "via", (id(camino), len(camino), hora), pintarVia)
         if hora in tonos:
             self.dibujarLuces(camino, hora)
+        for i, corazon in enumerate(corazonesFantasma(self.nivel)):
+            if not (enMarcha and i in self.corazonesTomados):
+                dibujarCorazon(s, corazon, 30, self.tiempo, i)
+        if self.estado in ("dibujar", "tutorial"):
+            dibujarPulsoFantasma(s, fantasma, self.tiempo)
+        if self.estado == "dibujar":
+            self.dibujarSugerido(fantasma)
         tomadas = self.viaje.tomadas if self.viaje else set()
         for i, m in enumerate(self.nivel["monedas"]):
             if i in tomadas:
@@ -2400,14 +2828,40 @@ class Juego:
             vida = limitar(p[4] / p[5], 0, 1)
             gota = puntosCirculo((p[0], p[1]), p[7] // 2 + 2, 7, 0.3, p[9])
             lavado(s, gota, p[6], int(70 + 170 * vida), 0.35)
-        for x, y, t0, txt in self.letreros:
+        for letrero in self.letreros:
+            x, y, t0, txt = letrero[:4]
+            colorLetrero = letrero[4] if len(letrero) > 4 else cOro
             # "+1" que salta, sube y se desvanece
             e = self.tiempo - t0
             y -= 46 * (1 - (1 - min(e / 0.8, 1)) ** 3)
             alfa = 255 if e < 0.6 else max(0, 255 * (1 - (e - 0.6) / 0.4))
             escala = 1 + 0.5 * max(0.0, 1 - e / 0.18)
-            lavado(s, puntosCirculo((x, y), 19 * escala, 12, 0.2, x), cOro, int(alfa * 0.85), 0.3)
+            lavado(s, puntosCirculo((x, y), 19 * escala, 12, 0.2, x), colorLetrero, int(alfa * 0.85), 0.3)
             self.textoEscalado(txt, 20, cOscuro, (x, y - 2), escala, alfa)
+
+    def dibujarSugerido(self, fantasma):
+        corazones = corazonesFantasma(self.nivel)
+        if not corazones:
+            return
+        letrero = "Sugerido para ti"
+        w = self.fuentes[14].size(letrero)[0] + 26
+        caja = self.cajaSugerido(corazones, w)
+        panel(self.pantalla, caja, mezclar(cFantasma, cCrema, 0.15), mezclar(cFantasma, cOscuro, 0.45), 10, 2)
+        self.texto(letrero, 14, cCrema, caja.center, "center")
+
+    def cajaSugerido(self, corazones, w):
+        sx, sy = self.nivel["salida"]
+        inicio = (sx + 116, sy - 1)
+        estorbos = [pygame.Rect(0, 0, 64, 64).move(m[0] - 32, m[1] - 32) for m in self.nivel["monedas"]]
+        estorbos += [pygame.Rect(0, 0, 40, 40).move(c[0] - 20, c[1] - 20) for c in corazones]
+        opciones = []
+        for x, y in corazones:
+            for dy in (-62, 32):
+                caja = pygame.Rect(int(x - w / 2), int(y + dy), w, 30)
+                lejos = math.dist(caja.center, inicio) >= 220
+                libre = caja.collidelist(estorbos) < 0 and caja.top > margenSup + 10 and caja.bottom < margenInf - 10
+                opciones.append((not (lejos and libre), not lejos, caja))
+        return min(opciones, key=lambda o: o[:2])[2]
 
     def dibujarCarros(self, enMarcha, hora):
         s = self.pantalla
@@ -2627,13 +3081,22 @@ class Juego:
         # título, texto y estrellas quedan centrados entre el borde de arriba y los botones
         arriba = tarjeta.top + bordeTarjeta(tarjeta.w, tarjeta.h)
         abajo = self.botRepetir.caja.top - 6
-        altoBloque = 50 + (40 if res["texto"] else 0) + (78 if res["gano"] else 0)
+        if self.esFinal:
+            abajo = tarjeta.bottom - bordeTarjeta(tarjeta.w, tarjeta.h)
+        lineasReflexion = []
+        if res.get("reflexion") and not self.siguioFantasma:
+            lineasReflexion = partirTexto(res["reflexion"], self.fuentes[20], tarjeta.w - 150)
+        altoBloque = 50 + (40 if res["texto"] else 0) + (78 if res["gano"] else 0) + 28 * len(lineasReflexion)
         y = (arriba + abajo - altoBloque) / 2
         self.texto(res["titulo"], 36, cOscuro, (tarjeta.centerx, y + 25), "center")
         y += 58
         if res["texto"]:
             self.texto(res["texto"], 16, cOscuro, (tarjeta.centerx, y), "midtop")
             y += 40
+        for linea in lineasReflexion:
+            self.texto(linea, 20, mezclar(cFantasma, cOscuro, 0.35) if self.siguioFantasma else cMaderaOsc,
+                       (tarjeta.centerx, y), "midtop")
+            y += 28
         if res["gano"]:
             cy = y + 34
             for i in range(3):
@@ -2666,6 +3129,100 @@ class Juego:
                         lavado(s, puntosEstrella((cx + 10, cy - 14), tam, 0.25, 4), cCrema, 240, 0.1)
         for b in self.botonesAhora():
             b.dibujar(s, self.fuentes[20])
+
+    def lineasEscritas(self, frases):
+        lineas = []
+        for frase in frases:
+            lineas += partirTexto(frase, self.fuentes[36], ancho - 200)
+        return lineas
+
+    def lineasDoradas(self, frases):
+        return len(partirTexto(frases[-1], self.fuentes[36], ancho - 200))
+
+    def horarioEscritura(self, lineas):
+        horario = []
+        momento = 0.5
+        for linea in lineas:
+            horario.append(momento)
+            momento += len(linea) / 24.0 + 0.45
+        horario.append(momento)
+        return horario
+
+    def textoBordeado(self, texto, color):
+        fuente = self.fuentes[36]
+        cuerpo = fuente.render(texto, True, color)
+        borde = fuente.render(texto, True, (60, 50, 70))
+        lienzo = pygame.Surface((cuerpo.get_width() + 6, cuerpo.get_height() + 6), pygame.SRCALPHA)
+        for grados in range(0, 360, 30):
+            lienzo.blit(borde, (3 + round(math.cos(math.radians(grados)) * 3), 3 + round(math.sin(math.radians(grados)) * 3)))
+        lienzo.blit(cuerpo, (3, 3))
+        return lienzo
+
+    def escribiendo(self, lineas, t):
+        horario = self.horarioEscritura(lineas)
+        return any(horario[i] <= t < horario[i] + len(linea) / 24.0 for i, linea in enumerate(lineas))
+
+    def dibujarEscritura(self, lineas, t, centroY=330, sup=None, doradas=1):
+        s = sup or self.pantalla
+        if t < 0.3 and int(t * 20) % 2 == 0:
+            return
+        s.fill((8, 6, 12))
+        horario = self.horarioEscritura(lineas)
+        altoLinea = self.fuentes[36].get_linesize() + 16
+        y = centroY - altoLinea * len(lineas) // 2
+        for i, linea in enumerate(lineas):
+            letras = min(len(linea), int(max(0.0, t - horario[i]) * 24))
+            if letras > 0:
+                color = cOro if i >= len(lineas) - doradas else (255, 247, 230)
+                texto = self.textoBordeado(linea[:letras], color)
+                izquierda = ancho // 2 - self.fuentes[36].size(linea)[0] // 2
+                s.blit(texto, texto.get_rect(midleft=(izquierda, y + altoLinea // 2)))
+            y += altoLinea
+
+    def introLista(self):
+        lineas = self.lineasEscritas(mensajeAlgoritmo)
+        return self.tiempo - self.tIntro >= self.horarioEscritura(lineas)[-1]
+
+    def dibujarIntro(self):
+        lineas = self.lineasEscritas(mensajeAlgoritmo)
+        self.dibujarEscritura(lineas, self.tiempo - self.tIntro, 330, doradas=self.lineasDoradas(mensajeAlgoritmo))
+
+    def dibujarDesvanecer(self):
+        e = self.tiempo - self.tDesvanecer
+        if e >= duracionDesvanecer or e < 0:
+            self.capaIntro = None
+            return
+        if self.capaIntro is None:
+            self.capaIntro = pygame.Surface((ancho, alto))
+            self.dibujarEscritura(self.lineasEscritas(mensajeAlgoritmo), duracionIntro, 330, self.capaIntro,
+                                  self.lineasDoradas(mensajeAlgoritmo))
+        avance = e / duracionDesvanecer
+        self.capaIntro.set_alpha(int(255 * (1 - avance * avance * (3 - 2 * avance))))
+        self.pantalla.blit(self.capaIntro, (0, 0))
+
+    def revelacionLista(self):
+        return self.tiempo - self.tRevelacion >= self.horarioEscritura(self.lineasRevelacion)[-1]
+
+    def pasarAlResultado(self):
+        if self.estado != "revelacion":
+            return
+        if self.esFinal:
+            self.terminado = True
+            return
+        self.estado = "resultado"
+        self.tResultado = self.tiempo
+        self.estrellasSonadas = 0
+
+    def dibujarRevelacion(self):
+        t = self.tiempo - self.tRevelacion
+        altoLinea = self.fuentes[36].get_linesize() + 16
+        centroY = max(265, 24 + altoLinea * len(self.lineasRevelacion) // 2)
+        self.dibujarEscritura(self.lineasRevelacion, t, centroY, doradas=self.doradasRevelacion)
+        if self.revelacionLista():
+            aparece = min(1.0, (t - self.horarioEscritura(self.lineasRevelacion)[-1]) / 0.5)
+            abajo = centroY + altoLinea * len(self.lineasRevelacion) // 2
+            self.textoEscalado("Clic o espacio para seguir", 16, mezclar(cCrema, cMadera, 0.4),
+                               (ancho // 2, min(alto - 24, max(500, abajo + 26))), 1.0, 255 * aparece)
 
     def dibujarTutorial(self):
         s = self.pantalla
@@ -2763,6 +3320,11 @@ class Juego:
                 self.dibujarResultado()
             if self.estado == "tutorial":
                 self.dibujarTutorial()
+            if self.estado == "intro":
+                self.dibujarIntro()
+            if self.estado == "revelacion":
+                self.dibujarRevelacion()
+            self.dibujarDesvanecer()
             if self.tiempo < self.avisoHasta:
                 w = self.fuentes[16].size(self.aviso)[0] + 40
                 panel(self.pantalla, pygame.Rect(ancho // 2 - w // 2, 76, w, 40), cCrema, cOscuro, 14, 3)
@@ -2775,12 +3337,16 @@ class Juego:
     def manejar(self, ev):
         if ev.type == pygame.QUIT:
             return False
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and self.estado == "revelacion":
+            if self.revelacionLista():
+                self.pasarAlResultado()
+            return True
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             if self.estado == "calibrar" and self.camara and self.rectVista.collidepoint(ev.pos):
                 nx = (ev.pos[0] - self.rectVista.x) / self.rectVista.w
                 ny = (ev.pos[1] - self.rectVista.y) / self.rectVista.h
                 self.camara.pedido = (nx, ny)
-            elif self.modo == "raton" or self.estado in ("calibrar", "resultado", "tutorial"):
+            elif self.modo == "raton" or self.estado in ("calibrar", "resultado", "tutorial", "intro"):
                 for b in self.botonesAhora():
                     if b.caja.collidepoint(ev.pos) and b.habilitado():
                         b.accion()
@@ -2800,6 +3366,18 @@ class Juego:
                     self.cuenta = 3.0
                 elif k == pygame.K_RETURN and self.botJugar.habilitado():
                     self.empezar()
+            elif self.estado == "intro":
+                if k in (pygame.K_SPACE, pygame.K_RETURN):
+                    if self.introLista():
+                        self.terminarIntro()
+                    else:
+                        self.tIntro = self.tiempo - self.horarioEscritura(self.lineasEscritas(mensajeAlgoritmo))[-1]
+            elif self.estado == "revelacion":
+                if k in (pygame.K_SPACE, pygame.K_RETURN):
+                    if self.revelacionLista():
+                        self.pasarAlResultado()
+                    else:
+                        self.tRevelacion = self.tiempo - self.horarioEscritura(self.lineasRevelacion)[-1]
             elif self.estado == "tutorial":
                 if k in (pygame.K_SPACE, pygame.K_RETURN):
                     self.siguientePaso()
@@ -2814,7 +3392,7 @@ class Juego:
                     self.borrar()
             elif self.estado == "viajando" and k == pygame.K_ESCAPE:
                 self.estado, self.viaje = "dibujar", None
-            elif self.estado == "resultado":
+            elif self.estado == "resultado" and not self.esFinal:
                 if k in (pygame.K_RETURN, pygame.K_r):
                     self.volverADibujar()
                 elif k == pygame.K_n and self.resultado["gano"]:
@@ -2828,6 +3406,7 @@ class Juego:
             for ev in pygame.event.get():
                 corriendo = self.manejar(ev) and corriendo
             self.actualizar(delta)
+            corriendo = corriendo and not self.terminado
             self.dibujar()
         if self.camara:
             self.camara.detener()
@@ -2839,6 +3418,7 @@ def principal():
     ap.add_argument("--raton", action="store_true", help="jugar con el mouse (sin cámara)")
     ap.add_argument("--camara", type=int, default=0, help="índice de la cámara")
     opc = ap.parse_args()
+    pygame.init()
     Juego(usarCamara=not opc.raton, indiceCamara=opc.camara).ejecutar()
 
 

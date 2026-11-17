@@ -245,7 +245,7 @@ class AvisoTrofeo:
         # La X va por fuera de la ventana, sobre la esquina de arriba a la derecha
         self.cajaCerrar = self.botonCerrar.get_rect(center=(self.cajaVentana.right - 4, self.cajaVentana.top + 36))
         # El trofeo flota más abajo para no tocar el letrero de ¡Qué nota!
-        self.centroTrofeo = (self.cajaVentana.centerx, self.cajaVentana.top + 292)
+        self.centroTrofeo = (self.cajaVentana.centerx, self.cajaVentana.top + 262)
 
         self.fuegos = FuegosArtificiales()
         self.chispas = JuiceParticleManager()
@@ -279,14 +279,33 @@ class AvisoTrofeo:
         cafeOscuro = (86, 50, 28)
         self.tarjeta = self.ventana.copy()
         # Un poco a la izquierda del centro para no tocar las flores de abajo
-        centroTexto = self.tarjeta.get_width() // 2 - 35
-        felicidades = self.fuenteFelicidades.render("¡Felicidades! Obtuviste el trofeo:", True, cafe)
-        self.tarjeta.blit(felicidades, felicidades.get_rect(center=(centroTexto, 446)))
-        nombre = self.fuenteNombre.render(nombreTrofeo, True, cafeOscuro)
-        self.tarjeta.blit(nombre, nombre.get_rect(center=(centroTexto, 506)))
+        centroTexto = self.tarjeta.get_width() // 2
+        for texto, fuente, color, alto in (("¡Felicidades! Obtuviste el trofeo:", self.fuenteFelicidades, cafe, 396),
+                                           (nombreTrofeo, self.fuenteNombre, cafeOscuro, 450)):
+            letras = fuente.render(texto, True, color)
+            caja = letras.get_rect(center=(centroTexto, alto))
+            libre = self.mitadLibre(centroTexto, caja.top + 6, caja.bottom - 4)
+            if letras.get_width() / 2.0 > libre:
+                letras = pygame.transform.smoothscale_by(letras, libre * 2.0 / letras.get_width())
+            self.tarjeta.blit(letras, letras.get_rect(center=(centroTexto, alto)))
 
         self.fuegos.lanzarAlrededor(self.cajaVentana)
         self.audio.play_win()
+
+    def mitadLibre(self, centro: int, arriba: int, abajo: int) -> float:
+        import numpy
+        if getattr(self, "colorVentana", None) is None:
+            rgb = pygame.surfarray.array3d(self.ventana).astype(numpy.int16)
+            self.colorVentana = (rgb.max(axis=2) - rgb.min(axis=2)) > 90
+        manchas = self.colorVentana
+        ancho = manchas.shape[0]
+        libre = ancho / 2.0
+        for y in range(max(0, arriba), min(manchas.shape[1], abajo), 3):
+            fila = manchas[:, y]
+            derecha = next((x for x in range(centro, ancho) if fila[x]), ancho)
+            izquierda = next((x for x in range(centro, -1, -1) if fila[x]), 0)
+            libre = min(libre, derecha - centro, centro - izquierda)
+        return max(40.0, libre - 14)
 
     def ponerBorde(self, imagen: pygame.Surface) -> pygame.Surface:
         """Le pone a la imagen un borde blanco de calcomanía con una línea fina de tinta café por fuera."""
@@ -355,6 +374,8 @@ class AvisoTrofeo:
 
         if self.abierto:
             self.entrada = min(1.0, self.entrada + dt / 0.35)
+            if self.tiempo >= 6.0:
+                self.cerrar()
         else:
             self.entrada = max(0.0, self.entrada - dt / 0.25)
 

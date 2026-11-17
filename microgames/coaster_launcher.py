@@ -117,6 +117,9 @@ class CoasterLauncherState(BaseState):
             self.game.camara.detener()
         self.game = None
         self.legacy_surface = None
+        AudioManager.get_instance().sonarEscritura(False)
+        if pygame.mixer.get_init():
+            pygame.mixer.music.unpause()
         if getattr(self, "_shared_camera", None):
             self._shared_camera.resume()
 
@@ -162,6 +165,9 @@ class CoasterLauncherState(BaseState):
         if self.game:
             previous_state = self.game.estado
             self.game.actualizar(min(dt, 0.05))
+            if getattr(self.game, "terminado", False):
+                self._finish(True)
+                return
             if self.calibration_only and previous_state == "calibrar" and self.game.estado != "calibrar":
                 self._finish(True)
 
