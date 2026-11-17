@@ -595,6 +595,120 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
                 self.assertGreaterEqual(callout_rect.top, 0)
                 self.assertLessEqual(callout_rect.bottom, 1080)
 
+    def test_map_keeps_main_markers_and_preview_avoids_them(self) -> None:
+        self.assertEqual(self.scene.poi_pin_surf.get_size(), (36, 44))
+        self.assertEqual(self.scene.poi_star_surf.get_size(), (44, 44))
+
+        # Verificar que callout y cola jamás colisionan con la envolvente de marcadores (incluido bob_y)
+        canvas = pygame.Surface((1920, 1080))
+        _, _, node_map, _, _ = self.scene._get_street_graph()
+        pin_w = max(self.scene.poi_pin_surf.get_width(), self.scene.poi_star_surf.get_width())
+        pin_h = max(self.scene.poi_pin_surf.get_height(), self.scene.poi_star_surf.get_height())
+        env_w = pin_w + 4
+        env_h = pin_h + 20
+        all_mg_ids = [self.scene.poi_registry[k]["microgame_id"] for k in STORY_PLAYABLE_POIS]
+        for completed_flag in (False, True):
+            self.scene.settings.update_story_progress(
+                completed_microgames=list(all_mg_ids) if completed_flag else []
+            )
+            for poi_key in STORY_PLAYABLE_POIS:
+                nid = self.scene._get_poi_target_node(poi_key)
+                nd = node_map[nid]
+                self.scene.player_node_id = nid
+                self.scene.player_pos = (float(nd["x"]), float(nd["y"]))
+                self.scene.player_is_moving = False
+                self.scene.camera.x = max(0.0, min(self.scene.world_w - 1920.0, nd["x"] - 960.0))
+                self.scene.camera.y = max(0.0, min(self.scene.world_h - 1080.0, nd["y"] - 540.0))
+                self.scene.camera.target_x = self.scene.camera.x
+                self.scene.camera.target_y = self.scene.camera.y
+                self.scene.callout_active_poi = poi_key
+                self.scene.callout_anim_t = 1.0
+                self.scene.callout_anchor_source = "parked"
+                self.scene.level_preview.last_callout_rect = None
+                self.scene.level_preview.last_tail_rect = None
+                self.scene.render(canvas)
+
+                callout_rect = self.scene.level_preview.last_callout_rect
+                tail_rect = self.scene.level_preview.last_tail_rect
+                self.assertIsNotNone(callout_rect)
+                cam_x, cam_y = int(self.scene.camera.x), int(self.scene.camera.y)
+                for other_key, other_info in self.scene.poi_registry.items():
+                    if other_key not in STORY_PLAYABLE_POIS:
+                        continue
+                    other_screen = other_info["rect"].move(-cam_x, -cam_y)
+                    env = pygame.Rect(
+                        other_screen.centerx - env_w // 2,
+                        other_screen.top - 18 - 11 - pin_h // 2 - 2,
+                        env_w,
+                        env_h,
+                    )
+                    self.assertFalse(
+                        callout_rect.colliderect(env),
+                        f"{poi_key} (completed={completed_flag}): callout {callout_rect} solapó marcador {other_key} {env}",
+                    )
+                    if tail_rect is not None:
+                        self.assertFalse(
+                            tail_rect.colliderect(env),
+                            f"{poi_key} (completed={completed_flag}): cola {tail_rect} solapó marcador {other_key} {env}",
+                        )
+        self.scene.settings.update_story_progress(completed_microgames=[])
+
+    def test_metropolitano_neighbor_non_stop_nodes_42_and_53_do_not_trigger(self) -> None:
+        _, _, node_map, _, _ = self.scene._get_street_graph()
+        for non_stop_nid in (42, 53):
+            nd = node_map[non_stop_nid]
+            self.scene.player_node_id = non_stop_nid
+            self.scene.player_pos = (float(nd["x"]), float(nd["y"]))
+            self.scene.player_is_moving = False
+            self.scene.player_path_edges = []
+            self.scene.player_target_poi = None
+            self.scene.callout_active_poi = None
+            self.scene.callout_anim_t = 0.0
+            self.scene.paloma_dialog_open = False
+            self.scene.quest_card_open = False
+
+            with patch("pygame.mouse.get_pos", return_value=(-100, -100)):
+                for _ in range(6):
+                    self.scene.update(0.05)
+
+            self.assertIsNone(
+                self.scene.callout_active_poi,
+                f"Nodo vecino no-parada {non_stop_nid} disparó callout indebido: {self.scene.callout_active_poi}",
+            )
+            self.scene.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE}))
+            self.scene.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RETURN}))
+            self.assertFalse(
+                self.scene.paloma_dialog_open or self.scene.quest_card_open,
+                f"Nodo vecino no-parada {non_stop_nid} abrió nivel indebidamente",
+            )
+
+        # Transitar por rutas vecinas que pasan por 42 o 53 sin dirigirse a 55 (41->42->43, 52->53->67)
+        for path in ([41, 42, 43], [52, 53, 67]):
+            self.scene.player_node_id = path[0]
+            self.scene.player_pos = (float(node_map[path[0]]["x"]), float(node_map[path[0]]["y"]))
+            self.scene.callout_active_poi = None
+            self.scene.callout_anim_t = 0.0
+            self.scene._start_path_travel(path, target_poi=None)
+            with patch("pygame.mouse.get_pos", return_value=(-100, -100)):
+                while self.scene.player_is_moving:
+                    self.scene.update(0.05)
+                    self.assertIsNone(
+                        self.scene.callout_active_poi,
+                        f"Ruta vecina {path} activó callout fantasma: {self.scene.callout_active_poi}",
+                    )
+
+        # Acercarse por 53->55 hacia Metropolitano SÍ debe activar el callout al aproximarse/estacionar en 55
+        self.scene.player_node_id = 53
+        self.scene.player_pos = (float(node_map[53]["x"]), float(node_map[53]["y"]))
+        self.scene.callout_active_poi = None
+        self.scene.callout_anim_t = 0.0
+        self.scene._start_path_travel([53, 55], target_poi=None)
+        with patch("pygame.mouse.get_pos", return_value=(-100, -100)):
+            for _ in range(25):
+                self.scene.update(0.05)
+        self.assertEqual(self.scene.callout_active_poi, "metropolitano")
+        self.assertEqual(self.scene.player_node_id, 55)
+
 
 if __name__ == "__main__":
     unittest.main()

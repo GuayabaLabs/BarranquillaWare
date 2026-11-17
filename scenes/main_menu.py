@@ -194,6 +194,7 @@ class MainMenuScene(BaseState):
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.sync_audio_buttons()
+        self.audio.play_bgm("7am_ancpg_ost_main_menu.ogg")
 
     def _open_modal(self, modal_name: str) -> None:
         self.active_modal = modal_name

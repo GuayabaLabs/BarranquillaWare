@@ -203,18 +203,12 @@ class ModeSelectScene(BaseState):
         self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
 
     def _select_mode(self, mode_id: str) -> None:
-        """Gestiona la selección de modo: notifica si está en desarrollo, abre modal si hay partida guardada o avanza a personajes."""
+        """Gestiona la selección de modo: abre modal si hay partida guardada de historia o avanza a personajes."""
         self.audio.play_click()
         if mode_id == "arcade":
-            self.toast_msg = "¡MODO ARCADE EN DESARROLLO!"
-            self.toast_timer = 2.5
             self.juice_particles.emit_sparks((960, 550), count=10)
-            return
         elif mode_id == "libre":
-            self.toast_msg = "¡MODO LIBRE EN DESARROLLO!"
-            self.toast_timer = 2.5
             self.juice_particles.emit_sparks((1500, 550), count=10)
-            return
 
         if mode_id == "historia" and self.settings.has_saved_story():
             self.story_save_panel.refresh()
