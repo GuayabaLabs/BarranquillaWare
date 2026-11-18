@@ -104,3 +104,27 @@ def test_story_map_triggers_seor_paloma_voices():
         assert "paloma_derrota.ogg" in played_voices
     finally:
         audio.play_voice = orig_play_voice
+
+def test_microgame_ensenanza_voice_trigger():
+    """Verifica que al mostrarse el cartel de enseñanza se invoque la búsqueda de la voz reflexiva."""
+    from microgames.uninorte_sprint import UninorteSprintMicrogame
+    audio = AudioManager.get_instance()
+    searched_clips = []
+
+    orig_play_voice = audio.play_voice
+    def mock_play_voice(clip_name, volume_scale=1.0, fallback_sound=None):
+        searched_clips.append(clip_name)
+        return None
+
+    audio.play_voice = mock_play_voice
+    try:
+        game = UninorteSprintMicrogame()
+        game.is_won = True
+        game.finLetrero = 1.0
+        game.outro_timer = 1.5
+        surf = pygame.Surface((1920, 1080))
+        game.dibujarEnsenanzaFinal(surf)
+
+        assert any("refl_uninorte_sprint_win.ogg" in clip or "refl_sprint_win.ogg" in clip for clip in searched_clips)
+    finally:
+        audio.play_voice = orig_play_voice

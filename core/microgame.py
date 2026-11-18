@@ -705,9 +705,38 @@ class BaseMicrogame(BaseState):
             return
         if getattr(self, "cartelEnsenanza", None) is None:
             self.cartelEnsenanza = self.crearCartel(ensenanza["gana" if self.is_won else "pierde"])
+            self._trigger_ensenanza_voice()
         if self.cartelEnsenanza:
             self.dibujarCartel(surface, self.cartelEnsenanza, self.finLetrero, self.outro_duration,
                                (self.screen_w // 2, self.screen_h // 2))
+
+    def _trigger_ensenanza_voice(self) -> None:
+        """Reproduce la locución reflexiva de SEOR para este minijuego si existe en assets/voces/."""
+        if not hasattr(self.audio, "play_voice"):
+            return
+        import re
+        raw_name = self.__class__.__name__
+        s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', raw_name)
+        snake = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+        snake_name = snake.replace('_microgame', '').replace('microgame', '')
+        mod_name = self.__module__.split('.')[-1]
+        raw_short = raw_name.lower().replace("microgame", "")
+
+        state_key = "win" if self.is_won else "lose"
+        possible_keys = [
+            f"refl_{snake_name}_{state_key}.ogg",
+            f"refl_{mod_name}_{state_key}.ogg",
+            f"refl_{raw_short}_{state_key}.ogg",
+            f"refl_{getattr(self, 'microgame_id', snake_name)}_{state_key}.ogg",
+        ]
+        if hasattr(self, "secuencia") and getattr(self, "secuencia", "") == "derrota_rabia":
+            possible_keys.insert(0, f"refl_{snake_name}_rabia.ogg")
+            possible_keys.insert(0, "refl_fritanga_rabia.ogg")
+
+        for key in possible_keys:
+            chan = self.audio.play_voice(key, volume_scale=1.0)
+            if chan is not None:
+                break
 
     def suavizarColores(self, imagen: pygame.Surface) -> pygame.Surface:
         suave = imagen.copy()
