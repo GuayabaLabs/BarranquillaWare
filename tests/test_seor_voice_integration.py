@@ -22,9 +22,15 @@ SEOR_VOICE_FILES = [
     "paloma_derrota.ogg",
 ]
 
+PALOMA_WELCOME_VOICE_FILES = [
+    "paloma_welcome_0.ogg",
+    "paloma_welcome_1.ogg",
+]
+
 def test_seor_voice_files_exist_and_playable():
-    """Verifica que los 6 audios grabados por SEOR existan limpios en assets/voces/ y assets/ y sean reproducibles."""
+    """Verifica que los audios grabados por SEOR existan limpios en assets/voces/ y assets/ y sean reproducibles."""
     pygame.mixer.init()
+    # 1. Voces de reacción cortas
     for filename in SEOR_VOICE_FILES:
         path_voces = os.path.join("assets", "voces", filename)
         path_assets = os.path.join("assets", filename)
@@ -34,6 +40,16 @@ def test_seor_voice_files_exist_and_playable():
         snd = pygame.mixer.Sound(path_voces)
         assert snd.get_length() > 1.0, f"Audio {filename} demasiado corto ({snd.get_length()}s)"
         assert snd.get_length() < 7.0, f"Audio {filename} demasiado largo ({snd.get_length()}s)"
+
+    # 2. Diálogos completos de bienvenida de la Paloma
+    for filename in PALOMA_WELCOME_VOICE_FILES:
+        path_voces = os.path.join("assets", "voces", filename)
+        path_assets = os.path.join("assets", filename)
+        assert os.path.isfile(path_voces), f"Falta {path_voces}"
+        assert os.path.isfile(path_assets), f"Falta {path_assets}"
+
+        snd = pygame.mixer.Sound(path_voces)
+        assert 15.0 <= snd.get_length() <= 25.0, f"Diálogo {filename} fuera de rango esperado ({snd.get_length()}s)"
 
 def test_microgame_finish_game_plays_seor_voices():
     """Verifica que BaseMicrogame dispare coronaste.ogg al ganar y ombe_casi.ogg al perder."""
@@ -79,25 +95,38 @@ def test_story_map_triggers_seor_paloma_voices():
     try:
         scene = StoryMapScene(character_id="westcol")
 
-        # 1. Diálogo de bienvenida -> paloma_saludo.ogg
+        # 1. Diálogo de bienvenida específico: Página 0 -> paloma_welcome_0.ogg
         played_voices.clear()
+        scene.paloma_dialog_pages = ["Página 0", "Página 1"]
+        scene.paloma_dialog_open = True
         scene.paloma_dialog_voice_prefix = "paloma_welcome"
+        scene._trigger_dialog_voice(0)
+        assert "paloma_welcome_0.ogg" in played_voices
+
+        # 2. Diálogo de bienvenida específico: Página 1 -> paloma_welcome_1.ogg
+        played_voices.clear()
+        scene.advance_paloma_dialog()
+        assert "paloma_welcome_1.ogg" in played_voices
+
+        # 3. Fallback genérico de bienvenida si el clip específico no existe
+        played_voices.clear()
+        scene.paloma_dialog_voice_prefix = "paloma_welcome_generico"
         scene._trigger_dialog_voice(0)
         assert "paloma_saludo.ogg" in played_voices
 
-        # 2. Diálogo previo al reto (ánimo) -> paloma_animo.ogg
+        # 4. Diálogo previo al reto (ánimo) -> paloma_animo.ogg
         played_voices.clear()
         scene.paloma_dialog_voice_prefix = "paloma_uninorte"
         scene._trigger_dialog_voice(0)
         assert "paloma_animo.ogg" in played_voices
 
-        # 3. Diálogo de victoria de nivel -> paloma_victoria.ogg
+        # 5. Diálogo de victoria de nivel -> paloma_victoria.ogg
         played_voices.clear()
         scene.paloma_dialog_voice_prefix = "paloma_uninorte_win"
         scene._trigger_dialog_voice(0)
         assert "paloma_victoria.ogg" in played_voices
 
-        # 4. Diálogo de derrota de nivel -> paloma_derrota.ogg
+        # 6. Diálogo de derrota de nivel -> paloma_derrota.ogg
         played_voices.clear()
         scene.paloma_dialog_voice_prefix = "paloma_uninorte_lose"
         scene._trigger_dialog_voice(0)
