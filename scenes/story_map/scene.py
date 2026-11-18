@@ -44,7 +44,6 @@ from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
-from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
 
 MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "mallorquin": MallorquinPhotoMicrogame,
@@ -66,7 +65,6 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "buenavista_cine": BuenavistaCineMicrogame,
     "buenavista_trend": BuenavistaTrendMicrogame,
     "aleta": PunchAlertMicrogame,
-    "batalla_flores": BatallaFloresBossMicrogame,
 }
 
 # (Constantes STORY_* y PALOMA_STORY_DIALOGS importadas de scenes.story_map_data)
@@ -772,16 +770,6 @@ class StoryMapScene(BaseState):
                     "Viaja ligero de equipaje digital para cerrar tu aventura en calma."
                 ],
                 "rect": self.aeropuerto_rect
-            },
-            "batalla_flores": {
-                "title": "¡BATALLA DE FLORES!",
-                "district": "VÍA 40",
-                "microgame_id": "batalla_flores_boss",
-                "microgame_title": "¡BATALLA DE FLORES!",
-                "desc": [
-                    "Gran desfile folclórico de celebración en la Vía 40."
-                ],
-                "rect": pygame.Rect(self.quad_w - 120, self.quad_h - 120, 240, 240)
             }
         }
 
@@ -1690,7 +1678,7 @@ class StoryMapScene(BaseState):
             all_4_levels_cleared = all(p in unlocked for p in STORY_CAMPAIGN_ORDER)
 
             def _after_post_win_dialog() -> None:
-                if (all_4_levels_cleared or m_id == "batalla_flores_boss" or len(completed) >= 8) and not self.victory_modal_shown:
+                if (all_4_levels_cleared or len(completed) >= 5) and not self.victory_modal_shown:
                     self.show_victory_modal = True
                     self.victory_modal_shown = True
                     self._spawn_carnaval_celebration()
@@ -3560,7 +3548,7 @@ class StoryMapScene(BaseState):
         if active_marker_rect is not None and active_marker_rect.colliderect(viewport):
             obstacle_rects.append(active_marker_rect)
         for other_key, other_info in self.poi_registry.items():
-            if other_key == poi_key or other_key == "batalla_flores":
+            if other_key == poi_key:
                 continue
             other_r = other_info.get("rect")
             if other_r is None:

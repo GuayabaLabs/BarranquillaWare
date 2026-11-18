@@ -16,7 +16,6 @@ CAMERA_CONTROL_GUIDE = (
     ("TrojaBaileMicrogame", "La Troja", "Mueve la mano a izquierda o derecha para mantener el equilibrio."),
     ("CurramGramGoMicrogame", "CurramGram Go", "Mano lateral: caminar; arriba: saltar; abajo: esconderse. Pellizco: foto. Índice: avisar; medio: publicar."),
     ("EmojiCatchMicrogame", "Emoji Catch", "Usa ambas manos: la mitad izquierda guía la morada; la derecha, la azul."),
-    ("BatallaFloresBossMicrogame", "Etapa jefe", "Mueve la mano lateralmente para esquivar. Puño o pellizco para saltar o tocar la tambora."),
     ("StoryMapScene", "Mapa", "Índice: apunta y espera. Para caminar: pellizca en el mapa y desliza hacia donde quieras ir; suelta para detenerte. Puño: entrar."),
     ("CoasterLauncherState", "Montaña rusa", "Usa los marcadores de color y el calibrador propio del juego para trazar la vía."),
 )
