@@ -5,7 +5,7 @@ import pygame
 from core.state_machine import BaseState
 from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
-from scenes.story_map_data import STORY_CAMPAIGN_ORDER
+from scenes.story_map_data import STORY_CAMPAIGN_ORDER, trofeosMapa
 from core.settings import SettingsManager
 from core.achievements import AchievementManager
 from core.map_settings import MapSettingsState
@@ -203,20 +203,21 @@ class MainMenuScene(BaseState):
         self.audio.play_bgm("7am_ancpg_ost_main_menu.ogg")
 
     def _build_logros_lines(self) -> List[str]:
-        """Resumen de la última partida guardada y estado de cada logro."""
-        summary = SettingsManager.get_instance().get_story_save_summary()
+        """Resumen de la última partida guardada y estado de cada trofeo oficial del mapa."""
+        settings = SettingsManager.get_instance()
+        summary = settings.get_story_save_summary()
         if not summary["has_save"]:
             header = "Aún no hay partida guardada en Modo Historia."
         else:
             header = f"{summary['character_name']} · Niveles {summary['levels_cleared']}/{len(STORY_CAMPAIGN_ORDER)}"
-        achievements = AchievementManager.get_instance().get_all_achievements()
-        unlocked = sum(1 for a in achievements if a["unlocked"])
-        lines = [header, f"Logros desbloqueados: {unlocked} / {len(achievements)}", ""]
-        for ach in achievements:
-            if ach["unlocked"]:
-                lines.append(f"{LOGRO_ON}{ach['title']} ({ach['category']}) - ¡Desbloqueado!")
+        obtenidos = set(settings.get("trofeosObtenidos", []) or [])
+        unlocked = len([t for t in trofeosMapa if t["id"] in obtenidos])
+        lines = [header, f"Trofeos desbloqueados: {unlocked} / {len(trofeosMapa)}", ""]
+        for trofeo in trofeosMapa:
+            if trofeo["id"] in obtenidos:
+                lines.append(f"{LOGRO_ON}{trofeo['nombre']} - ¡Desbloqueado!")
             else:
-                lines.append(f"{LOGRO_OFF}{ach['title']} - Bloqueado")
+                lines.append(f"{LOGRO_OFF}Trofeo escondido - Sigue explorando el mapa")
         lines += ["", "(Haz click o pulsa ESC para volver)"]
         return lines
 

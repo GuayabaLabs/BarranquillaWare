@@ -68,6 +68,7 @@ class BaseMicrogame(BaseState):
 
         self.is_won: bool = False
         self.is_finished: bool = False
+        self._ensenanza_voice_triggered: bool = False
         self.show_outro_banner: bool = True
         self.outro_message: Optional[str] = None
         self.pause_return_callback: Optional[Callable[[], None]] = None
@@ -167,6 +168,10 @@ class BaseMicrogame(BaseState):
         self.is_won = won
         self.phase = self.PHASE_OUTRO
         self.outro_timer = 0.0
+        self._ensenanza_voice_triggered = False
+
+        react_clip = "coronaste.ogg" if won else "ombe_casi.ogg"
+        react_dur = self.audio.get_voice_duration(react_clip) if hasattr(self.audio, "get_voice_duration") else 0.0
 
         if getattr(self, "skip_outro_story_card", False):
             self.letreroResultado = None
@@ -175,11 +180,12 @@ class BaseMicrogame(BaseState):
                 self.outro_message = "¡GANASTE!" if won else "¡PERDISTE!"
         else:
             if self.prepararLetreroResultado(won):
-                self.outro_duration = max(self.outro_duration, 4.0)
+                self.outro_duration = max(self.outro_duration, max(4.0, react_dur + 0.5))
 
             if getattr(self, "ensenanzaFinal", None) and getattr(self, "letreroResultado", None) is not None:
-                self.finLetrero = 3.0
-                self.outro_duration = max(self.outro_duration, 8.5)
+                self.finLetrero = max(3.0, min(3.45, react_dur + 0.15) if react_dur > 0 else 3.0)
+                refl_dur = self._resolve_ensenanza_voice_duration()
+                self.outro_duration = max(self.outro_duration, self.finLetrero + refl_dur + 0.85, 8.5)
 
         if won:
             fallback = getattr(self.audio, "_win_sound", None)
@@ -271,6 +277,54 @@ class BaseMicrogame(BaseState):
                 return
         if self.phase == self.PHASE_PLAY:
             self.handle_game_event(event)
+        elif self.phase == self.PHASE_OUTRO:
+            if (
+                (event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_e, pygame.K_ESCAPE))
+                or (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1)
+                or (event.type == pygame.JOYBUTTONDOWN and event.button in (0, 1, 7))
+            ):
+                self.skip_outro()
+
+    def exit(self) -> None:
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(False)
+        if hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(80)
+        super().exit()
+
+    def can_skip_outro(self) -> bool:
+        if self.phase != self.PHASE_OUTRO or self._completion_reported:
+            return False
+        fin_letrero = float(getattr(self, "finLetrero", 0.0) or 0.0)
+        min_wait = (fin_letrero + 0.6) if fin_letrero > 0.0 else 0.8
+        return self.outro_timer >= min_wait
+
+    def skip_outro(self) -> bool:
+        """Permite saltar la reflexión final una vez mostrada, cortando limpiamente la voz."""
+        if not self.can_skip_outro():
+            return False
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(False)
+        if hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(100)
+        self.outro_timer = max(self.outro_timer, self.outro_duration)
+        if self.on_complete_callback and not self._completion_reported:
+            self._completion_reported = True
+            self.on_complete_callback(self.is_won)
+        return True
+
+    def update_outro(self, dt: float) -> None:
+        """Actualiza temporizador de outro, dispara la voz reflexiva a tiempo y reporta fin."""
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
+        self.outro_timer += dt
+        fin_letrero = getattr(self, "finLetrero", None)
+        if getattr(self, "ensenanzaFinal", None) and fin_letrero and self.outro_timer >= fin_letrero:
+            self._trigger_ensenanza_voice()
+        if self.outro_timer >= self.outro_duration:
+            if self.on_complete_callback and not self._completion_reported:
+                self._completion_reported = True
+                self.on_complete_callback(self.is_won)
 
     def update_game(self, dt: float) -> None:
         """Lógica interna del microjuego implementada en la subclase."""
@@ -282,11 +336,15 @@ class BaseMicrogame(BaseState):
             self.paloma_intro.update(dt, CameraGestureInput.get_instance())
             return
         if self.phase == self.PHASE_INTRO:
+            if hasattr(self.audio, "update"):
+                self.audio.update(dt)
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:
                 self.phase = self.PHASE_PLAY
 
         elif self.phase == self.PHASE_PLAY:
+            if hasattr(self.audio, "update"):
+                self.audio.update(dt)
             self.time_left -= dt
             self.update_game(dt)
             if self.time_left <= 0.0 and not self.is_finished:
@@ -295,11 +353,7 @@ class BaseMicrogame(BaseState):
                 self.finish_game(won=False)
 
         elif self.phase == self.PHASE_OUTRO:
-            self.outro_timer += dt
-            if self.outro_timer >= self.outro_duration:
-                if self.on_complete_callback and not self._completion_reported:
-                    self._completion_reported = True
-                    self.on_complete_callback(self.is_won)
+            self.update_outro(dt)
 
     def render_game(self, surface: pygame.Surface) -> None:
         """Dibujo del escenario y entidades del microjuego."""
@@ -710,10 +764,7 @@ class BaseMicrogame(BaseState):
             self.dibujarCartel(surface, self.cartelEnsenanza, self.finLetrero, self.outro_duration,
                                (self.screen_w // 2, self.screen_h // 2))
 
-    def _trigger_ensenanza_voice(self) -> None:
-        """Reproduce la locución reflexiva de SEOR para este minijuego si existe en assets/voces/."""
-        if not hasattr(self.audio, "play_voice"):
-            return
+    def _candidate_ensenanza_voice_keys(self) -> list:
         import re
         raw_name = self.__class__.__name__
         s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', raw_name)
@@ -742,8 +793,25 @@ class BaseMicrogame(BaseState):
                 elif pierde_actual == getattr(self, "ensenanzaDistraido", None):
                     possible_keys.insert(0, f"refl_{snake_name}_distraido.ogg")
                     possible_keys.insert(0, "refl_fritanga_distraido.ogg")
+        return possible_keys
 
-        for key in possible_keys:
+    def _resolve_ensenanza_voice_duration(self) -> float:
+        """Consulta sin reproducir la duración de la voz reflexiva correspondiente."""
+        if not hasattr(self.audio, "resolve_voice_path") or not hasattr(self.audio, "get_voice_duration"):
+            return 0.0
+        for key in self._candidate_ensenanza_voice_keys():
+            if self.audio.resolve_voice_path(key) is not None:
+                return self.audio.get_voice_duration(key)
+        return 0.0
+
+    def _trigger_ensenanza_voice(self) -> None:
+        """Reproduce la locución reflexiva de SEOR para este minijuego si existe en assets/voces/."""
+        if getattr(self, "_ensenanza_voice_triggered", False):
+            return
+        self._ensenanza_voice_triggered = True
+        if not hasattr(self.audio, "play_voice"):
+            return
+        for key in self._candidate_ensenanza_voice_keys():
             chan = self.audio.play_voice(key, volume_scale=1.0)
             if chan is not None:
                 break

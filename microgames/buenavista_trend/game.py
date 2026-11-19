@@ -385,9 +385,15 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         track_path = os.path.join("assets", self.music_track_name)
         if pygame.mixer.get_init() and os.path.exists(track_path):
             try:
+                if hasattr(self.audio, "stop_voice"):
+                    self.audio.stop_voice(fade_ms=0)
                 pygame.mixer.music.load(track_path)
-                vol = getattr(self.audio, "music_volume", 0.75)
-                pygame.mixer.music.set_volume(vol)
+                self.audio._bgm_volume_scale = 1.0
+                if hasattr(self.audio, "sync_music_volume"):
+                    self.audio.sync_music_volume()
+                else:
+                    vol = getattr(self.audio, "music_volume", 0.75)
+                    pygame.mixer.music.set_volume(vol if getattr(self.audio, "music_enabled", True) else 0.0)
                 if getattr(self.audio, "music_enabled", True):
                     pygame.mixer.music.play(loops=0, start=0.0)
                 self.audio.current_track = self.music_track_name
@@ -416,6 +422,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.cleanup()
         if hasattr(self.audio, "sonarEscritura"):
             self.audio.sonarEscritura(False)
+        super().exit()
         # La cámara pertenece al motor y se comparte con el resto de escenas.
 
     def finish_game(self, won: bool) -> None:
@@ -475,11 +482,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 self.finish_game(won=(self.lives > 0))
 
         elif self.phase == self.PHASE_OUTRO:
-            self.outro_timer += dt
             self._update_particles(dt)
-            if self.outro_timer >= self.outro_duration:
-                if self.on_complete_callback:
-                    self.on_complete_callback(self.is_won)
+            self.update_outro(dt)
 
     def update_game(self, dt: float) -> None:
         if self.is_finished:
@@ -580,6 +584,10 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             return
         if self.phase == self.PHASE_PLAY:
             self.handle_game_event(event)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                super().handle_event(event)
+        else:
+            super().handle_event(event)
 
     def handle_game_event(self, event: pygame.event.Event) -> None:
         """

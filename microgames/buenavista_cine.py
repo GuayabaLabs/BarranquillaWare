@@ -308,10 +308,7 @@ class BuenavistaCineMicrogame(BaseMicrogame):
                 self.finish_game(won=True)
 
         elif self.phase == self.PHASE_OUTRO:
-            self.outro_timer += dt
-            if self.outro_timer >= self.outro_duration:
-                if self.on_complete_callback:
-                    self.on_complete_callback(self.is_won)
+            self.update_outro(dt)
 
     def update_game(self, dt: float) -> None:
         if self.is_finished:

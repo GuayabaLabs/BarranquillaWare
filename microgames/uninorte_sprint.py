@@ -524,8 +524,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
-        pass
         self.callarTictac()
+        super().exit()
 
     def _jump_forward(self) -> None:
         if self.player_lane < self.max_lane:

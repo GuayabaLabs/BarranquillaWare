@@ -1881,6 +1881,15 @@ class Fritanga84Microgame(BaseMicrogame):
 
     def finish_game(self, won: bool) -> None:
         yaTerminado = self.is_finished
+        if not yaTerminado:
+            if self.canalAceite is not None:
+                self.canalAceite.stop()
+                self.canalAceite = None
+            if getattr(self, "canalTrol", None) is not None:
+                self.canalTrol.stop()
+                self.canalTrol = None
+            if hasattr(self.audio, "sonarEscritura"):
+                self.audio.sonarEscritura(False)
         super().finish_game(won)
         if yaTerminado:
             return

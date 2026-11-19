@@ -37,6 +37,7 @@ class StoryMapUI:
         font_body: pygame.font.Font,
         font_hint: pygame.font.Font,
         talk_frames: Optional[List[pygame.Surface]] = None,
+        is_talking: Optional[bool] = None,
     ) -> None:
         """Renderiza el cuadro de diálogo acuarela oficial con paloma animada modulando pico y pestañeo."""
         anim = max(0.0, min(1.0, anim_t))
@@ -54,14 +55,17 @@ class StoryMapUI:
 
         bob_y = int(math.sin(timer * 3.0) * 6.0)
 
-        # Selección de frame animado de la Paloma
+        # Selección de frame animado de la Paloma (pico sincronizado con voz activa + pestañeo natural)
+        talking = is_talking if is_talking is not None else AudioManager.get_instance().is_voice_playing()
         if talk_frames and len(talk_frames) >= 4 and anim > 0.05:
             blink_c = timer % 3.8
             if blink_c < 0.16:
                 pal_surf = talk_frames[3]
-            else:
+            elif talking:
                 step = int((timer * 6.2) % 4)
                 pal_surf = talk_frames[[0, 1, 2, 1][step]]
+            else:
+                pal_surf = talk_frames[0]
         else:
             pal_surf = portrait_surf
         pal_w, pal_h = pal_surf.get_size()
@@ -171,14 +175,15 @@ class StoryMapUI:
 
         desc = [
             "Recorriste Barranquilla junto a la Paloma aprendiendo a desconectar con calma:",
-            "Campus Uninorte, C.C. Buenavista, Estadio Metropolitano y Aeropuerto Cortissoz.",
+            "Campus Uninorte, C.C. Buenavista, Estadio Metropolitano,",
+            "Aeropuerto Cortissoz y la Aleta del Tiburón.",
             "¡La ciudad brilla más bonito cuando disfrutas el presente al ritmo de la brisa!"
         ]
-        dy = 265
+        dy = 258
         for d in desc:
             txt_d = font_v_body.render(d, True, (200, 215, 240))
             vic_surf.blit(txt_d, txt_d.get_rect(center=(vw // 2, dy)))
-            dy += 28
+            dy += 26
 
         surface.blit(vic_surf, (vx, vy))
         btn_explore.render(surface)

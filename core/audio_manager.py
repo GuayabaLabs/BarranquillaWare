@@ -1,7 +1,8 @@
 import os
+import time
 import numpy as np
 import pygame
-from typing import Optional
+from typing import Dict, Optional, Tuple
 from core.settings import SettingsManager
 
 class AudioManager:
@@ -23,6 +24,12 @@ class AudioManager:
 
         self.current_track: Optional[str] = None
         self._bgm_volume_scale: float = 1.0
+        self._duck_factor: float = 1.0
+        self._duck_target: float = 1.0
+        self.duck_level: float = 0.32
+        self._voice_cache: Dict[Tuple[str, Optional[tuple]], pygame.mixer.Sound] = {}
+        self._voice_channel: Optional[pygame.mixer.Channel] = None
+        self._voice_end_time: float = 0.0
         self._hover_sound: Optional[pygame.mixer.Sound] = None
         self._click_sound: Optional[pygame.mixer.Sound] = None
         self._iguana_sound: Optional[pygame.mixer.Sound] = None
@@ -51,7 +58,37 @@ class AudioManager:
             except Exception:
                 return
 
+        self._ensure_voice_channel()
         self._generate_procedural_sounds()
+
+    def _ensure_voice_channel(self) -> Optional[pygame.mixer.Channel]:
+        """Reserva un canal dedicado para voces de Paloma/SEOR y evita solapamientos."""
+        mixer_init = pygame.mixer.get_init()
+        if not mixer_init:
+            self._reserved_voice_channel = None
+            self._reserved_voice_mixer_init = None
+            return None
+        try:
+            if pygame.mixer.get_num_channels() < 4:
+                pygame.mixer.set_num_channels(8)
+            pygame.mixer.set_reserved(1)
+            cached_ch = getattr(self, "_reserved_voice_channel", None)
+            if cached_ch is None or getattr(self, "_reserved_voice_mixer_init", None) != mixer_init:
+                cached_ch = pygame.mixer.Channel(0)
+                self._reserved_voice_channel = cached_ch
+                self._reserved_voice_mixer_init = mixer_init
+            return cached_ch
+        except Exception:
+            return None
+
+    def _effective_bgm_volume(self) -> float:
+        if not self.music_enabled:
+            return 0.0
+        return max(0.0, min(1.0, self.music_volume * self._bgm_volume_scale * self._duck_factor))
+
+    def sync_music_volume(self) -> None:
+        if pygame.mixer.get_init():
+            pygame.mixer.music.set_volume(self._effective_bgm_volume())
 
     def play_bgm(
         self,
@@ -61,8 +98,12 @@ class AudioManager:
     ) -> None:
         """Carga y reproduce una pista en loop con un volumen relativo opcional."""
         self._bgm_volume_scale = max(0.0, float(volume_scale))
-        volume = max(0.0, min(1.0, self.music_volume * self._bgm_volume_scale))
-        applied_volume = volume if self.music_enabled else 0.0
+        if self.current_track != filename or force_restart:
+            self.stop_voice(fade_ms=0)
+        if not self.is_voice_playing():
+            self._duck_factor = 1.0
+            self._duck_target = 1.0
+        applied_volume = self._effective_bgm_volume()
         if self.current_track == filename and not force_restart:
             if pygame.mixer.get_init():
                 pygame.mixer.music.set_volume(applied_volume)
@@ -209,8 +250,10 @@ class AudioManager:
                 pygame.mixer.music.pause()
         else:
             if pygame.mixer.get_init():
-                volume = max(0.0, min(1.0, self.music_volume * self._bgm_volume_scale))
-                pygame.mixer.music.set_volume(volume)
+                if not self.is_voice_playing():
+                    self._duck_factor = 1.0
+                    self._duck_target = 1.0
+                pygame.mixer.music.set_volume(self._effective_bgm_volume())
                 pygame.mixer.music.unpause()
                 if not pygame.mixer.music.get_busy() and self.current_track:
                     self.play_bgm(self.current_track, force_restart=True, volume_scale=self._bgm_volume_scale)
@@ -221,19 +264,42 @@ class AudioManager:
         self.settings.set("sound_enabled", self.sound_enabled)
         if self.sound_enabled:
             self.play_click()
+        else:
+            self.stop_voice(fade_ms=0)
+            self.sonarEscritura(False)
         return self.sound_enabled
 
     def set_sfx_volume(self, volume: float) -> float:
         self.sfx_volume = round(max(0.0, min(1.0, float(volume))), 2)
         self.settings.set("sfx_volume", self.sfx_volume)
+        voice_snd = getattr(self, "_voice_sound", None)
+        if voice_snd is not None and self.is_voice_playing():
+            try:
+                v_scale = getattr(self, "_voice_volume_scale", 1.0)
+                voice_snd.set_volume(max(0.0, min(1.0, self.sfx_volume * v_scale)) if self.sound_enabled else 0.0)
+            except Exception:
+                pass
+        canal_esc = getattr(self, "canalEscritura", None)
+        sonido_esc = getattr(self, "sonidoEscritura", None)
+        if canal_esc is not None and sonido_esc is not None:
+            try:
+                if canal_esc.get_busy():
+                    escritura_scale = 0.35 if self.is_voice_playing() else 0.7
+                    sonido_esc.set_volume(
+                        max(0.0, min(1.0, self.sfx_volume * escritura_scale)) if self.sound_enabled else 0.0
+                    )
+            except Exception:
+                pass
         return self.sfx_volume
 
     def set_music_volume(self, volume: float) -> float:
         self.music_volume = round(max(0.0, min(1.0, float(volume))), 2)
         self.settings.set("music_volume", self.music_volume)
         if pygame.mixer.get_init():
-            applied = max(0.0, min(1.0, self.music_volume * self._bgm_volume_scale)) if self.music_enabled else 0.0
-            pygame.mixer.music.set_volume(applied)
+            if not self.is_voice_playing():
+                self._duck_factor = 1.0
+                self._duck_target = 1.0
+            pygame.mixer.music.set_volume(self._effective_bgm_volume())
         return self.music_volume
 
     def play_sfx(
@@ -264,7 +330,8 @@ class AudioManager:
                 self.sonidoEscritura = False
         if not self.sonidoEscritura or not self.sound_enabled:
             return
-        self.sonidoEscritura.set_volume(max(0.0, min(1.0, self.sfx_volume * 0.7)))
+        escritura_scale = 0.35 if self.is_voice_playing() else 0.7
+        self.sonidoEscritura.set_volume(max(0.0, min(1.0, self.sfx_volume * escritura_scale)))
         self.canalEscritura = self.sonidoEscritura.play(loops=-1)
 
     def play_hover(self) -> None:
@@ -300,6 +367,99 @@ class AudioManager:
     def play_miss(self) -> None:
         self.play_sfx(self._miss_sound, 0.95)
 
+    def resolve_voice_path(self, clip_name: str) -> Optional[str]:
+        """Retorna la ruta del primer archivo de voz existente en assets/voces/ o assets/."""
+        for path in (
+            os.path.join(self.base_assets_dir, "voces", clip_name),
+            os.path.join(self.base_assets_dir, clip_name),
+        ):
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _load_voice_sound(self, clip_name: str) -> Optional[pygame.mixer.Sound]:
+        """Carga con caché el Sound de una voz según la configuración actual del mixer."""
+        if not pygame.mixer.get_init():
+            return None
+        path = self.resolve_voice_path(clip_name)
+        if path is None:
+            return None
+        key = (path, pygame.mixer.get_init())
+        cached = self._voice_cache.get(key)
+        if cached is not None:
+            return cached
+        try:
+            snd = pygame.mixer.Sound(path)
+            self._voice_cache[key] = snd
+            return snd
+        except Exception:
+            return None
+
+    def get_voice_duration(self, clip_name: str) -> float:
+        """Retorna la duración en segundos de una voz localizada (0.0 si no existe)."""
+        snd = self._load_voice_sound(clip_name)
+        if snd is None:
+            return 0.0
+        try:
+            return max(0.0, float(snd.get_length()))
+        except Exception:
+            return 0.0
+
+    def is_voice_playing(self) -> bool:
+        """Indica si hay una línea de voz activamente en reproducción."""
+        if not self.sound_enabled or not pygame.mixer.get_init():
+            return False
+        ch = getattr(self, "_voice_channel", None)
+        now = time.monotonic()
+        if ch is not None:
+            try:
+                busy = bool(ch.get_busy())
+            except Exception:
+                busy = False
+            if not busy:
+                self._voice_end_time = 0.0
+                return False
+            if self._voice_end_time > 0.0 and now >= self._voice_end_time:
+                self._voice_end_time = 0.0
+                return False
+            return True
+        return self._voice_end_time > now
+
+    def stop_voice(self, fade_ms: int = 80) -> None:
+        """Detiene limpiamente la voz actual (con fade opcional) evitando cortes secos o solapamientos."""
+        ch = getattr(self, "_voice_channel", None)
+        if ch is not None:
+            try:
+                if fade_ms > 0 and ch.get_busy():
+                    ch.fadeout(int(fade_ms))
+                else:
+                    ch.stop()
+            except Exception:
+                pass
+        self._voice_channel = None
+        self._voice_end_time = 0.0
+        self._duck_target = 1.0
+        if fade_ms <= 0 and self._duck_factor < 1.0:
+            self._duck_factor = 1.0
+            self.sync_music_volume()
+
+    def update(self, dt: float) -> None:
+        """Actualiza el ducking dinámico de música según la reproducción de voz."""
+        active = self.is_voice_playing()
+        target = self.duck_level if active else 1.0
+        self._duck_target = target
+        if abs(self._duck_factor - target) > 0.002:
+            rate = 14.0 if target < self._duck_factor else 2.8
+            step = min(1.0, max(0.0, float(dt)) * rate)
+            new_factor = self._duck_factor + (target - self._duck_factor) * step
+            if abs(new_factor - target) <= 0.004:
+                new_factor = target
+            self._duck_factor = new_factor
+            self.sync_music_volume()
+        elif self._duck_factor != target:
+            self._duck_factor = target
+            self.sync_music_volume()
+
     def play_voice(
         self,
         clip_name: str,
@@ -308,33 +468,46 @@ class AudioManager:
     ) -> Optional[pygame.mixer.Channel]:
         """
         Reproduce una línea de voz localizada (ej. 'coronaste.ogg', 'ombe_casi.ogg')
-        buscando en 'assets/voces/' y luego en 'assets/'.
-        Si el archivo no existe o falla la carga, recurre limpiamente a fallback_sound
-        (como el sfx procedural de victoria o derrota) garantizando 0 crashes.
+        buscando en 'assets/voces/' y luego en 'assets/', con caché y canal dedicado
+        para evitar solapamiento y activar ducking suave sobre la música de fondo.
         """
         if not self.sound_enabled:
             return None
 
-        # Intentar ubicar y reproducir archivo de voz
-        voice_paths = [
-            os.path.join(self.base_assets_dir, "voces", clip_name),
-            os.path.join(self.base_assets_dir, clip_name),
-        ]
+        loaded_sound = self._load_voice_sound(clip_name)
+        target_sound = loaded_sound if loaded_sound is not None else fallback_sound
+        if target_sound is None:
+            return None
 
-        loaded_sound = None
-        for path in voice_paths:
-            if os.path.exists(path):
-                try:
-                    loaded_sound = pygame.mixer.Sound(path)
-                    break
-                except Exception:
-                    pass
+        # Detener cualquier voz previa antes de reproducir la nueva
+        self.stop_voice(fade_ms=0)
 
-        if loaded_sound is not None:
-            return self.play_sfx(loaded_sound, volume_scale)
-        elif fallback_sound is not None:
-            return self.play_sfx(fallback_sound, volume_scale)
-        return None
+        volume = max(0.0, min(1.0, self.sfx_volume * volume_scale))
+        try:
+            target_sound.set_volume(volume)
+        except Exception:
+            pass
+
+        ch = self._ensure_voice_channel()
+        if ch is not None:
+            try:
+                ch.play(target_sound)
+            except Exception:
+                ch = self.play_sfx(target_sound, volume_scale)
+        else:
+            ch = self.play_sfx(target_sound, volume_scale)
+
+        if ch is not None or loaded_sound is not None:
+            try:
+                dur = float(target_sound.get_length())
+            except Exception:
+                dur = 2.0
+            self._voice_channel = ch
+            self._voice_sound = target_sound
+            self._voice_volume_scale = volume_scale
+            self._voice_end_time = time.monotonic() + max(0.1, dur + 0.05)
+            self._duck_target = self.duck_level
+        return ch
 
     def get_pitched_sound(self, sound: pygame.mixer.Sound, pitch_factor: float) -> pygame.mixer.Sound:
         """

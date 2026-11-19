@@ -64,7 +64,8 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "buenavista": BuenavistaTrendMicrogame,
     "buenavista_cine": BuenavistaCineMicrogame,
     "buenavista_trend": BuenavistaTrendMicrogame,
-    "aleta": PunchAlertMicrogame,
+    "aleta": Fritanga84Microgame,
+    "aleta_campeones": Fritanga84Microgame,
 }
 
 # (Constantes STORY_* y PALOMA_STORY_DIALOGS importadas de scenes.story_map_data)
@@ -185,8 +186,18 @@ class StoryMapScene(BaseState):
         self.iniciarTrofeos()
         self._sync_drawer_data()
 
+    def _is_poi_cleared(self, poi_key: str, completed_games: list) -> bool:
+        """Determina si un POI fue despejado usando tanto microgame_id como sus etapas registradas."""
+        done_set = set(completed_games or [])
+        poi_info = self.poi_registry.get(poi_key, {})
+        m_id = poi_info.get("microgame_id")
+        if m_id and m_id in done_set:
+            return True
+        stages = STORY_LEVEL_STAGES.get(poi_key, [])
+        return bool(stages and all(st["id"] in done_set for st in stages))
+
     def _count_completed_campaign_levels(self, completed_microgames: Optional[list] = None) -> int:
-        """Cuenta cuántos de los 4 niveles principales de la Historia han sido completados."""
+        """Cuenta cuántos de los 5 niveles principales de la Historia han sido completados."""
         if completed_microgames is None:
             completed_microgames = self.settings.get_story_progress().get("completed_microgames", [])
         done_set = set(completed_microgames)
@@ -236,47 +247,62 @@ class StoryMapScene(BaseState):
             return
         progress = self.settings.get_story_progress()
         completed_microgames = progress.get("completed_microgames", [])
+        completed_set = set(completed_microgames)
         unlocked_locations = progress.get("unlocked_locations", [])
         trofeos_obtenidos = self.leerTrofeosObtenidos()
 
-        # Misiones de campaña
+        def _is_poi_completed(poi_key: str, fallback_stage_id: Optional[str] = None) -> bool:
+            stages = STORY_LEVEL_STAGES.get(poi_key, [])
+            if stages:
+                return all(st["id"] in completed_set for st in stages)
+            return bool(fallback_stage_id and fallback_stage_id in completed_set)
+
+        uninorte_done = _is_poi_completed("uninorte")
+        buenavista_done = _is_poi_completed("buenavista")
+        metro_done = _is_poi_completed("metropolitano")
+        aero_done = _is_poi_completed("aeropuerto")
+        aleta_done = _is_poi_completed("aleta")
+        malecon_done = ("coaster" in completed_set) or ("malecon" in unlocked_locations)
+
+        # Misiones de campaña (las 5 paradas principales + reto secreto del Malecón)
         misiones = [
             {
                 "id": "uninorte",
                 "titulo": "Biblioteca Uninorte",
                 "desc": "Espanta distracciones y vence el doomscrolling.",
-                "completada": "uninorte" in unlocked_locations or "uninorte_concentrate" in completed_microgames,
+                "completada": uninorte_done,
             },
             {
                 "id": "buenavista",
                 "titulo": "C.C. Buenavista",
                 "desc": "Sigue el compás del trend sin volverte viral adicto.",
-                "completada": "buenavista" in unlocked_locations or "buenavista_trend" in completed_microgames,
+                "completada": buenavista_done,
             },
             {
                 "id": "metropolitano",
                 "titulo": "Estadio Metropolitano",
                 "desc": "Modera el chat en vivo y frena la toxicidad.",
-                "completada": "metropolitano" in unlocked_locations or "metropolitano_moderacion" in completed_microgames,
+                "completada": metro_done,
             },
             {
                 "id": "aeropuerto",
                 "titulo": "Aeropuerto Cortissoz",
                 "desc": "Batea el phishing y bloquea mensajes sospechosos.",
-                "completada": "aeropuerto" in unlocked_locations or "punch_alert" in completed_microgames,
+                "completada": aero_done,
+            },
+            {
+                "id": "aleta",
+                "titulo": "Aleta del Tiburón",
+                "desc": "Atiende los fritos sin engancharte con el trol.",
+                "completada": aleta_done,
             },
             {
                 "id": "malecon",
                 "titulo": "Gran Malecón del Río",
                 "desc": "Suelta el celular y reconéctate con el Magdalena.",
-                "completada": "malecon" in unlocked_locations or "coaster" in completed_microgames,
+                "completada": malecon_done,
             },
         ]
-        misiones.append({
-            "id": "aleta", "titulo": "Aleta del Tiburón",
-            "desc": "Atiende los fritos sin engancharte con el trol.",
-            "completada": "aleta" in unlocked_locations or "fritanga_84" in completed_microgames,
-        })
         self.side_drawer.ponerMisiones(misiones)
 
         # Mensajes narrativos y alertas de redes
@@ -291,28 +317,35 @@ class StoryMapScene(BaseState):
                 "remitente": "Alerta Digital Uninorte",
                 "asunto": "Zona Libre de Doomscrolling",
                 "cuerpo": "El estudio rinde más cuando silencias las notificaciones innecesarias.",
-                "leido": "uninorte" in unlocked_locations,
+                "leido": uninorte_done,
             },
             {
                 "remitente": "Radar Buenavista",
                 "asunto": "Tendencia en Consciencia",
                 "cuerpo": "Baila por alegría y arte, no para buscar validación en métricas vacías.",
-                "leido": "buenavista" in unlocked_locations,
+                "leido": buenavista_done,
             },
             {
                 "remitente": "Tribuna Metropolitano",
                 "asunto": "Pasión con Respeto",
                 "cuerpo": "El fútbol une a Barranquilla. Deja los insultos y la toxicidad fuera de la red.",
-                "leido": "metropolitano" in unlocked_locations,
+                "leido": metro_done,
             },
             {
                 "remitente": "Seguridad Cortissoz",
                 "asunto": "Alerta de Phishing y Estafas",
                 "cuerpo": "Nunca abras enlaces de premios milagrosos ni compartas contraseñas.",
-                "leido": "aeropuerto" in unlocked_locations,
+                "leido": aero_done,
+            },
+            {
+                "remitente": "Aleta del Tiburón",
+                "asunto": "El Sabor del Troll",
+                "cuerpo": "No muerdas el anzuelo del trol. Respira hondo y atiende tu mesa con calma.",
+                "leido": aleta_done,
             },
         ]
         self.side_drawer.ponerMensajes(mensajes)
+        self.side_drawer.show_notification_badge = any(not m.get("leido", False) for m in mensajes)
 
         # Perfil del jugador
         metricas = self._sync_social_hud()
@@ -1174,7 +1207,7 @@ class StoryMapScene(BaseState):
             self.paloma_talk_frames = [self.paloma_guide] * 4
 
     def get_paloma_talk_portrait(self) -> pygame.Surface:
-        """Retorna el sprite activo de la Paloma modulando pico y pestañeo."""
+        """Retorna el sprite activo de la Paloma modulando pico con la voz y pestañeo natural."""
         frames = getattr(self, "paloma_talk_frames", None)
         if not frames or len(frames) < 4:
             return getattr(self, "paloma_dialog_portrait", self.paloma_guide)
@@ -1187,6 +1220,11 @@ class StoryMapScene(BaseState):
         # Pestañeo cada 3.8s durante 0.16s
         if (t % 3.8) < 0.16:
             return frames[3]  # Pestañeo
+
+        # Solo mover el pico mientras la locución esté reproduciéndose activamente
+        is_talking = bool(self.audio.is_voice_playing()) if hasattr(self.audio, "is_voice_playing") else False
+        if not is_talking:
+            return frames[0]
 
         # Modulación de habla a ~6.2 Hz (0 -> 1 -> 2 -> 1)
         step = int((t * 6.2) % 4)
@@ -1260,6 +1298,8 @@ class StoryMapScene(BaseState):
             self.paloma_dialog_page_idx += 1
             self._trigger_dialog_voice(self.paloma_dialog_page_idx)
         else:
+            if hasattr(self.audio, "stop_voice"):
+                self.audio.stop_voice(100)
             self.paloma_dialog_open = False
             self.desbloquearTrofeoPorId("charlaPaloma")
             cb = self.paloma_dialog_on_finish
@@ -1545,6 +1585,8 @@ class StoryMapScene(BaseState):
         """Lanza el desafío exclusivo del distrito activo (soportando niveles de múltiples rondas encadenadas)."""
         self._close_quest_card()
         self.paloma_dialog_open = False
+        if hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(80)
         poi_info = self.poi_registry.get(self.active_poi, {})
 
         stages = STORY_LEVEL_STAGES.get(self.active_poi, [])
@@ -1656,6 +1698,7 @@ class StoryMapScene(BaseState):
                 save_source="auto",
             )
             metrics = self._sync_social_hud()
+            self._sync_drawer_data()
             if metrics:
                 self.settings.update_story_progress(
                     followers=metrics["followers"],
@@ -1674,11 +1717,11 @@ class StoryMapScene(BaseState):
             self.toast_msg = f"¡{poi_info.get('title', 'NIVEL')} DESPEJADO CON ÉXITO!"
             self.toast_timer = 4.0
 
-            # Verificar si se completaron los 4 niveles principales de la Historia
-            all_4_levels_cleared = all(p in unlocked for p in STORY_CAMPAIGN_ORDER)
+            # Verificar si se completaron todos los niveles principales de la Historia
+            all_campaign_cleared = self._count_completed_campaign_levels(completed) >= len(STORY_CAMPAIGN_ORDER)
 
             def _after_post_win_dialog() -> None:
-                if (all_4_levels_cleared or len(completed) >= 5) and not self.victory_modal_shown:
+                if all_campaign_cleared and not self.victory_modal_shown:
                     self.show_victory_modal = True
                     self.victory_modal_shown = True
                     self._spawn_carnaval_celebration()
@@ -1823,6 +1866,8 @@ class StoryMapScene(BaseState):
 
     def request_exit(self) -> None:
         """Guarda el progreso y sale directamente al menú principal cuando está disponible."""
+        if hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(80)
         self.save_current_state(source="auto")
         if self.on_main_menu_callback:
             self.on_main_menu_callback(self)
@@ -2499,6 +2544,8 @@ class StoryMapScene(BaseState):
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.paloma_dialog_open = False
                 self.paloma_dialog_on_finish = None
+                if hasattr(self.audio, "stop_voice"):
+                    self.audio.stop_voice(100)
                 if hasattr(self.audio, "play_hover"):
                     self.audio.play_hover()
                 return
@@ -2775,6 +2822,8 @@ class StoryMapScene(BaseState):
 
     def update(self, dt: float) -> None:
         self.timer += dt
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.toast_timer > 0.0:
             self.toast_timer = max(0.0, self.toast_timer - dt)
             if self.toast_timer == 0.0:
@@ -3105,7 +3154,7 @@ class StoryMapScene(BaseState):
                 pin_center_y = p_screen_y - 18 + int(bob_y)
 
                 # Si el microjuego de la locación fue completado, mostrar Estrella Dorada
-                is_cleared = p_info["microgame_id"] in completed_games
+                is_cleared = self._is_poi_cleared(p_key, completed_games)
                 pin_to_draw = self.poi_star_surf if is_cleared else self.poi_pin_surf
                 if is_cleared and getattr(self, "estrellaPintada", None) is not None:
                     vuelta = (self.timer * 0.45 + (sum(map(ord, p_key)) % 100) / 100.0) % 1.0
@@ -3138,7 +3187,7 @@ class StoryMapScene(BaseState):
                     hx = pr.centerx - cam_x
                     hy = pr.centery - cam_y
                     if -200 < hx < self.screen_w + 200 and -200 < hy < self.screen_h + 200:
-                        is_done = p_info["microgame_id"] in completed_games
+                        is_done = self._is_poi_cleared(p_key, completed_games)
                         halo = self.night_lamp_halo.copy()
                         pulse = 0.82 + 0.18 * math.sin(self.timer * 2.2 + pr.x * 0.01)
                         halo.set_alpha(int((135 if is_done else 215) * pulse))
@@ -3538,7 +3587,7 @@ class StoryMapScene(BaseState):
             )
 
         progress = self.settings.get_story_progress()
-        is_cleared = poi_info["microgame_id"] in progress.get("completed_microgames", [])
+        is_cleared = self._is_poi_cleared(poi_key, progress.get("completed_microgames", []))
         blocked = self._get_blocked_hud_rects()
         active_poi_screen = poi_rect.move(-cam_x, -cam_y)
         player_screen = self._get_player_screen_rect(cam_x, cam_y)
@@ -3714,7 +3763,8 @@ class StoryMapScene(BaseState):
 
         # Tarjeta de estado con sello de cera ilustrado sin colisión ni huecos vacíos
         progress = self.settings.get_story_progress()
-        is_done = poi_info["microgame_id"] in progress.get("completed_microgames", [])
+        active_key = self.active_poi if self.active_poi in self.poi_registry else "uninorte"
+        is_done = self._is_poi_cleared(active_key, progress.get("completed_microgames", []))
         status_text = "ESTADO: DESPEJADO (+100 PTS)" if is_done else "ESTADO: PENDIENTE POR DESPEJAR"
         status_col = (30, 125, 55) if is_done else (190, 95, 25)
         sello_tex = self.tex_sello_despejado if is_done else self.tex_sello_pendiente
@@ -3840,6 +3890,7 @@ class StoryMapScene(BaseState):
             font_body=self.font_paloma_body,
             font_hint=self.font_paloma_hint,
             talk_frames=getattr(self, "paloma_talk_frames", None),
+            is_talking=bool(self.audio.is_voice_playing()) if hasattr(self.audio, "is_voice_playing") else False,
         )
 
     def _render_intro_dialog(self, surface: pygame.Surface) -> None:

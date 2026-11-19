@@ -323,6 +323,8 @@ class Engine:
 
             # 2. Lógica
             self.state_machine.update(dt)
+            if hasattr(self, "audio") and hasattr(self.audio, "update"):
+                self.audio.update(dt)
 
             # 3. Renderizado
             self._render_current_frame()

@@ -593,40 +593,52 @@ class SideNavDrawer:
             {"remitente": "Alerta Digital Uninorte", "asunto": "Zona Libre de Distracciones", "cuerpo": "Enfoca tu mente y silencia avisos innecesarios al estudiar.", "leido": False},
             {"remitente": "Radar Buenavista", "asunto": "Baila a tu propio compás", "cuerpo": "No dejes que los likes dicten tu felicidad ni tu valor.", "leido": False},
             {"remitente": "Tribuna Metropolitano", "asunto": "Convivencia y Respeto", "cuerpo": "Apoya a tu equipo sin lanzar odio en comentarios ni chats.", "leido": False},
+            {"remitente": "Seguridad Cortissoz", "asunto": "Alerta de Phishing y Estafas", "cuerpo": "Nunca abras enlaces de premios milagrosos ni compartas claves.", "leido": False},
+            {"remitente": "Aleta del Tiburón", "asunto": "El Sabor del Troll", "cuerpo": "No muerdas el anzuelo del trol. Respira hondo y atiende en calma.", "leido": False},
         ]
 
-        card_y = top + 140
+        visibles = mensajes_a_mostrar[:6]
+        n_msg = len(visibles)
+        if n_msg <= 4:
+            card_h, card_gap, card_y = 118, 16, top + 140
+        elif n_msg == 5:
+            card_h, card_gap, card_y = 98, 10, top + 136
+        else:
+            card_h, card_gap, card_y = 84, 7, top + 134
+
         card_w = 310
         card_x = panelX + 45
-        for i, msg in enumerate(mensajes_a_mostrar[:4]):
-            card_h = 118
+        for msg in visibles:
             card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
             bg_color = (255, 252, 244, 215) if msg.get("leido", False) else (255, 245, 235, 240)
             pygame.draw.rect(card_surf, bg_color, (0, 0, card_w, card_h), border_radius=12)
             border_color = (205, 175, 145, 180) if msg.get("leido", False) else (226, 75, 58, 200)
             pygame.draw.rect(card_surf, border_color, (0, 0, card_w, card_h), width=2, border_radius=12)
 
+            compact_msg = card_h < 95
+            dot_y = 16 if compact_msg else 22
             dot_color = (160, 138, 118) if msg.get("leido", False) else (226, 75, 58)
-            pygame.draw.circle(card_surf, dot_color, (18, 22), 5)
+            pygame.draw.circle(card_surf, dot_color, (18, dot_y), 5)
 
             txt_rem = self.fuenteNombreCompacto.render(msg.get("remitente", "Aviso"), True, cafeOscuro)
-            card_surf.blit(txt_rem, (32, 12))
+            card_surf.blit(txt_rem, (32, 7 if compact_msg else 12))
 
             txt_as = self.fuenteDetalleCompacto.render(msg.get("asunto", ""), True, cafe)
-            card_surf.blit(txt_as, (32, 34))
+            card_surf.blit(txt_as, (32, 25 if compact_msg else 34))
 
             cuerpo = msg.get("cuerpo", "")
-            renglones = self.partirTexto(cuerpo, self.fuenteDetalleCompacto, card_w - 40)
-            y_cuerpo = 56
+            renglones = self.partirTexto(cuerpo, self.fuenteDetalleCompacto, card_w - 36)
+            y_cuerpo = 45 if compact_msg else 56
+            salto_cuerpo = 16 if compact_msg else 18
             for r in renglones[:2]:
                 txt_c = self.fuenteDetalleCompacto.render(r, True, cafeApagado)
                 card_surf.blit(txt_c, (18, y_cuerpo))
-                y_cuerpo += 18
+                y_cuerpo += salto_cuerpo
 
             surface.blit(card_surf, (card_x, card_y))
-            card_y += card_h + 16
+            card_y += card_h + card_gap
 
-        pie = self.fuenteDetalleCompacto.render(f"{len(mensajes_a_mostrar)} avisos registrados", True, cafe)
+        pie = self.fuenteDetalleCompacto.render(f"{len(visibles)} avisos registrados", True, cafe)
         surface.blit(pie, pie.get_rect(center=(panelX + 200, top + 705)))
 
     def dibujarSeccionMisiones(self, surface: pygame.Surface, panelX: int) -> None:
@@ -648,21 +660,28 @@ class SideNavDrawer:
         surface.blit(sub, sub.get_rect(center=(panelX + 200, top + 115)))
 
         misiones_a_mostrar = self.misiones if self.misiones else [
-            {"titulo": "Biblioteca Uninorte", "desc": "Espanta distracciones y vence el doomscrolling.", "completada": False},
-            {"titulo": "C.C. Buenavista", "desc": "Sigue el compás del trend sin volverte viral adicto.", "completada": False},
-            {"titulo": "Estadio Metropolitano", "desc": "Modera el chat en vivo y frena la toxicidad.", "completada": False},
-            {"titulo": "Aeropuerto Cortissoz", "desc": "Batea el phishing y bloquea mensajes sospechosos.", "completada": False},
-            {"titulo": "Gran Malecón del Río", "desc": "Suelta el celular y reconéctate con el Magdalena.", "completada": False},
+            {"id": "uninorte", "titulo": "Biblioteca Uninorte", "desc": "Espanta distracciones y vence el doomscrolling.", "completada": False},
+            {"id": "buenavista", "titulo": "C.C. Buenavista", "desc": "Sigue el compás del trend sin volverte viral adicto.", "completada": False},
+            {"id": "metropolitano", "titulo": "Estadio Metropolitano", "desc": "Modera el chat en vivo y frena la toxicidad.", "completada": False},
+            {"id": "aeropuerto", "titulo": "Aeropuerto Cortissoz", "desc": "Batea el phishing y bloquea mensajes sospechosos.", "completada": False},
+            {"id": "aleta", "titulo": "Aleta del Tiburón", "desc": "Atiende los fritos sin engancharte con el trol.", "completada": False},
+            {"id": "malecon", "titulo": "Gran Malecón del Río", "desc": "Suelta el celular y reconéctate con el Magdalena.", "completada": False},
         ]
 
-        card_y = top + 138
+        visibles = misiones_a_mostrar[:6]
+        n_mis = len(visibles)
+        if n_mis <= 5:
+            card_h, card_gap, card_y = 96, 14, top + 138
+        else:
+            card_h, card_gap, card_y = 82, 8, top + 136
+        compact_mis = card_h < 90
+
         card_w = 310
         card_x = panelX + 45
         completadas = 0
 
-        for i, mis in enumerate(misiones_a_mostrar[:5]):
-            card_h = 96
-            comp = mis.get("completada", False)
+        for mis in visibles:
+            comp = bool(mis.get("completada", False))
             if comp:
                 completadas += 1
 
@@ -681,20 +700,20 @@ class SideNavDrawer:
 
             t_col = cafeOscuro if comp else cafe
             txt_t = self.fuenteNombreCompacto.render(mis.get("titulo", "Misión"), True, t_col)
-            card_surf.blit(txt_t, (48, 14))
+            card_surf.blit(txt_t, (48, 9 if compact_mis else 14))
 
             d_col = (90, 130, 100) if comp else cafeApagado
             renglones = self.partirTexto(mis.get("desc", ""), self.fuenteDetalleCompacto, card_w - 60)
-            y_desc = 38
+            y_desc = 32 if compact_mis else 38
             for r in renglones[:2]:
                 txt_d = self.fuenteDetalleCompacto.render(r, True, d_col)
                 card_surf.blit(txt_d, (48, y_desc))
                 y_desc += 16
 
             surface.blit(card_surf, (card_x, card_y))
-            card_y += card_h + 14
+            card_y += card_h + card_gap
 
-        pie = self.fuenteNombreCompacto.render(f"{completadas} de {len(misiones_a_mostrar)} misiones superadas", True, cafeOscuro)
+        pie = self.fuenteNombreCompacto.render(f"{completadas} de {len(visibles)} misiones superadas", True, cafeOscuro)
         surface.blit(pie, pie.get_rect(center=(panelX + 200, top + 705)))
 
     def dibujarSeccionPerfil(self, surface: pygame.Surface, panelX: int) -> None:
@@ -751,7 +770,7 @@ class SideNavDrawer:
         metrics = [
             ("Seguidores", pdata.get("followers_text", pdata.get("seguidores", "0"))),
             ("Likes", pdata.get("likes_text", pdata.get("likes", "0"))),
-            ("Campaña", pdata.get("niveles", "0/4")),
+            ("Campaña", pdata.get("niveles", "0/5")),
             ("Trofeos", pdata.get("trofeos", "0/4")),
         ]
 

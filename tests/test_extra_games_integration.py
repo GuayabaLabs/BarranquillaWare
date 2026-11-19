@@ -83,7 +83,12 @@ def test_emoji_timer_sync_hands_and_finish():
     game.game.victoria = True
     game.update(1 / 30)
     assert game.is_finished and game.is_won
-    for _ in range(300):
+    mid_frames = int(max(0.0, game.outro_duration - 0.5) * 30)
+    for _ in range(mid_frames):
+        game.update(1 / 30)
+    assert not results
+    remaining_frames = int((game.outro_duration + 0.35) * 30) - mid_frames + 1
+    for _ in range(max(1, remaining_frames)):
         game.update(1 / 30)
     # (BaseMicrogame repite el callback tras el outro; en el juego real la escena ya cambió.)
     assert results and set(results) == {True}

@@ -191,3 +191,50 @@ def test_profile_and_missions_include_fritanga():
     scene = StoryMapScene(character_id="westcol")
     assert scene.side_drawer.perfil_data["niveles"].endswith(f"/{len(STORY_CAMPAIGN_ORDER)}")
     assert "aleta" in {mission["id"] for mission in scene.side_drawer.misiones}
+
+
+def test_drawer_missions_messages_state_and_main_menu_logros():
+    """Verifica rectificación de misiones, badge de mensajes sin leer y logros reales en MainMenu."""
+    from core.settings import SettingsManager
+    from core.audio_manager import AudioManager
+    from scenes.main_menu import MainMenuScene
+
+    settings = SettingsManager.get_instance()
+    settings.reset_story_progress()
+    audio = AudioManager.get_instance()
+    try:
+        scene = StoryMapScene(character_id="westcol")
+        missions = {m["id"]: m["completada"] for m in scene.side_drawer.misiones}
+        assert len(missions) == 6
+        assert all(not done for done in missions.values()), f"En partida nueva ninguna misión debe iniciar completada: {missions}"
+        assert scene.side_drawer.show_notification_badge is True
+
+        # Renderizar pestañas con 6 ítems sin errores de superficie
+        scene.side_drawer.is_open = True
+        scene.side_drawer.anim_t = 1.0
+        surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+        scene._on_side_nav_selected("misiones")
+        scene.side_drawer.render(surf)
+        scene._on_side_nav_selected("mensajes")
+        scene.side_drawer.render(surf)
+
+        # Despejar Uninorte (2 rondas) actualiza misión, mensaje y trofeo real en MainMenu
+        scene.active_poi = "uninorte"
+        scene.current_level_stage_idx = 0
+        scene._on_microgame_complete(True)
+        scene._on_microgame_complete(True)
+        audio.stop_voice(fade_ms=0)
+
+        missions_after = {m["id"]: m["completada"] for m in scene.side_drawer.misiones}
+        assert missions_after["uninorte"] is True
+        assert missions_after["buenavista"] is False
+        msg_map = {m["remitente"]: m["leido"] for m in scene.side_drawer.mensajes}
+        assert msg_map["Alerta Digital Uninorte"] is True
+        assert "Aleta del Tiburón" in msg_map
+
+        menu = MainMenuScene(1920, 1080)
+        lines = menu._build_logros_lines()
+        assert any("1 / 4" in line for line in lines), f"MainMenu logros debe mostrar trofeos del mapa: {lines}"
+    finally:
+        audio.stop_voice(fade_ms=0)
+        settings.reset_story_progress()
