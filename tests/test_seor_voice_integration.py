@@ -157,3 +157,78 @@ def test_microgame_ensenanza_voice_trigger():
         assert any("refl_uninorte_sprint_win.ogg" in clip or "refl_sprint_win.ogg" in clip for clip in searched_clips)
     finally:
         audio.play_voice = orig_play_voice
+
+
+REFL_VOICE_FILES = [
+    "refl_uninorte_sprint_win.ogg",
+    "refl_uninorte_sprint_lose.ogg",
+    "refl_uninorte_concentrate_win.ogg",
+    "refl_uninorte_concentrate_lose.ogg",
+    "refl_fritanga_84_win.ogg",
+    "refl_fritanga_84_lose.ogg",
+    "refl_fritanga_rabia.ogg",
+    "refl_fritanga_distraido.ogg",
+    "refl_curramgram_go_win.ogg",
+    "refl_curramgram_go_lose.ogg",
+    "refl_emoji_catch_win.ogg",
+    "refl_emoji_catch_lose.ogg",
+]
+
+
+def test_reflection_voice_files_exist_and_playable():
+    """Verifica que los 12 audios reflexivos grabados por SEOR existan en assets/voces/ y assets/."""
+    pygame.mixer.init()
+    for filename in REFL_VOICE_FILES:
+        path_voces = os.path.join("assets", "voces", filename)
+        path_assets = os.path.join("assets", filename)
+        assert os.path.isfile(path_voces), f"Falta {path_voces}"
+        assert os.path.isfile(path_assets), f"Falta {path_assets}"
+        snd = pygame.mixer.Sound(path_voces)
+        assert 4.0 <= snd.get_length() <= 11.0, f"Audio {filename} fuera de rango ({snd.get_length()}s)"
+
+
+def test_fritanga_triggers_specific_reflection_voices():
+    """Verifica que Fritanga84Microgame dispare gana, pierde, rabia y distraido correctamente."""
+    from microgames.fritanga_84 import Fritanga84Microgame
+    audio = AudioManager.get_instance()
+    played = []
+
+    orig_play_voice = audio.play_voice
+    def mock_play_voice(clip_name, volume_scale=1.0, fallback_sound=None):
+        played.append(clip_name)
+        return orig_play_voice(clip_name, volume_scale, fallback_sound)
+
+    audio.play_voice = mock_play_voice
+    try:
+        surf = pygame.Surface((1920, 1080))
+
+        # 1. Gana
+        played.clear()
+        g = Fritanga84Microgame()
+        g.is_won = True
+        g.finLetrero = 1.0
+        g.outro_timer = 1.5
+        g.dibujarEnsenanzaFinal(surf)
+        assert "refl_fritanga_84_win.ogg" in played
+
+        # 2. Pierde distraído
+        played.clear()
+        g = Fritanga84Microgame()
+        g.is_won = False
+        g.ensenanzaFinal = {"gana": Fritanga84Microgame.ensenanzaFinal["gana"], "pierde": g.ensenanzaDistraido}
+        g.finLetrero = 1.0
+        g.outro_timer = 1.5
+        g.dibujarEnsenanzaFinal(surf)
+        assert "refl_fritanga_distraido.ogg" in played
+
+        # 3. Pierde por rabia
+        played.clear()
+        g = Fritanga84Microgame()
+        g.is_won = False
+        g.ensenanzaFinal = {"gana": Fritanga84Microgame.ensenanzaFinal["gana"], "pierde": g.ensenanzaRabia}
+        g.finLetrero = 1.0
+        g.outro_timer = 1.5
+        g.dibujarEnsenanzaFinal(surf)
+        assert "refl_fritanga_rabia.ogg" in played
+    finally:
+        audio.play_voice = orig_play_voice

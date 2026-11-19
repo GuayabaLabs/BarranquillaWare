@@ -1913,6 +1913,7 @@ class Fritanga84Microgame(BaseMicrogame):
             self.sonoApagon = True
             if hasattr(self.audio, "play_click"):
                 self.audio.play_click()
+            self._trigger_ensenanza_voice()
         if t < 0.3 and int(t * 20) % 2 == 0:
             return
         surface.fill((8, 6, 12))

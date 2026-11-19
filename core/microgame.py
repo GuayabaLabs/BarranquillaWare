@@ -732,6 +732,16 @@ class BaseMicrogame(BaseState):
         if hasattr(self, "secuencia") and getattr(self, "secuencia", "") == "derrota_rabia":
             possible_keys.insert(0, f"refl_{snake_name}_rabia.ogg")
             possible_keys.insert(0, "refl_fritanga_rabia.ogg")
+        elif not self.is_won:
+            ensenanza_actual = getattr(self, "ensenanzaFinal", None) or {}
+            pierde_actual = ensenanza_actual.get("pierde")
+            if pierde_actual is not None:
+                if pierde_actual == getattr(self, "ensenanzaRabia", None):
+                    possible_keys.insert(0, f"refl_{snake_name}_rabia.ogg")
+                    possible_keys.insert(0, "refl_fritanga_rabia.ogg")
+                elif pierde_actual == getattr(self, "ensenanzaDistraido", None):
+                    possible_keys.insert(0, f"refl_{snake_name}_distraido.ogg")
+                    possible_keys.insert(0, "refl_fritanga_distraido.ogg")
 
         for key in possible_keys:
             chan = self.audio.play_voice(key, volume_scale=1.0)
