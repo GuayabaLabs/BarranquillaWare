@@ -80,3 +80,16 @@ python microgames/emoji_catch.py
 
 - `tests/test_boss_stage.py` guarda una imagen en una ruta de otro computador (`C:/Users/danie/...`). No falla, pero
   debería usar `artifacts/`.
+
+## 6. Tareas de fuegos, flechas del mapa y clic de botones
+
+- [ ] **Fuegos artificiales**: cada fuego suena con un solo estallido justo al reventar (sin el silbido de subida).
+      Revisar en el letrero de "¡Ganaste!" de cualquier minijuego, en el aviso de trofeo del mapa y en el resultado
+      del Coaster. Deben oírse **por debajo** de la voz de SEOR ("¡Coronaste!"). Volúmenes en
+      `effects/fuegos_sonido.py` (`VOLUMEN` y `VOLUMEN_CON_VOZ`).
+- [ ] **Flechas en el mapa**: → y ← solo toman calles a ≤ 45° de la horizontal; ↑ y ↓ calles a ≤ 68°; dos flechas
+      a la vez toman diagonales. Si una flecha no tiene calle hacia ese lado, Cami no se mueve (antes se iba
+      por otra calle). Ángulos en `DPAD_MAX_ANGLE_*` de `scenes/story_map/scene.py`.
+- [ ] **Clic de botones**: el juego ahora mide el tamaño real de la ventana (Windows) y abre una ventana que cabe en
+      la pantalla. Probar en ventana normal, maximizada y F11 que el clic funcione sobre el botón (no debajo).
+      Si `settings.json` tenía guardada una ventana de 1920x1080, al abrir se ajustará sola.

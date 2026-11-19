@@ -2068,52 +2068,80 @@ class StoryMapScene(BaseState):
             if hasattr(self.audio, "play_click"):
                 self.audio.play_click()
 
+    # Dirección de flechas en el mapa isométrico: ángulo máximo aceptado entre la flecha y la calle.
+    # Las calles "horizontales" salen a ~27° y las "verticales" a ~63°; nunca se toma una calle que
+    # vaya hacia otro lado (p. ej. → nunca baja por una calle vertical).
+    DPAD_MAX_ANGLE_HORIZONTAL: float = 45.0
+    DPAD_MAX_ANGLE_VERTICAL: float = 68.0
+    DPAD_MAX_ANGLE_DIAGONAL: float = 45.0
+
+    def _edge_screen_direction(self, from_id: int, to_id: int, sample_px: float = 70.0) -> Optional[Tuple[float, float]]:
+        """Dirección real con la que arranca la calle (sobre la curva Bézier dibujada), normalizada."""
+        nodes, edges, node_map, adj, edge_map = self._get_street_graph()
+        e = edge_map.get((from_id, to_id))
+        if not e or from_id not in node_map or to_id not in node_map:
+            return None
+        nu, nv = node_map[from_id], node_map[to_id]
+        p0 = (nu["x"], nu["y"])
+        p1 = (nv["x"], nv["y"])
+        ctrl = (e.get("ctrl_x", (p0[0] + p1[0]) // 2), e.get("ctrl_y", (p0[1] + p1[1]) // 2))
+        pts = get_bezier_points(p0, ctrl, p1, step_px=5)
+        if len(pts) < 2:
+            pts = [p0, p1]
+        target = pts[-1]
+        recorrido = 0.0
+        for a, b in zip(pts, pts[1:]):
+            recorrido += math.hypot(b[0] - a[0], b[1] - a[1])
+            if recorrido >= sample_px:
+                target = b
+                break
+        dx, dy = float(target[0] - p0[0]), float(target[1] - p0[1])
+        mag = math.hypot(dx, dy)
+        if mag < 0.001:
+            return None
+        return dx / mag, dy / mag
+
+    def _pick_dpad_neighbor(self, dir_vec: Tuple[float, float]) -> Optional[int]:
+        """Vecino cuya calle arranca más alineada con la flecha, dentro del ángulo permitido."""
+        _, _, node_map, adj, _ = self._get_street_graph()
+        curr_id = self.player_node_id
+        if curr_id not in node_map or not adj.get(curr_id):
+            return None
+        mag = math.hypot(dir_vec[0], dir_vec[1])
+        if mag < 0.001:
+            return None
+        ux, uy = dir_vec[0] / mag, dir_vec[1] / mag
+        if abs(ux) > 0.01 and abs(uy) > 0.01:
+            max_angle = self.DPAD_MAX_ANGLE_DIAGONAL
+        elif abs(ux) > abs(uy):
+            max_angle = self.DPAD_MAX_ANGLE_HORIZONTAL
+        else:
+            max_angle = self.DPAD_MAX_ANGLE_VERTICAL
+        min_dot = math.cos(math.radians(max_angle))
+
+        best_nbr, best_dot = None, min_dot
+        for nbr_id in adj[curr_id]:
+            d = self._edge_screen_direction(curr_id, nbr_id)
+            if d is None:
+                continue
+            dot = d[0] * ux + d[1] * uy
+            if dot >= best_dot:
+                best_dot, best_nbr = dot, nbr_id
+        return best_nbr
+
     def _handle_dpad_move(self, dir_vec: Tuple[float, float]) -> bool:
         """
-        Navegación tipo D-Pad / WASD / Flechas en intersecciones (Opción 1.C):
-        Selecciona la arista cuya tangente de salida tenga mayor coincidencia direccional (dot product),
-        y viaja únicamente hasta el siguiente nodo de la red. Así cada nodo
-        vuelve a ser una parada navegable, como en la versión anterior.
+        Navegación con flechas / WASD / D-pad: avanza un solo nodo por la calle cuya dirección real
+        (como se ve en pantalla) coincide con la flecha. Si ninguna calle va hacia ese lado, no se mueve.
         """
         if self.player_is_moving:
             return False
-
-        nodes, edges, node_map, adj, edge_map = self._get_street_graph()
-        curr_id = self.player_node_id
-        if curr_id not in node_map or not adj.get(curr_id):
-            return False
-
-        curr_n = node_map[curr_id]
-        best_nbr = None
-        best_dot = 0.20
-
-        for nbr_id in adj[curr_id]:
-            e = edge_map.get((curr_id, nbr_id))
-            if not e:
-                continue
-            nbr_n = node_map[nbr_id]
-            cx = e.get("ctrl_x", (curr_n["x"] + nbr_n["x"]) // 2)
-            cy = e.get("ctrl_y", (curr_n["y"] + nbr_n["y"]) // 2)
-            dx = float(cx - curr_n["x"])
-            dy = float(cy - curr_n["y"])
-            mag = math.hypot(dx, dy)
-            if mag < 1.0:
-                dx = float(nbr_n["x"] - curr_n["x"])
-                dy = float(nbr_n["y"] - curr_n["y"])
-                mag = math.hypot(dx, dy)
-            if mag > 0.001:
-                dot = (dx / mag) * dir_vec[0] + (dy / mag) * dir_vec[1]
-                if dot > best_dot:
-                    best_dot = dot
-                    best_nbr = nbr_id
-
+        best_nbr = self._pick_dpad_neighbor(dir_vec)
         if best_nbr is None:
             return False
-
         # Cada nodo es una parada: no saltar nodos intermedios ni limitarse a
         # los POI que tienen minijuego.
-        path = [curr_id, best_nbr]
-        self._start_path_travel(path)
+        self._start_path_travel([self.player_node_id, best_nbr])
         return True
 
     def _find_node_near_world_pos(self, world_pos: Tuple[float, float], max_dist: float = 28.0) -> Optional[dict]:
@@ -2667,7 +2695,16 @@ class StoryMapScene(BaseState):
             if event.key in dpad_dirs:
                 if self.camera.is_dragging:
                     self.camera.stop_drag()
-                if self._handle_dpad_move(dpad_dirs[event.key]):
+                # Dos flechas a la vez (p. ej. → y ↓) toman las calles diagonales del mapa isométrico.
+                from core import input_state
+                held = input_state.get_pressed()
+                dx, dy = dpad_dirs[event.key]
+                for key, (hx, hy) in dpad_dirs.items():
+                    if key != event.key and held[key] and (hx == 0.0) != (dx == 0.0):
+                        dx, dy = dx + hx, dy + hy
+                if self._handle_dpad_move((dx, dy)):
+                    return
+                if (dx, dy) != dpad_dirs[event.key] and self._handle_dpad_move(dpad_dirs[event.key]):
                     return
 
         # Arrastre de cámara con mouse en toda la superficie y click en POIs
