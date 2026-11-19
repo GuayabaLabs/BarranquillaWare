@@ -259,7 +259,7 @@ class StoryMapUI:
         font_d_body = pygame.font.SysFont("Arial, sans-serif", 16)
         font_d_sub = pygame.font.SysFont("Arial Black, Impact", 13)
 
-        txt_d_title = font_d_title.render(f"¡{char_name.upper()} TE DA LA BIENVENIDA! 🕊️", True, (255, 220, 80))
+        txt_d_title = font_d_title.render(f"¡{char_name.upper()} TE DA LA BIENVENIDA!", True, (255, 220, 80))
         d_surf.blit(txt_d_title, (210, 25))
 
         lines = [
@@ -273,8 +273,9 @@ class StoryMapUI:
             d_surf.blit(txt_l, (210, ly))
             ly += 26
 
-        txt_prompt = font_d_sub.render("▶ PULSA ESPACIO O HAZ CLICK PARA EMPEZAR A EXPLORAR", True, (120, 235, 160))
-        d_surf.blit(txt_prompt, (210, 160))
+        pygame.draw.polygon(d_surf, (120, 235, 160), [(210, 162), (210, 174), (221, 168)])
+        txt_prompt = font_d_sub.render("PULSA ESPACIO O HAZ CLICK PARA EMPEZAR A EXPLORAR", True, (120, 235, 160))
+        d_surf.blit(txt_prompt, (228, 160))
         surface.blit(d_surf, (dx, dy))
 
 

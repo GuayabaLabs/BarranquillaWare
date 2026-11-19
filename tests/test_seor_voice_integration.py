@@ -537,3 +537,59 @@ def test_fritanga_finish_stops_oil_and_troll_channels_and_aleta_story_consistenc
     assert vm["title_rect"].right < vm["right_star_rect"].left
     assert vm["badge_size"][0] >= vm["badge_text_size"][0] + 48
     assert vm["badge_size"][1] >= vm["badge_text_size"][1] + 16
+
+
+def test_sequential_play_voice_preserves_ducking_and_intro_has_no_tofu_glyphs(monkeypatch):
+    """Cambiar de voz directamente no debe disparar un salto de ducking a 1.0 ni renderizar glifos rotos."""
+    pygame.display.set_mode((1920, 1080))
+    from core.audio_manager import AudioManager
+    from scenes.story_map.ui_dialogs import StoryMapUI
+
+    audio = AudioManager.get_instance()
+    orig_sound = audio.sound_enabled
+    orig_music = audio.music_enabled
+    orig_vol = audio.music_volume
+    audio.sound_enabled = True
+    audio.music_enabled = True
+    audio.set_music_volume(1.0)
+    try:
+        ch1 = audio.play_voice("paloma_welcome_0.ogg")
+        assert ch1 is not None
+        for _ in range(12):
+            audio.update(0.05)
+        assert abs(audio._duck_factor - audio.duck_level) < 0.02
+
+        ch2 = audio.play_voice("paloma_welcome_1.ogg")
+        assert ch2 is not None
+        assert abs(audio._duck_factor - audio.duck_level) < 0.02, (
+            f"Ducking saltó al cambiar entre voces consecutivas: _duck_factor={audio._duck_factor}"
+        )
+        assert abs(ch2.get_volume() - 1.0) < 0.01
+    finally:
+        audio.stop_voice(fade_ms=0)
+        audio.sound_enabled = orig_sound
+        audio.music_enabled = orig_music
+        audio.set_music_volume(orig_vol)
+
+    rendered_intro = []
+    orig_sysfont = pygame.font.SysFont
+
+    class SpyFont:
+        def __init__(self, real):
+            self._real = real
+
+        def render(self, text, antialias, color, background=None):
+            rendered_intro.append(text)
+            return self._real.render(text, antialias, color, background)
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    monkeypatch.setattr(pygame.font, "SysFont", lambda n, s, bold=False, italic=False: SpyFont(orig_sysfont(n, s, bold, italic)))
+    ui = StoryMapUI(1920, 1080)
+    surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+    bust = pygame.Surface((140, 140), pygame.SRCALPHA)
+    guide = pygame.Surface((120, 120), pygame.SRCALPHA)
+    ui.render_intro_dialog(surf, bust, guide)
+    joined = "\n".join(rendered_intro)
+    assert "\U0001f54a" not in joined and "\u25b6" not in joined

@@ -631,13 +631,23 @@ class SideNavDrawer:
             f_as = self.fuenteAsuntoMsg if compact_msg else self.fuenteDetalleCompacto
             f_cuerpo = self.fuenteDetalleMsg if compact_msg else self.fuenteDetalleCompacto
 
+            max_header_w = card_w - 42
+
             y_rem = 3 if compact_msg else 7
             txt_rem = f_rem.render(msg.get("remitente", "Aviso"), True, cafeOscuro)
+            if txt_rem.get_width() > max_header_w:
+                orig_rh = txt_rem.get_height()
+                txt_rem = pygame.transform.smoothscale_by(txt_rem, max_header_w / float(txt_rem.get_width()))
+                y_rem += max(0, (orig_rh - txt_rem.get_height()) // 2)
             card_surf.blit(txt_rem, (32, y_rem))
             rem_bb = txt_rem.get_bounding_rect().move(32, y_rem)
 
             y_as = 31 if compact_msg else 37
             txt_as = f_as.render(msg.get("asunto", ""), True, cafe)
+            if txt_as.get_width() > max_header_w:
+                orig_ah = txt_as.get_height()
+                txt_as = pygame.transform.smoothscale_by(txt_as, max_header_w / float(txt_as.get_width()))
+                y_as += max(0, (orig_ah - txt_as.get_height()) // 2)
             card_surf.blit(txt_as, (32, y_as))
             as_bb = txt_as.get_bounding_rect().move(32, y_as)
 
@@ -732,7 +742,13 @@ class SideNavDrawer:
 
             t_col = cafeOscuro if comp else cafe
             txt_t = self.fuenteNombreCompacto.render(mis.get("titulo", "Misión"), True, t_col)
-            card_surf.blit(txt_t, (48, 9 if compact_mis else 14))
+            max_title_w = card_w - 58
+            y_title = 9 if compact_mis else 14
+            if txt_t.get_width() > max_title_w:
+                orig_th = txt_t.get_height()
+                txt_t = pygame.transform.smoothscale_by(txt_t, max_title_w / float(txt_t.get_width()))
+                y_title += max(0, (orig_th - txt_t.get_height()) // 2)
+            card_surf.blit(txt_t, (48, y_title))
 
             d_col = (90, 130, 100) if comp else cafeApagado
             renglones = self.partirTexto(mis.get("desc", ""), self.fuenteDetalleCompacto, card_w - 60)

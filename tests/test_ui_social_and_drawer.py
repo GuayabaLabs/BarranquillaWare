@@ -278,6 +278,12 @@ def test_mensajes_section_no_text_overlap_and_fits_panel():
                     f"count={count} card={idx}: líneas de cuerpo se solapan ({card['body_inks']})"
                 )
             assert card["rem_ink"].top >= 2
+            assert card["rem_ink"].right <= c_rect.width - 8, (
+                f"count={count} card={idx}: remitente desborda a la derecha ({card['rem_ink']} en w={c_rect.width})"
+            )
+            assert card["as_ink"].right <= c_rect.width - 8, (
+                f"count={count} card={idx}: asunto desborda a la derecha ({card['as_ink']} en w={c_rect.width})"
+            )
             assert card["body_inks"][-1].bottom <= c_rect.height - 2, (
                 f"count={count} card={idx}: cuerpo toca borde inferior ({card['body_inks'][-1]} en h={c_rect.height})"
             )
@@ -288,3 +294,23 @@ def test_mensajes_section_no_text_overlap_and_fits_panel():
         assert m["pie_ink"].bottom < m["panel_rect"].bottom - 20, (
             f"count={count}: pie demasiado cerca del borde inferior ({m['pie_ink']} vs {m['panel_rect']})"
         )
+
+    # Caso extremo: remitentes y asuntos largos en 6 tarjetas compactas tampoco deben recortarse
+    drawer.ponerMensajes([
+        {
+            "remitente": "Departamento de Bienestar Digital Uninorte",
+            "asunto": "Alerta urgente sobre desinformación viral en redes locales",
+            "cuerpo": "Texto largo de prueba para verificar ajuste de ancho sin desbordes ni solapamientos.",
+            "leido": (i % 2 == 0),
+        }
+        for i in range(6)
+    ])
+    surf.fill((0, 0, 0, 0))
+    drawer.render(surf)
+    m_long = drawer.last_mensajes_layout_metrics
+    for idx, card in enumerate(m_long["cards"]):
+        c_rect = card["card_rect"]
+        assert card["rem_ink"].right <= c_rect.width - 8, f"long card={idx} remitente desbordado: {card['rem_ink']}"
+        assert card["as_ink"].right <= c_rect.width - 8, f"long card={idx} asunto desbordado: {card['as_ink']}"
+        assert card["rem_ink"].bottom < card["as_ink"].top
+        assert card["as_ink"].bottom < card["body_inks"][0].top

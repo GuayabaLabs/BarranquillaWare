@@ -425,7 +425,7 @@ class AudioManager:
             return True
         return self._voice_end_time > now
 
-    def stop_voice(self, fade_ms: int = 80) -> None:
+    def stop_voice(self, fade_ms: int = 80, preserve_ducking: bool = False) -> None:
         """Detiene limpiamente la voz actual (con fade opcional) evitando cortes secos o solapamientos."""
         ch = getattr(self, "_voice_channel", None)
         if ch is not None:
@@ -439,10 +439,11 @@ class AudioManager:
         self._voice_channel = None
         self._voice_sound = None
         self._voice_end_time = 0.0
-        self._duck_target = 1.0
-        if fade_ms <= 0 and self._duck_factor < 1.0:
-            self._duck_factor = 1.0
-            self.sync_music_volume()
+        if not preserve_ducking:
+            self._duck_target = 1.0
+            if fade_ms <= 0 and self._duck_factor < 1.0:
+                self._duck_factor = 1.0
+                self.sync_music_volume()
 
     def update(self, dt: float) -> None:
         """Actualiza el ducking dinámico de música según la reproducción de voz."""
@@ -495,8 +496,8 @@ class AudioManager:
         if target_sound is None:
             return None
 
-        # Detener cualquier voz previa antes de reproducir la nueva
-        self.stop_voice(fade_ms=0)
+        # Detener cualquier voz previa conservando el ducking activo para no dar saltos de BGM
+        self.stop_voice(fade_ms=0, preserve_ducking=True)
 
         volume = max(0.0, min(1.0, self.sfx_volume * volume_scale))
         try:
@@ -507,6 +508,7 @@ class AudioManager:
         ch = self._ensure_voice_channel()
         if ch is not None:
             try:
+                ch.set_volume(1.0)
                 ch.play(target_sound)
             except Exception:
                 ch = self.play_sfx(target_sound, volume_scale)
