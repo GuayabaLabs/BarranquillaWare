@@ -26,7 +26,7 @@ class AudioManager:
         self._bgm_volume_scale: float = 1.0
         self._duck_factor: float = 1.0
         self._duck_target: float = 1.0
-        self.duck_level: float = 0.32
+        self.duck_level: float = 0.26
         self._voice_cache: Dict[Tuple[str, Optional[tuple]], pygame.mixer.Sound] = {}
         self._voice_channel: Optional[pygame.mixer.Channel] = None
         self._voice_end_time: float = 0.0
@@ -437,6 +437,7 @@ class AudioManager:
             except Exception:
                 pass
         self._voice_channel = None
+        self._voice_sound = None
         self._voice_end_time = 0.0
         self._duck_target = 1.0
         if fade_ms <= 0 and self._duck_factor < 1.0:
@@ -459,6 +460,21 @@ class AudioManager:
         elif self._duck_factor != target:
             self._duck_factor = target
             self.sync_music_volume()
+
+        canal_esc = getattr(self, "canalEscritura", None)
+        sonido_esc = getattr(self, "sonidoEscritura", None)
+        if canal_esc is not None and sonido_esc:
+            try:
+                if canal_esc.get_busy():
+                    escritura_scale = 0.35 if active else 0.7
+                    target_esc_vol = (
+                        max(0.0, min(1.0, self.sfx_volume * escritura_scale))
+                        if self.sound_enabled else 0.0
+                    )
+                    if abs(float(sonido_esc.get_volume()) - target_esc_vol) > 0.01:
+                        sonido_esc.set_volume(target_esc_vol)
+            except Exception:
+                pass
 
     def play_voice(
         self,

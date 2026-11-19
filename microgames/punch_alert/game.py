@@ -569,7 +569,7 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
-        pass
+        super().exit()
 
     def add_trauma(self, amount: float) -> None:
         """Agrega trauma con clamp en 1.0."""

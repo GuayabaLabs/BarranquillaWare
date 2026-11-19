@@ -1077,7 +1077,10 @@ class Fritanga84Microgame(BaseMicrogame):
         if not self.musicaPausada:
             return
         try:
-            pygame.mixer.music.unpause()
+            if getattr(self.audio, "music_enabled", True):
+                pygame.mixer.music.unpause()
+                if hasattr(self.audio, "sync_music_volume"):
+                    self.audio.sync_music_volume()
         except Exception:
             pass
         self.musicaPausada = False
@@ -1200,7 +1203,11 @@ class Fritanga84Microgame(BaseMicrogame):
         try:
             if not pygame.mixer.get_init() or not getattr(self.audio, "music_enabled", True):
                 return
-            base = getattr(self.audio, "music_volume", 0.7) * getattr(self.audio, "_bgm_volume_scale", 1.0)
+            if abs(factor - 1.0) < 1e-4 and hasattr(self.audio, "sync_music_volume"):
+                self.audio.sync_music_volume()
+                return
+            duck = getattr(self.audio, "_duck_factor", 1.0)
+            base = getattr(self.audio, "music_volume", 0.7) * getattr(self.audio, "_bgm_volume_scale", 1.0) * duck
             pygame.mixer.music.set_volume(max(0.0, min(1.0, base * factor)))
         except Exception:
             pass
@@ -1308,8 +1315,17 @@ class Fritanga84Microgame(BaseMicrogame):
     def actualizarSonido(self) -> None:
         self.ultimoUpdate = pygame.time.get_ticks()
         if self.canalTrol is not None:
-            self.canalTrol.unpause()
-        if self.sonidoAceite is None or not getattr(self.audio, "sound_enabled", True):
+            if getattr(self.audio, "music_enabled", True):
+                self.canalTrol.set_volume(max(0.0, min(1.0, getattr(self.audio, "music_volume", 0.7))))
+                self.canalTrol.unpause()
+            else:
+                self.canalTrol.pause()
+        if not getattr(self.audio, "sound_enabled", True):
+            if self.canalAceite is not None:
+                self.canalAceite.set_volume(0.0)
+                self.canalAceite.pause()
+            return
+        if self.sonidoAceite is None:
             return
         if self.canalAceite is None:
             self.canalAceite = self.sonidoAceite.play(loops=-1)

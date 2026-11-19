@@ -293,6 +293,10 @@ class BuenavistaCineMicrogame(BaseMicrogame):
         if hasattr(self, "shh_detector"):
             self.shh_detector.stop()
 
+    def exit(self) -> None:
+        self.cleanup()
+        super().exit()
+
     def update(self, dt: float) -> None:
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt

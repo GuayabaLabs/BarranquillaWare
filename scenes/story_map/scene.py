@@ -187,14 +187,17 @@ class StoryMapScene(BaseState):
         self._sync_drawer_data()
 
     def _is_poi_cleared(self, poi_key: str, completed_games: list) -> bool:
-        """Determina si un POI fue despejado usando tanto microgame_id como sus etapas registradas."""
+        """Determina si un POI fue despejado usando sus etapas registradas (o alias de microjuego)."""
         done_set = set(completed_games or [])
+        stages = STORY_LEVEL_STAGES.get(poi_key, [])
+        if stages and all(st["id"] in done_set for st in stages):
+            return True
+        stage_ids = {st["id"] for st in stages}
         poi_info = self.poi_registry.get(poi_key, {})
         m_id = poi_info.get("microgame_id")
-        if m_id and m_id in done_set:
+        if m_id and m_id not in stage_ids and m_id in done_set:
             return True
-        stages = STORY_LEVEL_STAGES.get(poi_key, [])
-        return bool(stages and all(st["id"] in done_set for st in stages))
+        return False
 
     def _count_completed_campaign_levels(self, completed_microgames: Optional[list] = None) -> int:
         """Cuenta cuántos de los 5 niveles principales de la Historia han sido completados."""

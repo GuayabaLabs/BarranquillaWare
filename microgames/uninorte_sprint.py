@@ -1025,7 +1025,11 @@ class UninorteSprintMicrogame(BaseMicrogame):
                 self.tiempoAviso += dt
                 self.ultimoUpdate = pygame.time.get_ticks()
                 if self.canalTictac is not None:
-                    self.canalTictac.unpause()
+                    if getattr(self.audio, "sound_enabled", True):
+                        self.canalTictac.set_volume(max(0.0, min(1.0, getattr(self.audio, "sfx_volume", 0.8))))
+                        self.canalTictac.unpause()
+                    else:
+                        self.callarTictac()
                 self.revisarGestosAviso(dt)
                 return
             self.tiempoJugado += dt

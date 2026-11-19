@@ -120,9 +120,11 @@ class CoasterLauncherState(BaseState):
             self.game.camara.detener()
         self.game = None
         self.legacy_surface = None
-        AudioManager.get_instance().sonarEscritura(False)
-        if pygame.mixer.get_init():
+        audio = AudioManager.get_instance()
+        audio.sonarEscritura(False)
+        if pygame.mixer.get_init() and audio.music_enabled:
             pygame.mixer.music.unpause()
+            audio.sync_music_volume()
         if getattr(self, "_shared_camera", None):
             self._shared_camera.resume()
 
