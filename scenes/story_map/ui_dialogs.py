@@ -129,6 +129,26 @@ class StoryMapUI:
             surface.blit(box_surf, (total_x, total_y))
             surface.blit(pal_surf, (pal_x, pal_y))
 
+    @staticmethod
+    def _build_victory_star(size: int = 34) -> pygame.Surface:
+        """Genera una estrella dorada vectorial suavizada (4x supersampling) sin glifos de fuente."""
+        scale = 4
+        canvas_sz = size * scale
+        star_hi = pygame.Surface((canvas_sz, canvas_sz), pygame.SRCALPHA)
+        cx = cy = canvas_sz / 2.0
+        outer_r = canvas_sz * 0.44
+        inner_r = canvas_sz * 0.19
+        pts = []
+        for i in range(10):
+            r = outer_r if i % 2 == 0 else inner_r
+            angle = -math.pi / 2.0 + i * (math.pi / 5.0)
+            pts.append((cx + math.cos(angle) * r, cy + math.sin(angle) * r))
+        pygame.draw.polygon(star_hi, (255, 220, 65), pts)
+        highlight_pts = [pts[0], pts[1], (cx, cy), pts[9], pts[8], pts[7]]
+        pygame.draw.polygon(star_hi, (255, 246, 165), highlight_pts)
+        pygame.draw.polygon(star_hi, (195, 135, 25), pts, width=max(2, scale))
+        return pygame.transform.smoothscale(star_hi, (size, size))
+
     def render_victory_modal(
         self,
         surface: pygame.Surface,
@@ -158,20 +178,47 @@ class StoryMapUI:
         font_v_sub = pygame.font.SysFont("Arial Black, Impact", 22)
         font_v_body = pygame.font.SysFont("Arial, sans-serif", 17)
 
-        txt_vt = font_v_title.render("★ ¡ORGULLO DE CURRAMBA! ★", True, (255, 225, 80))
-        vic_surf.blit(txt_vt, txt_vt.get_rect(center=(vw // 2, 70)))
+        title_text = "¡ORGULLO DE CURRAMBA!"
+        txt_vt = font_v_title.render(title_text, True, (255, 225, 80))
+        vt_rect = txt_vt.get_rect(center=(vw // 2, 70))
+        vic_surf.blit(txt_vt, vt_rect)
+
+        star_size = 34
+        if getattr(self, "_victory_star_surf", None) is None:
+            self._victory_star_surf = self._build_victory_star(star_size)
+        star_gap = 18
+        left_star_rect = self._victory_star_surf.get_rect(
+            center=(max(star_size // 2 + 24, vt_rect.left - star_gap - star_size // 2), vt_rect.centery)
+        )
+        right_star_rect = self._victory_star_surf.get_rect(
+            center=(min(vw - star_size // 2 - 24, vt_rect.right + star_gap + star_size // 2), vt_rect.centery)
+        )
+        vic_surf.blit(self._victory_star_surf, left_star_rect)
+        vic_surf.blit(self._victory_star_surf, right_star_rect)
 
         txt_vs = font_v_sub.render("¡COMPLETASTE LOS 5 NIVELES DE LA HISTORIA!", True, (255, 255, 255))
         vic_surf.blit(txt_vs, txt_vs.get_rect(center=(vw // 2, 135)))
 
-        badge_w, badge_h = 460, 48
+        font_badge = pygame.font.SysFont("Arial Black, Impact", 20)
+        txt_b = font_badge.render("BIENESTAR DIGITAL: 100% EN ARMONÍA", True, (230, 255, 240))
+        badge_w = min(vw - 80, max(540, txt_b.get_width() + 64))
+        badge_h = max(50, txt_b.get_height() + 18)
         badge_s = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
         pygame.draw.rect(badge_s, (35, 130, 70), (0, 0, badge_w, badge_h), border_radius=14)
         pygame.draw.rect(badge_s, (110, 250, 160), (0, 0, badge_w, badge_h), width=2, border_radius=14)
-        font_badge = pygame.font.SysFont("Arial Black, Impact", 20)
-        txt_b = font_badge.render("BIENESTAR DIGITAL: 100% EN ARMONÍA", True, (230, 255, 240))
-        badge_s.blit(txt_b, txt_b.get_rect(center=(badge_w // 2, 24)))
-        vic_surf.blit(badge_s, badge_s.get_rect(center=(vw // 2, 205)))
+        badge_s.blit(txt_b, txt_b.get_rect(center=(badge_w // 2, badge_h // 2)))
+        badge_rect = badge_s.get_rect(center=(vw // 2, 205))
+        vic_surf.blit(badge_s, badge_rect)
+
+        self.last_victory_layout_metrics = {
+            "title_text": title_text,
+            "title_rect": vt_rect.move(vx, vy),
+            "left_star_rect": left_star_rect.move(vx, vy),
+            "right_star_rect": right_star_rect.move(vx, vy),
+            "badge_rect": badge_rect.move(vx, vy),
+            "badge_text_size": txt_b.get_size(),
+            "badge_size": (badge_w, badge_h),
+        }
 
         desc = [
             "Recorriste Barranquilla junto a la Paloma aprendiendo a desconectar con calma:",

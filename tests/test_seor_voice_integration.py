@@ -526,6 +526,14 @@ def test_fritanga_finish_stops_oil_and_troll_channels_and_aleta_story_consistenc
     surf = pygame.Surface((1920, 1080))
     scene._render_victory_modal(surf)
     joined = "\n".join(rendered_texts)
+    assert "\u2605" not in joined
+    assert "¡ORGULLO DE CURRAMBA!" in joined
     assert "5 NIVELES" in joined
     assert "Aleta del Tiburón" in joined
     assert "Uninorte" in joined and "Buenavista" in joined and "Metropolitano" in joined and "Cortissoz" in joined
+
+    vm = scene.story_ui.last_victory_layout_metrics
+    assert vm["left_star_rect"].right < vm["title_rect"].left
+    assert vm["title_rect"].right < vm["right_star_rect"].left
+    assert vm["badge_size"][0] >= vm["badge_text_size"][0] + 48
+    assert vm["badge_size"][1] >= vm["badge_text_size"][1] + 16

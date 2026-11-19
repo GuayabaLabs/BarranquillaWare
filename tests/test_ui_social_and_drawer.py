@@ -238,3 +238,53 @@ def test_drawer_missions_messages_state_and_main_menu_logros():
     finally:
         audio.stop_voice(fade_ms=0)
         settings.reset_story_progress()
+
+
+def test_mensajes_section_no_text_overlap_and_fits_panel():
+    """Valida que título, subtítulo, remitente, asunto, cuerpo y pie en Mensajes no se solapen ni recorten."""
+    scene = StoryMapScene(character_id="westcol")
+    drawer = scene.side_drawer
+    drawer.is_open = True
+    drawer.anim_t = 1.0
+    drawer.mostrarMensajes()
+    surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+
+    base_msgs = list(drawer.mensajes)
+    assert len(base_msgs) == 6
+
+    for count in (6, 5, 3, 0):
+        drawer.ponerMensajes(base_msgs[:count] if count else [])
+        surf.fill((0, 0, 0, 0))
+        drawer.render(surf)
+        m = drawer.last_mensajes_layout_metrics
+        assert len(m["cards"]) == (count if count else 6)
+
+        assert m["titulo_ink"].bottom < m["sub_ink"].top, (
+            f"count={count}: título solapa subtítulo ({m['titulo_ink']} vs {m['sub_ink']})"
+        )
+        assert m["sub_ink"].bottom < m["cards"][0]["card_rect"].top, (
+            f"count={count}: subtítulo solapa primera tarjeta"
+        )
+        for idx, card in enumerate(m["cards"]):
+            c_rect = card["card_rect"]
+            assert card["rem_ink"].bottom < card["as_ink"].top, (
+                f"count={count} card={idx}: remitente solapa asunto ({card['rem_ink']} vs {card['as_ink']})"
+            )
+            assert card["as_ink"].bottom < card["body_inks"][0].top, (
+                f"count={count} card={idx}: asunto solapa cuerpo ({card['as_ink']} vs {card['body_inks'][0]})"
+            )
+            if len(card["body_inks"]) > 1:
+                assert card["body_inks"][0].bottom < card["body_inks"][1].top, (
+                    f"count={count} card={idx}: líneas de cuerpo se solapan ({card['body_inks']})"
+                )
+            assert card["rem_ink"].top >= 2
+            assert card["body_inks"][-1].bottom <= c_rect.height - 2, (
+                f"count={count} card={idx}: cuerpo toca borde inferior ({card['body_inks'][-1]} en h={c_rect.height})"
+            )
+
+        assert m["cards"][-1]["card_rect"].bottom < m["pie_ink"].top, (
+            f"count={count}: última tarjeta solapa pie ({m['cards'][-1]['card_rect']} vs {m['pie_ink']})"
+        )
+        assert m["pie_ink"].bottom < m["panel_rect"].bottom - 20, (
+            f"count={count}: pie demasiado cerca del borde inferior ({m['pie_ink']} vs {m['panel_rect']})"
+        )

@@ -116,10 +116,14 @@ class SideNavDrawer:
         self.trofeoColorCompacto = assets.cargarTrofeo(78)
         self.trofeoGrisCompacto = assets.cargarTrofeo(78, enGris=True)
         self.fuenteTitulo = assets.cargarFuenteCuento(62)
+        self.fuenteTituloMensajes = assets.cargarFuenteCuento(56)
         self.fuenteNombre = assets.cargarFuenteCuento(34)
         self.fuenteDetalle = assets.cargarFuenteCuento(25)
         self.fuenteNombreCompacto = assets.cargarFuenteCuento(21)
         self.fuenteDetalleCompacto = assets.cargarFuenteCuento(15)
+        self.fuenteNombreMsg = assets.cargarFuenteCuento(19)
+        self.fuenteAsuntoMsg = assets.cargarFuenteCuento(14)
+        self.fuenteDetalleMsg = assets.cargarFuenteCuento(13)
         # Reloj del destello que pasa por los trofeos ganados
         self.tiempoBrillo: float = 0.0
 
@@ -577,8 +581,9 @@ class SideNavDrawer:
         cafeApagado = (160, 138, 118)
         top = self.panel_top_y
 
-        titulo = self.fuenteTitulo.render("Mensajes", True, cafeOscuro)
-        surface.blit(titulo, titulo.get_rect(center=(panelX + 200, top + 75)))
+        titulo = self.fuenteTituloMensajes.render("Mensajes", True, cafeOscuro)
+        titulo_rect = titulo.get_rect(center=(panelX + 200, top + 60))
+        surface.blit(titulo, titulo_rect)
 
         cerrar = self.botonCerrar
         if self.hoverBotonCerrar:
@@ -586,7 +591,8 @@ class SideNavDrawer:
         surface.blit(cerrar, cerrar.get_rect(center=self.rectBotonCerrar(panelX).center))
 
         sub = self.fuenteDetalleCompacto.render("Alertas y consejos de Curramba", True, cafeApagado)
-        surface.blit(sub, sub.get_rect(center=(panelX + 200, top + 115)))
+        sub_rect = sub.get_rect(center=(panelX + 200, top + 114))
+        surface.blit(sub, sub_rect)
 
         mensajes_a_mostrar = self.mensajes if self.mensajes else [
             {"remitente": "Paloma de Curramba", "asunto": "¡Bienvenido a BarranquillaWare!", "cuerpo": "Usa las redes con cabeza fría. ¡No todo en el feed es real!", "leido": True},
@@ -600,14 +606,15 @@ class SideNavDrawer:
         visibles = mensajes_a_mostrar[:6]
         n_msg = len(visibles)
         if n_msg <= 4:
-            card_h, card_gap, card_y = 118, 16, top + 140
+            card_h, card_gap, card_y = 122, 16, top + 136
         elif n_msg == 5:
-            card_h, card_gap, card_y = 98, 10, top + 136
+            card_h, card_gap, card_y = 106, 10, top + 134
         else:
-            card_h, card_gap, card_y = 84, 7, top + 134
+            card_h, card_gap, card_y = 93, 5, top + 132
 
         card_w = 310
         card_x = panelX + 45
+        cards_metrics = []
         for msg in visibles:
             card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
             bg_color = (255, 252, 244, 215) if msg.get("leido", False) else (255, 245, 235, 240)
@@ -615,31 +622,56 @@ class SideNavDrawer:
             border_color = (205, 175, 145, 180) if msg.get("leido", False) else (226, 75, 58, 200)
             pygame.draw.rect(card_surf, border_color, (0, 0, card_w, card_h), width=2, border_radius=12)
 
-            compact_msg = card_h < 95
-            dot_y = 16 if compact_msg else 22
+            compact_msg = card_h < 96
+            dot_y = 17 if compact_msg else 20
             dot_color = (160, 138, 118) if msg.get("leido", False) else (226, 75, 58)
             pygame.draw.circle(card_surf, dot_color, (18, dot_y), 5)
 
-            txt_rem = self.fuenteNombreCompacto.render(msg.get("remitente", "Aviso"), True, cafeOscuro)
-            card_surf.blit(txt_rem, (32, 7 if compact_msg else 12))
+            f_rem = self.fuenteNombreMsg if compact_msg else self.fuenteNombreCompacto
+            f_as = self.fuenteAsuntoMsg if compact_msg else self.fuenteDetalleCompacto
+            f_cuerpo = self.fuenteDetalleMsg if compact_msg else self.fuenteDetalleCompacto
 
-            txt_as = self.fuenteDetalleCompacto.render(msg.get("asunto", ""), True, cafe)
-            card_surf.blit(txt_as, (32, 25 if compact_msg else 34))
+            y_rem = 3 if compact_msg else 7
+            txt_rem = f_rem.render(msg.get("remitente", "Aviso"), True, cafeOscuro)
+            card_surf.blit(txt_rem, (32, y_rem))
+            rem_bb = txt_rem.get_bounding_rect().move(32, y_rem)
+
+            y_as = 31 if compact_msg else 37
+            txt_as = f_as.render(msg.get("asunto", ""), True, cafe)
+            card_surf.blit(txt_as, (32, y_as))
+            as_bb = txt_as.get_bounding_rect().move(32, y_as)
 
             cuerpo = msg.get("cuerpo", "")
-            renglones = self.partirTexto(cuerpo, self.fuenteDetalleCompacto, card_w - 36)
-            y_cuerpo = 45 if compact_msg else 56
-            salto_cuerpo = 16 if compact_msg else 18
+            renglones = self.partirTexto(cuerpo, f_cuerpo, card_w - 36)
+            y_cuerpo = 51 if compact_msg else 58
+            salto_cuerpo = 18 if compact_msg else 20
+            body_bbs = []
             for r in renglones[:2]:
-                txt_c = self.fuenteDetalleCompacto.render(r, True, cafeApagado)
+                txt_c = f_cuerpo.render(r, True, cafeApagado)
                 card_surf.blit(txt_c, (18, y_cuerpo))
+                body_bbs.append(txt_c.get_bounding_rect().move(18, y_cuerpo))
                 y_cuerpo += salto_cuerpo
 
+            cards_metrics.append({
+                "card_rect": pygame.Rect(card_x, card_y, card_w, card_h),
+                "rem_ink": rem_bb,
+                "as_ink": as_bb,
+                "body_inks": body_bbs,
+            })
             surface.blit(card_surf, (card_x, card_y))
             card_y += card_h + card_gap
 
         pie = self.fuenteDetalleCompacto.render(f"{len(visibles)} avisos registrados", True, cafe)
-        surface.blit(pie, pie.get_rect(center=(panelX + 200, top + 705)))
+        pie_rect = pie.get_rect(center=(panelX + 200, top + 733))
+        surface.blit(pie, pie_rect)
+
+        self.last_mensajes_layout_metrics = {
+            "titulo_ink": titulo.get_bounding_rect().move(titulo_rect.topleft),
+            "sub_ink": sub.get_bounding_rect().move(sub_rect.topleft),
+            "pie_ink": pie.get_bounding_rect().move(pie_rect.topleft),
+            "panel_rect": pygame.Rect(panelX, top, self.panel_w, self.panel_h),
+            "cards": cards_metrics,
+        }
 
     def dibujarSeccionMisiones(self, surface: pygame.Surface, panelX: int) -> None:
         """Dibuja los objetivos de campaña y misiones en la ciudad."""
