@@ -114,21 +114,35 @@ def test_story_map_triggers_seor_paloma_voices():
         scene._trigger_dialog_voice(0)
         assert "paloma_saludo.ogg" in played_voices
 
-        # 4. Diálogo previo al reto (ánimo) -> paloma_animo.ogg
+        # 4. Diálogo específico de nivel -> paloma_uninorte_0.ogg / win_0 / lose_0
         played_voices.clear()
         scene.paloma_dialog_voice_prefix = "paloma_uninorte"
         scene._trigger_dialog_voice(0)
-        assert "paloma_animo.ogg" in played_voices
+        assert "paloma_uninorte_0.ogg" in played_voices
 
-        # 5. Diálogo de victoria de nivel -> paloma_victoria.ogg
         played_voices.clear()
         scene.paloma_dialog_voice_prefix = "paloma_uninorte_win"
         scene._trigger_dialog_voice(0)
-        assert "paloma_victoria.ogg" in played_voices
+        assert "paloma_uninorte_win_0.ogg" in played_voices
 
-        # 6. Diálogo de derrota de nivel -> paloma_derrota.ogg
         played_voices.clear()
         scene.paloma_dialog_voice_prefix = "paloma_uninorte_lose"
+        scene._trigger_dialog_voice(0)
+        assert "paloma_uninorte_lose_0.ogg" in played_voices
+
+        # 5. Fallback genérico si un POI no tiene clip específico
+        played_voices.clear()
+        scene.paloma_dialog_voice_prefix = "paloma_generico"
+        scene._trigger_dialog_voice(0)
+        assert "paloma_animo.ogg" in played_voices
+
+        played_voices.clear()
+        scene.paloma_dialog_voice_prefix = "paloma_generico_win"
+        scene._trigger_dialog_voice(0)
+        assert "paloma_victoria.ogg" in played_voices
+
+        played_voices.clear()
+        scene.paloma_dialog_voice_prefix = "paloma_generico_lose"
         scene._trigger_dialog_voice(0)
         assert "paloma_derrota.ogg" in played_voices
     finally:
@@ -232,3 +246,22 @@ def test_fritanga_triggers_specific_reflection_voices():
         assert "refl_fritanga_rabia.ogg" in played
     finally:
         audio.play_voice = orig_play_voice
+
+
+PALOMA_POI_VOICE_FILES = [
+    f"paloma_{poi}_{suffix}"
+    for poi in ("uninorte", "buenavista", "metropolitano", "aeropuerto", "aleta", "malecon")
+    for suffix in ("0.ogg", "1.ogg", "win_0.ogg", "lose_0.ogg")
+]
+
+
+def test_paloma_poi_voice_files_exist_and_playable():
+    """Verifica que los 24 audios de las 6 paradas de la Paloma existan y sean reproducibles."""
+    pygame.mixer.init()
+    for filename in PALOMA_POI_VOICE_FILES:
+        path_voces = os.path.join("assets", "voces", filename)
+        path_assets = os.path.join("assets", filename)
+        assert os.path.isfile(path_voces), f"Falta {path_voces}"
+        assert os.path.isfile(path_assets), f"Falta {path_assets}"
+        snd = pygame.mixer.Sound(path_voces)
+        assert 7.0 <= snd.get_length() <= 22.0, f"Audio {filename} fuera de rango ({snd.get_length()}s)"
