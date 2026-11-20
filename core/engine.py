@@ -355,6 +355,8 @@ class Engine:
 
         if self.enable_gl and self.gl_renderer is not None:
             self.state_machine.render(self.virtual_surface)
+            if not getattr(current_state, "_draws_voice_badge", False):
+                AudioManager.get_instance().render_voice_muted_badge(self.virtual_surface)
             # El lapicero va DESPUÉS de la escena para que no quede oculto debajo del fondo.
             self._render_camera_cursor(self.virtual_surface)
 
@@ -378,6 +380,8 @@ class Engine:
             )
         else:
             self.state_machine.render(self.virtual_surface)
+            if not getattr(current_state, "_draws_voice_badge", False):
+                AudioManager.get_instance().render_voice_muted_badge(self.virtual_surface)
             if has_sw_particles:
                 particles.render_software(self.virtual_surface)
             self._render_camera_cursor(self.virtual_surface)

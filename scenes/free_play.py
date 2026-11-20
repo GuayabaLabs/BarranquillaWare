@@ -393,9 +393,9 @@ class FreePlayScene(BaseState):
             character_id=self.character_id,
             on_complete_callback=self._on_game_complete,
         )
-        microgame.pause_restart_callback = lambda: self._launch_game(game_idx)
-        microgame.pause_menu_callback = lambda: self._on_game_complete(False)
-        microgame.pause_return_callback = lambda: self._on_game_complete(False)
+        microgame.pause_restart_callback = lambda idx=game_idx: self._restart_from_pause(idx)
+        microgame.pause_menu_callback = lambda: self._exit_from_pause()
+        microgame.pause_return_callback = lambda: self._exit_from_pause()
         self._active_microgame = microgame
 
         if hasattr(self, "state_machine") and self.state_machine:
@@ -480,6 +480,26 @@ class FreePlayScene(BaseState):
 
         # 5. Botón Volver
         self.btn_back.render(surface)
+        self._draws_voice_badge = True
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface, right_top=(1875, 108))
+
+    def _pop_pause_states(self) -> None:
+        if self.state_machine:
+            from core.microgame_pause import MicrogamePauseState
+            while self.state_machine._states and isinstance(self.state_machine._states[-1], MicrogamePauseState):
+                self.state_machine.pop_state()
+
+    def _exit_from_pause(self) -> None:
+        self._pop_pause_states()
+        self._on_game_complete(False)
+
+    def _restart_from_pause(self, game_idx: int) -> None:
+        self._pop_pause_states()
+        if self.state_machine and self in self.state_machine._states:
+            while len(self.state_machine._states) > 1 and self.state_machine._states[-1] is not self:
+                self.state_machine.pop_state()
+        self._launch_game(game_idx)
 
     def _render_game_card(
         self,

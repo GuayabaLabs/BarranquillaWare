@@ -1390,6 +1390,8 @@ class Fritanga84Microgame(BaseMicrogame):
             c["t"] += dt
 
     def update(self, dt: float) -> None:
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.shake_timer > 0.0:
             self.shake_timer = max(0.0, self.shake_timer - dt)
             fuerza = self.shake_intensity * (self.shake_timer / max(0.01, self.shake_duration))

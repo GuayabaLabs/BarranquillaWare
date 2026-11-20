@@ -334,8 +334,8 @@ class ArcadeModeScene(BaseState):
                 # Estos juegos llevan su propio reloj, sincronizado con la barra común.
                 microgame.game.tiempo = fair_time
 
-        microgame.pause_return_callback = self._exit_arcade
-        microgame.pause_menu_callback = self._exit_arcade
+        microgame.pause_return_callback = self._exit_from_pause
+        microgame.pause_menu_callback = self._exit_from_pause
         self._active_microgame = microgame
 
         if hasattr(self, "state_machine") and self.state_machine:
@@ -437,6 +437,20 @@ class ArcadeModeScene(BaseState):
                 bg_surf.blit(c_surf, (int(cf["x"]), int(cf["y"])))
 
         surface.blit(bg_surf, (ox, oy))
+        self._draws_voice_badge = True
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface, right_top=(1880, 128))
+
+    def _exit_from_pause(self) -> None:
+        if self.state_machine:
+            from core.microgame import BaseMicrogame
+            from core.microgame_pause import MicrogamePauseState
+            while self.state_machine._states and isinstance(
+                self.state_machine._states[-1],
+                (MicrogamePauseState, BaseMicrogame),
+            ):
+                self.state_machine.pop_state()
+        self._exit_arcade()
 
     def _render_hud(self, surface: pygame.Surface) -> None:
         # A) Panel acuarela de Récord y Racha arriba a la izquierda

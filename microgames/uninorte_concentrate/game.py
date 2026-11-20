@@ -466,6 +466,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         Sobreescribe el ciclo de actualización para que el juego dure exactamente los 25 segundos
         completos, evaluando victoria o derrota según si la tarea llegó al 100%.
         """
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:

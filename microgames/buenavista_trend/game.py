@@ -385,8 +385,6 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         track_path = os.path.join("assets", self.music_track_name)
         if pygame.mixer.get_init() and os.path.exists(track_path):
             try:
-                if hasattr(self.audio, "stop_voice"):
-                    self.audio.stop_voice(fade_ms=0)
                 pygame.mixer.music.load(track_path)
                 self.audio._bgm_volume_scale = 1.0
                 if hasattr(self.audio, "sync_music_volume"):
@@ -466,6 +464,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     def update(self, dt: float) -> None:
         """Ciclo principal de estados (INTRO -> PLAY -> OUTRO) con victoria de supervivencia a los 30s."""
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:

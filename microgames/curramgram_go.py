@@ -136,6 +136,7 @@ class CurramGramGoMicrogame(BaseMicrogame):
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.audio.play_bgm(MUSIC_TRACK, volume_scale=0.5)
+        super().enter(params)
 
     def _photo_target(self):
         """Apunta al caso más cercano a Cami (para teclado/mando sin mouse)."""

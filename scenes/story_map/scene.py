@@ -1070,9 +1070,10 @@ class StoryMapScene(BaseState):
         )
 
         # Botones de audio tipo toggle dentro del Drawer
-        audio_frames = self.assets.get_audio_button_frames(target_size=64)
+        audio_frames = self.assets.get_audio_button_frames(target_size=60)
+        voice_frames = self.assets.get_voice_button_frames(target_size=60)
         self.btn_drawer_music = UIButton(
-            center_pos=(160, 440),
+            center_pos=(120, 440),
             normal_sprite=audio_frames[0],
             alt_sprite=audio_frames[1],
             is_toggle=True,
@@ -1080,12 +1081,20 @@ class StoryMapScene(BaseState):
             on_click=self.audio.toggle_music
         )
         self.btn_drawer_sound = UIButton(
-            center_pos=(280, 440),
+            center_pos=(220, 440),
             normal_sprite=audio_frames[2],
             alt_sprite=audio_frames[3],
             is_toggle=True,
             initial_toggle_state=self.audio.sound_enabled,
             on_click=self.audio.toggle_sound
+        )
+        self.btn_drawer_voice = UIButton(
+            center_pos=(320, 440),
+            normal_sprite=voice_frames[0],
+            alt_sprite=voice_frames[1],
+            is_toggle=True,
+            initial_toggle_state=self.audio.voice_enabled,
+            on_click=self.audio.toggle_voice
         )
 
         self.drawer_buttons = [
@@ -1093,6 +1102,7 @@ class StoryMapScene(BaseState):
             self.btn_save_game,
             self.btn_drawer_music,
             self.btn_drawer_sound,
+            self.btn_drawer_voice,
             self.btn_calibrate_pointer,
             self.btn_settings,
             self.btn_exit_map
@@ -1288,6 +1298,8 @@ class StoryMapScene(BaseState):
                 if channel is not None:
                     return
 
+        if page_idx > 0 and hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(100)
         if hasattr(self.audio, "play_pigeon") and page_idx == 0:
             self.audio.play_pigeon()
 
@@ -1584,11 +1596,11 @@ class StoryMapScene(BaseState):
         self.state_machine.push_state(self)
         self.request_exit()
 
-    def _launch_microgame(self) -> None:
+    def _launch_microgame(self, preserve_voice: bool = False) -> None:
         """Lanza el desafío exclusivo del distrito activo (soportando niveles de múltiples rondas encadenadas)."""
         self._close_quest_card()
         self.paloma_dialog_open = False
-        if hasattr(self.audio, "stop_voice"):
+        if not preserve_voice and hasattr(self.audio, "stop_voice"):
             self.audio.stop_voice(80)
         poi_info = self.poi_registry.get(self.active_poi, {})
 
@@ -1633,6 +1645,14 @@ class StoryMapScene(BaseState):
             )
         ) if self.state_machine else None
         if hasattr(self, "state_machine") and self.state_machine:
+            prev_state = self.state_machine.current_state
+            if (
+                preserve_voice
+                and prev_state is not None
+                and prev_state is not self
+                and getattr(microgame, "paloma_intro", None) is None
+            ):
+                prev_state.preserve_voice_on_exit = True
             self.state_machine.change_state(microgame)
 
     def _restart_microgame_from_pause(self) -> None:
@@ -1679,7 +1699,7 @@ class StoryMapScene(BaseState):
                     )
                     self._sync_social_hud()
                     # Encadenar directamente la Ronda 2 sin cortar el ritmo con diálogos intermedios
-                    self._launch_microgame()
+                    self._launch_microgame(preserve_voice=True)
                     return
 
             # Nivel completado en su totalidad
@@ -1789,6 +1809,8 @@ class StoryMapScene(BaseState):
             self.camera.stop_drag()
             self.btn_drawer_music.toggle_state = self.audio.music_enabled
             self.btn_drawer_sound.toggle_state = self.audio.sound_enabled
+            if hasattr(self, "btn_drawer_voice"):
+                self.btn_drawer_voice.toggle_state = self.audio.voice_enabled
 
     def _on_save_clicked(self) -> None:
         self.save_current_state(source="manual")
@@ -2504,6 +2526,12 @@ class StoryMapScene(BaseState):
         # Asegurar estado limpio de diálogos y popups
         self.show_intro_dialog = False
         self.show_victory_modal = False
+        if hasattr(self, "btn_drawer_voice"):
+            self.btn_drawer_voice.toggle_state = self.audio.voice_enabled
+
+        # Música continua de exploración sin cortes (iniciar antes o junto a la bienvenida sin cortar voces)
+        cafe_track = "cafe_bistro_mapa.ogg" if os.path.exists(os.path.join("assets", "cafe_bistro_mapa.ogg")) else "cafe_bistro_mapa.mp3"
+        self.audio.play_bgm(cafe_track)
 
         # Mostrar diálogo de bienvenida de la Paloma la primera vez que se entra a una partida limpia
         progress = self.settings.get_story_progress()
@@ -2523,10 +2551,6 @@ class StoryMapScene(BaseState):
                     voice_prefix=welcome_cfg.get("voice_clip_prefix", "")
                 )
 
-        # Música continua de exploración sin cortes
-        cafe_track = "cafe_bistro_mapa.ogg" if os.path.exists(os.path.join("assets", "cafe_bistro_mapa.ogg")) else "cafe_bistro_mapa.mp3"
-        self.audio.play_bgm(cafe_track)
-
     def handle_event(self, event: pygame.event.Event) -> None:
         # 1. DevTool intercepta eventos si está activo
         if hasattr(self, "dev_tool"):
@@ -2541,7 +2565,7 @@ class StoryMapScene(BaseState):
 
         # Interacción con el diálogo acuarela de la Paloma
         if getattr(self, "paloma_dialog_open", False):
-            if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_e):
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_e):
                 self.advance_paloma_dialog()
                 return
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -3253,6 +3277,8 @@ class StoryMapScene(BaseState):
         if self.menu_anim_t < 0.95:
             self.btn_menu_toggle.render(surface)
 
+        self._draws_voice_badge = True
+
         # 9. Renderizar Drawer Desplegable de Pausa y Guardado
         if self.menu_anim_t > 0.01:
             self._render_drawer_menu(surface)
@@ -3276,6 +3302,13 @@ class StoryMapScene(BaseState):
         # 10C. Aviso de trofeo ganado con sus fuegos artificiales y el vuelo al panel
         if hasattr(self, "avisoTrofeo"):
             self.avisoTrofeo.render(surface)
+
+        if (
+            self.menu_anim_t < 0.2
+            and (not self.state_machine or self.state_machine.current_state is self)
+            and hasattr(self.audio, "render_voice_muted_badge")
+        ):
+            self.audio.render_voice_muted_badge(surface, right_top=(1894, 114))
 
         # 11. Renderizar Herramienta de Desarrollo Visual (DevTool F1)
         if hasattr(self, "dev_tool"):
@@ -3375,6 +3408,12 @@ class StoryMapScene(BaseState):
             drawer_surf.blit(badge_surf, badge_surf.get_rect(center=(self.drawer_w // 2, 232)))
 
         # Renderizar botones del Drawer
+        if hasattr(self, "btn_drawer_music"):
+            self.btn_drawer_music.toggle_state = self.audio.music_enabled
+        if hasattr(self, "btn_drawer_sound"):
+            self.btn_drawer_sound.toggle_state = self.audio.sound_enabled
+        if hasattr(self, "btn_drawer_voice"):
+            self.btn_drawer_voice.toggle_state = getattr(self.audio, "voice_enabled", True)
         for btn in self.drawer_buttons:
             btn.render(drawer_surf)
 
@@ -3455,11 +3494,14 @@ class StoryMapScene(BaseState):
                 self.cambiarImagenBoton(boton, versiones[0], (self.centroPapelMenu, y))
                 self.botonesMenuMapa.append((boton, versiones[0], versiones[1]))
 
-            # Los botones de música y sonido quedan entre guardar y calibrar
-            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 60, 562)
-            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 60, 562)
-            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu + 60, 562)
-            self.btn_drawer_sound.rect.center = (self.centroPapelMenu + 60, 562)
+            # Los botones de música, sonido y voces quedan entre guardar y calibrar
+            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 96, 562)
+            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 96, 562)
+            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu, 562)
+            self.btn_drawer_sound.rect.center = (self.centroPapelMenu, 562)
+            if hasattr(self, "btn_drawer_voice"):
+                self.btn_drawer_voice.center_x, self.btn_drawer_voice.center_y = (self.centroPapelMenu + 96, 562)
+                self.btn_drawer_voice.rect.center = (self.centroPapelMenu + 96, 562)
 
             # Botón nuevo para abrir el menú
             botonMenu = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMenu.jpg"), 76)
@@ -3501,6 +3543,10 @@ class StoryMapScene(BaseState):
         panel.blit(linea1, linea1.get_rect(center=(cinta_rect.centerx, cinta_rect.centery - 11)))
         panel.blit(linea2, linea2.get_rect(center=(cinta_rect.centerx, cinta_rect.centery + 11)))
 
+        self.btn_drawer_music.toggle_state = self.audio.music_enabled
+        self.btn_drawer_sound.toggle_state = self.audio.sound_enabled
+        if hasattr(self, "btn_drawer_voice"):
+            self.btn_drawer_voice.toggle_state = self.audio.voice_enabled
         # Morado normal y rojo cuando el mouse está encima
         for boton, morado, rojo in self.botonesMenuMapa:
             boton.normal_sprite = rojo if boton.is_hovered else morado

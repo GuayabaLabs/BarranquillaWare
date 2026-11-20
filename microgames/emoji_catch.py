@@ -117,6 +117,7 @@ class EmojiCatchMicrogame(BaseMicrogame):
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.audio.play_bgm(MUSIC_TRACK, volume_scale=0.5)
+        super().enter(params)
 
     def _apply_camera_hands(self, dt: float) -> None:
         cam = self.camera_input

@@ -298,6 +298,8 @@ class BuenavistaCineMicrogame(BaseMicrogame):
         super().exit()
 
     def update(self, dt: float) -> None:
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:

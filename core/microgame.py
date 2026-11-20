@@ -68,6 +68,8 @@ class BaseMicrogame(BaseState):
 
         self.is_won: bool = False
         self.is_finished: bool = False
+        self.preserve_voice_on_exit: bool = False
+        self._draws_voice_badge: bool = True
         self._ensenanza_voice_triggered: bool = False
         self.show_outro_banner: bool = True
         self.outro_message: Optional[str] = None
@@ -98,6 +100,16 @@ class BaseMicrogame(BaseState):
     def setup_game(self) -> None:
         """Inicializa variables específicas del microjuego individual."""
         pass
+
+    def enter(self, params=None) -> None:
+        super().enter(params)
+        if (
+            self.paloma_intro is not None
+            and self.paloma_intro.active
+            and hasattr(self.audio, "is_voice_playing")
+            and not self.audio.is_voice_playing()
+        ):
+            self.paloma_intro._play_voice()
 
     def update_camera_actions(self, camera) -> None:
         """Convierte gestos en teclas virtuales según CAMERA_ACTIONS (solo en la fase de juego)."""
@@ -178,9 +190,13 @@ class BaseMicrogame(BaseState):
             self.fuegosLogro = None
             if not getattr(self, "outro_message", None):
                 self.outro_message = "¡GANASTE!" if won else "¡PERDISTE!"
+            if not won and react_dur > 0.0:
+                self.outro_duration = max(self.outro_duration, react_dur + 0.35)
         else:
             if self.prepararLetreroResultado(won):
                 self.outro_duration = max(self.outro_duration, max(4.0, react_dur + 0.5))
+            elif react_dur > 0.0:
+                self.outro_duration = max(self.outro_duration, react_dur + 0.35)
 
             if getattr(self, "ensenanzaFinal", None) and getattr(self, "letreroResultado", None) is not None:
                 self.finLetrero = max(3.0, min(3.45, react_dur + 0.15) if react_dur > 0 else 3.0)
@@ -189,20 +205,26 @@ class BaseMicrogame(BaseState):
 
         if won:
             fallback = getattr(self.audio, "_win_sound", None)
-            if hasattr(self.audio, "play_voice"):
-                self.audio.play_voice("coronaste.ogg", volume_scale=1.0, fallback_sound=fallback)
-            elif hasattr(self.audio, "play_win"):
-                self.audio.play_win()
-            elif hasattr(self.audio, "play_click"):
-                self.audio.play_click()
+            played_voice = None
+            has_play_voice = hasattr(self.audio, "play_voice")
+            if has_play_voice:
+                played_voice = self.audio.play_voice("coronaste.ogg", volume_scale=1.0, fallback_sound=fallback)
+            if (not has_play_voice or played_voice is None) and getattr(self.audio, "sound_enabled", True):
+                if hasattr(self.audio, "play_win"):
+                    self.audio.play_win()
+                elif hasattr(self.audio, "play_click"):
+                    self.audio.play_click()
         else:
             fallback = getattr(self.audio, "_lose_sound", None)
-            if hasattr(self.audio, "play_voice"):
-                self.audio.play_voice("ombe_casi.ogg", volume_scale=1.0, fallback_sound=fallback)
-            elif hasattr(self.audio, "play_lose"):
-                self.audio.play_lose()
-            elif hasattr(self.audio, "play_pigeon"):
-                self.audio.play_pigeon()
+            played_voice = None
+            has_play_voice = hasattr(self.audio, "play_voice")
+            if has_play_voice:
+                played_voice = self.audio.play_voice("ombe_casi.ogg", volume_scale=1.0, fallback_sound=fallback)
+            if (not has_play_voice or played_voice is None) and getattr(self.audio, "sound_enabled", True):
+                if hasattr(self.audio, "play_lose"):
+                    self.audio.play_lose()
+                elif hasattr(self.audio, "play_pigeon"):
+                    self.audio.play_pigeon()
 
     def handle_game_event(self, event: pygame.event.Event) -> None:
         """Sobreescribir para manejar eventos durante la fase de juego activa."""
@@ -288,7 +310,7 @@ class BaseMicrogame(BaseState):
     def exit(self) -> None:
         if hasattr(self.audio, "sonarEscritura"):
             self.audio.sonarEscritura(False)
-        if hasattr(self.audio, "stop_voice"):
+        if not getattr(self, "preserve_voice_on_exit", False) and hasattr(self.audio, "stop_voice"):
             self.audio.stop_voice(80)
         super().exit()
 
@@ -370,6 +392,8 @@ class BaseMicrogame(BaseState):
         # 0. Contexto de la Paloma (antes de la consigna)
         if self.paloma_intro is not None and self.paloma_intro.active:
             self.paloma_intro.render(surface)
+            if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+                self.audio.render_voice_muted_badge(surface)
             return
 
         # 3. Cartel de consigna inicial (Fase Intro con bounce elástico)
@@ -379,6 +403,9 @@ class BaseMicrogame(BaseState):
         # 4. Cartel de resultado final (Fase Outro con feedback jugoso)
         elif self.phase == self.PHASE_OUTRO:
             self._render_outro_banner(surface)
+
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface)
 
     def _render_fuse_timer(self, surface: pygame.Surface) -> None:
         """Barra de tiempo inferior con indicador de mecha y tensión cromática."""

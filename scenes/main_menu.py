@@ -181,6 +181,15 @@ class MainMenuScene(BaseState):
             on_click=self.audio.toggle_sound
         )
 
+        self.btn_voice = UIButton(
+            center_pos=(1598, 78),
+            normal_sprite=self.assets.get_voice_button_frames(target_size=86)[0],
+            alt_sprite=self.assets.get_voice_button_frames(target_size=86)[1],
+            is_toggle=True,
+            initial_toggle_state=self.audio.voice_enabled,
+            on_click=self.audio.toggle_voice
+        )
+
         self.buttons: List[UIButton] = [
             self.btn_jugar,
             self.btn_cargar,
@@ -190,13 +199,18 @@ class MainMenuScene(BaseState):
             self.btn_music,
             self.btn_sound
         ]
+        self._draws_voice_badge = True
         # Teclado / mando: foco inicial en "Jugar"
-        self.focus_nav = FocusNavigator(lambda: self.buttons, default_index=0)
+        self.focus_nav = FocusNavigator(
+            lambda: [*self.buttons, self.btn_voice] if hasattr(self, "btn_voice") else self.buttons,
+            default_index=0,
+        )
 
     def sync_audio_buttons(self) -> None:
         """Sincroniza el estado visual de los toggles con el AudioManager (SSOT)."""
         self.btn_music.toggle_state = self.audio.music_enabled
         self.btn_sound.toggle_state = self.audio.sound_enabled
+        self.btn_voice.toggle_state = self.audio.voice_enabled
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.sync_audio_buttons()
@@ -366,7 +380,10 @@ class MainMenuScene(BaseState):
                 self._trigger_iguana_reaction()
                 return
 
-        for btn in self.buttons:
+        all_buttons = list(self.buttons)
+        if hasattr(self, "btn_voice"):
+            all_buttons.append(self.btn_voice)
+        for btn in all_buttons:
             consumed = btn.handle_event(event)
             if consumed and event.type != pygame.MOUSEMOTION:
                 break
@@ -380,6 +397,8 @@ class MainMenuScene(BaseState):
         if not self.active_modal:
             for btn in self.buttons:
                 btn.update(dt)
+            if hasattr(self, "btn_voice"):
+                self.btn_voice.update(dt)
 
         self._update_iguana_physics(dt)
         self._update_modal_transition(dt)
@@ -428,6 +447,10 @@ class MainMenuScene(BaseState):
 
         for btn in self.buttons:
             btn.render(surface)
+        if hasattr(self, "btn_voice"):
+            self.btn_voice.render(surface)
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface, right_top=(1865, 134))
 
         if self.modal_alpha > 5.0 and self.active_modal:
             self._render_modal(surface)
@@ -525,7 +548,10 @@ class MainMenuScene(BaseState):
         """Solo permite dwell-click cuando el puntero está físicamente sobre un botón interactivo o modal."""
         if getattr(self, "active_modal", None):
             return ("modal", self.active_modal)
-        for i, btn in enumerate(self.buttons):
+        all_buttons = list(self.buttons)
+        if hasattr(self, "btn_voice"):
+            all_buttons.append(self.btn_voice)
+        for i, btn in enumerate(all_buttons):
             if hasattr(btn, "rect") and btn.rect.collidepoint(pos):
                 return ("btn", i)
         return None

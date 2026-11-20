@@ -15,7 +15,7 @@ class MapSettingsState(BaseState):
         self.audio = AudioManager.get_instance()
         self.on_calibrate = on_calibrate
         self.index = 0
-        self.items = ["sound", "music", "brightness", "colorblind", "controller", "camera", "camera_help", "calibrate", "back"]
+        self.items = ["sound", "music", "voice", "brightness", "colorblind", "controller", "camera", "camera_help", "calibrate", "back"]
         self.show_camera_help = False
         self.camera_help_page = 0
         self._row_rects = {}
@@ -53,14 +53,14 @@ class MapSettingsState(BaseState):
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.index = (self.index + 1) % len(self.items)
             elif event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
-                if event.key in (pygame.K_LEFT, pygame.K_RIGHT) and self.items[self.index] in ("sound", "music", "brightness", "colorblind"):
+                if event.key in (pygame.K_LEFT, pygame.K_RIGHT) and self.items[self.index] in ("sound", "music", "voice", "brightness", "colorblind"):
                     self._adjust(1 if event.key == pygame.K_RIGHT else -1)
                 else:
                     self._activate()
         elif event.type == pygame.JOYHATMOTION:
             if event.value[1] != 0:
                 self.index = (self.index - 1 if event.value[1] > 0 else self.index + 1) % len(self.items)
-            elif event.value[0] != 0 and self.items[self.index] in ("sound", "music", "brightness", "colorblind"):
+            elif event.value[0] != 0 and self.items[self.index] in ("sound", "music", "voice", "brightness", "colorblind"):
                 self._adjust(1 if event.value[0] > 0 else -1)
         elif event.type == pygame.JOYBUTTONDOWN and event.button == 0:
             self._activate()
@@ -73,6 +73,8 @@ class MapSettingsState(BaseState):
             self.audio.toggle_sound()
         elif item == "music":
             self.audio.toggle_music()
+        elif item == "voice":
+            self.audio.toggle_voice()
         elif item == "camera":
             from core.camera_gestures import CameraGestureInput
             CameraGestureInput.get_instance().set_enabled(not self.settings.get("camera_enabled", True))
@@ -99,6 +101,8 @@ class MapSettingsState(BaseState):
         elif item == "sound":
             self.audio.set_sfx_volume(self.audio.sfx_volume + direction * 0.05)
             self.audio.play_click()
+        elif item == "voice":
+            self.audio.set_voice_volume(self.audio.voice_volume + direction * 0.05)
         elif item == "brightness":
             value = float(self.settings.get("brightness", 1.0)) + direction * 0.05
             self.settings.set("brightness", round(max(0.5, min(1.5, value)), 2))
@@ -209,6 +213,7 @@ class MapSettingsState(BaseState):
         values = {
             "sound": f"{'ACTIVADO' if self.audio.sound_enabled else 'SILENCIADO'} · {int(self.audio.sfx_volume * 100)}%",
             "music": f"{'ACTIVADA' if self.audio.music_enabled else 'SILENCIADA'} · {int(self.audio.music_volume * 100)}%",
+            "voice": f"{'ACTIVADAS' if self.audio.voice_enabled else 'SILENCIADAS'} · {int(self.audio.voice_volume * 100)}%",
             "brightness": f"{int(float(self.settings.get('brightness', 1.0)) * 100)}%",
             "colorblind": f"{str(self.settings.get('colorblind_mode', 'off')).upper()} · {int(float(self.settings.get('colorblind_intensity', 0.0)) * 100)}%",
             "controller": "MANDO COMPATIBLE · AUTOMÁTICO",
@@ -217,21 +222,23 @@ class MapSettingsState(BaseState):
             "calibrate": "ABRIR CALIBRADOR",
             "back": "VOLVER",
         }
-        labels = {"sound":"Sonido", "music":"Música", "brightness":"Brillo", "colorblind":"Daltonismo", "controller":"Mando", "camera":"Cámara", "camera_help":"Ayuda de cámara", "calibrate":"Lapicero", "back":"Cerrar"}
+        labels = {"sound":"Sonido", "music":"Música", "voice":"Voces", "brightness":"Brillo", "colorblind":"Daltonismo", "controller":"Mando", "camera":"Cámara", "camera_help":"Ayuda de cámara", "calibrate":"Lapicero", "back":"Cerrar"}
         for i, item in enumerate(self.items):
-            y = panel.y + 125 + i * 72
+            y = panel.y + 115 + i * 66
             selected = i == self.index
-            rect = pygame.Rect(panel.x + 45, y, panel.w - 90, 62)
+            rect = pygame.Rect(panel.x + 45, y, panel.w - 90, 56)
             self._row_rects[i] = rect
             pygame.draw.rect(surface, (55, 80, 115) if selected else (34, 48, 72), rect, border_radius=12)
-            surface.blit(self.small.render(labels[item], True, (255, 255, 255)), (rect.x + 22, rect.y + 18))
+            surface.blit(self.small.render(labels[item], True, (255, 255, 255)), (rect.x + 22, rect.y + 15))
             txt = self.small.render(values[item], True, (170, 220, 185))
-            surface.blit(txt, (rect.right - txt.get_width() - 22, rect.y + 18))
-            if item in ("sound", "music", "brightness", "colorblind"):
+            surface.blit(txt, (rect.right - txt.get_width() - 22, rect.y + 15))
+            if item in ("sound", "music", "voice", "brightness", "colorblind"):
                 if item == "sound":
                     value = self.audio.sfx_volume
                 elif item == "music":
                     value = self.audio.music_volume
+                elif item == "voice":
+                    value = self.audio.voice_volume
                 elif item == "brightness":
                     value = (float(self.settings.get("brightness", 1.0)) - 0.5) / 1.0
                 else:
@@ -272,13 +279,14 @@ class MapSettingsState(BaseState):
         nombresModos = {"off": "Apagado", "protanopia": "Protanopia", "deuteranopia": "Deuteranopia", "tritanopia": "Tritanopia"}
         modo = nombresModos.get(str(self.settings.get("colorblind_mode", "off")), "Apagado")
         nombres = {
-            "sound": "Sonido", "music": "Música", "brightness": "Brillo", "colorblind": "Daltonismo",
+            "sound": "Sonido", "music": "Música", "voice": "Voces", "brightness": "Brillo", "colorblind": "Daltonismo",
             "controller": "Mando", "calibrate": "Calibrar lápiz", "back": "Cerrar",
             "camera": "Cámara", "camera_help": "Ayuda de cámara",
         }
         valores = {
             "sound": f"{'Activado' if self.audio.sound_enabled else 'Silenciado'}  {int(self.audio.sfx_volume * 100)}%",
             "music": f"{'Activada' if self.audio.music_enabled else 'Silenciada'}  {int(self.audio.music_volume * 100)}%",
+            "voice": f"{'Activadas' if self.audio.voice_enabled else 'Silenciadas'}  {int(self.audio.voice_volume * 100)}%",
             "brightness": f"{int(float(self.settings.get('brightness', 1.0)) * 100)}%",
             "colorblind": f"{modo}  {int(float(self.settings.get('colorblind_intensity', 0.0)) * 100)}%",
             "controller": "Automático",
@@ -290,13 +298,14 @@ class MapSettingsState(BaseState):
         barras = {
             "sound": self.audio.sfx_volume,
             "music": self.audio.music_volume,
+            "voice": self.audio.voice_volume,
             "brightness": (float(self.settings.get("brightness", 1.0)) - 0.5) / 1.0,
             "colorblind": float(self.settings.get("colorblind_intensity", 0.0)),
         }
 
         for i, item in enumerate(self.items):
-            y = tarjeta.top + 210 + i * 62
-            fila = pygame.Rect(tarjeta.x + 100, y, tarjeta.w - 200, 56)
+            y = tarjeta.top + 205 + i * 56
+            fila = pygame.Rect(tarjeta.x + 100, y, tarjeta.w - 200, 52)
             self._row_rects[i] = fila
 
             # La fila elegida se marca con una mancha suave de color y un puntico coral
@@ -316,7 +325,7 @@ class MapSettingsState(BaseState):
                 self.dibujarBarra(surface, pygame.Rect(fila.x + 270, fila.centery - 9, 250, 18), barras[item], dorado, cafeOscuro)
 
         ayuda = fuenteAyuda.render("Flechas / cruceta: elegir  ·  A / Enter: cambiar  ·  B / Esc: cerrar", True, cafe)
-        surface.blit(ayuda, ayuda.get_rect(center=(tarjeta.centerx, tarjeta.bottom - 118)))
+        surface.blit(ayuda, ayuda.get_rect(center=(tarjeta.centerx, tarjeta.bottom - 104)))
         return True
 
     def dibujarBarra(self, surface: pygame.Surface, caja: pygame.Rect, valor: float, color, tinta) -> None:

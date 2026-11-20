@@ -191,6 +191,7 @@ class AssetManager:
         self._cache: Dict[str, pygame.Surface] = {}
         self._raw_cache: Dict[str, pygame.Surface] = {}
         self._audio_cache: Dict[int, List[pygame.Surface]] = {}
+        self._voice_cache: Dict[int, List[pygame.Surface]] = {}
         self._font_cache: Dict[str, pygame.font.Font] = {}
         self.fonts_dir = os.path.join(self.base_dir, "fonts")
 
@@ -314,6 +315,76 @@ class AssetManager:
             frames.append(scaled)
 
         self._audio_cache[target_size] = frames
+        return frames
+
+    def get_voice_button_frames(self, target_size: int = 58) -> List[pygame.Surface]:
+        """
+        Genera los 2 frames acuarela para el botón toggle de Voces [ON, OFF]
+        en formato 1:1 armonizado con los botones de Música y SFX.
+        """
+        if target_size in self._voice_cache:
+            return self._voice_cache[target_size]
+
+        hi = max(128, target_size * 2)
+        frames: List[pygame.Surface] = []
+        palettes = [
+            # ON: crema acuarela cálida + borde dorado/tierra + micrófono coral vivo
+            ((255, 246, 224), (218, 168, 86), (112, 68, 44), (214, 96, 72), False),
+            # OFF: crema apagada + borde gris cálido + micrófono atenuado tachado
+            ((232, 222, 208), (156, 138, 124), (116, 98, 88), (186, 66, 58), True),
+        ]
+        cx, cy = hi // 2, hi // 2
+        radius = int(hi * 0.44)
+        for bg_col, ring_col, ink_col, accent_col, is_muted in palettes:
+            surf = pygame.Surface((hi, hi), pygame.SRCALPHA)
+            # Sombra sutil abajo para integrarse con botones de menú
+            pygame.draw.circle(surf, (46, 30, 22, 68), (cx, cy + max(3, hi // 28)), radius)
+            pygame.draw.circle(surf, bg_col, (cx, cy), radius)
+            pygame.draw.circle(surf, ring_col, (cx, cy), radius, width=max(4, hi // 20))
+            pygame.draw.circle(surf, ink_col, (cx, cy), radius, width=max(2, hi // 42))
+
+            # Cápsula de micrófono centrada
+            mic_w = max(14, int(hi * 0.16))
+            mic_h = max(22, int(hi * 0.25))
+            mic_rect = pygame.Rect(0, 0, mic_w, mic_h)
+            mic_rect.center = (cx - (int(hi * 0.04) if not is_muted else 0), cy - int(hi * 0.05))
+            pygame.draw.rect(surf, accent_col, mic_rect, border_radius=mic_w // 2)
+            pygame.draw.rect(surf, ink_col, mic_rect, width=max(2, hi // 40), border_radius=mic_w // 2)
+
+            # Horquilla y base del micrófono
+            arc_w = mic_w + int(hi * 0.12)
+            arc_h = int(hi * 0.18)
+            arc_rect = pygame.Rect(0, 0, arc_w, arc_h)
+            arc_rect.center = (mic_rect.centerx, mic_rect.bottom - int(hi * 0.02))
+            pygame.draw.arc(surf, ink_col, arc_rect, 3.14159, 6.28318, max(3, hi // 34))
+            stem_top = arc_rect.bottom - 2
+            stem_bot = stem_top + int(hi * 0.09)
+            pygame.draw.line(surf, ink_col, (mic_rect.centerx, stem_top), (mic_rect.centerx, stem_bot), max(3, hi // 34))
+            base_half = int(hi * 0.10)
+            pygame.draw.line(
+                surf,
+                ink_col,
+                (mic_rect.centerx - base_half, stem_bot),
+                (mic_rect.centerx + base_half, stem_bot),
+                max(3, hi // 34),
+            )
+
+            if is_muted:
+                # Trazo diagonal rojo cálido indicando silencio de voz
+                pad = int(hi * 0.27)
+                pygame.draw.line(surf, (255, 246, 236), (pad, pad), (hi - pad, hi - pad), max(8, hi // 16))
+                pygame.draw.line(surf, (192, 58, 52), (pad, pad), (hi - pad, hi - pad), max(5, hi // 24))
+            else:
+                # Dos ondas de voz suaves a la derecha
+                for r_frac in (0.15, 0.23):
+                    wr = int(hi * r_frac)
+                    wave_rect = pygame.Rect(0, 0, wr * 2, wr * 2)
+                    wave_rect.center = (mic_rect.right + int(hi * 0.02), mic_rect.centery)
+                    pygame.draw.arc(surf, ink_col, wave_rect, -0.75, 0.75, max(3, hi // 36))
+
+            frames.append(pygame.transform.smoothscale(surf, (target_size, target_size)))
+
+        self._voice_cache[target_size] = frames
         return frames
 
     def get_font(self, font_name: str, size: int, bold: bool = False) -> pygame.font.Font:

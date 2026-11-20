@@ -1022,6 +1022,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
     def update(self, dt: float) -> None:
         if self.phase == self.PHASE_PLAY and not self.is_finished and getattr(self, "imagenesNoti", False):
             if self.avisoAbierto:
+                if hasattr(self.audio, "update"):
+                    self.audio.update(dt)
                 self.tiempoAviso += dt
                 self.ultimoUpdate = pygame.time.get_ticks()
                 if self.canalTictac is not None:

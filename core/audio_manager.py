@@ -19,8 +19,15 @@ class AudioManager:
 
         self.music_enabled: bool = bool(self.settings.get("music_enabled", True))
         self.sound_enabled: bool = bool(self.settings.get("sound_enabled", True))
+        raw_voice_enabled = self.settings.get("voice_enabled", True)
+        self.voice_enabled: bool = True if raw_voice_enabled is None else bool(raw_voice_enabled)
         self.music_volume: float = float(self.settings.get("music_volume", 0.65))
         self.sfx_volume: float = float(self.settings.get("sfx_volume", 0.8))
+        raw_voice_volume = self.settings.get("voice_volume", 1.0)
+        try:
+            self.voice_volume: float = max(0.0, min(1.0, float(1.0 if raw_voice_volume is None else raw_voice_volume)))
+        except (TypeError, ValueError):
+            self.voice_volume = 1.0
 
         self.current_track: Optional[str] = None
         self._bgm_volume_scale: float = 1.0
@@ -29,6 +36,8 @@ class AudioManager:
         self.duck_level: float = 0.26
         self._voice_cache: Dict[Tuple[str, Optional[tuple]], pygame.mixer.Sound] = {}
         self._voice_channel: Optional[pygame.mixer.Channel] = None
+        self._voice_sound: Optional[pygame.mixer.Sound] = None
+        self._voice_clip_name: Optional[str] = None
         self._voice_end_time: float = 0.0
         self._hover_sound: Optional[pygame.mixer.Sound] = None
         self._click_sound: Optional[pygame.mixer.Sound] = None
@@ -98,9 +107,10 @@ class AudioManager:
     ) -> None:
         """Carga y reproduce una pista en loop con un volumen relativo opcional."""
         self._bgm_volume_scale = max(0.0, float(volume_scale))
-        if self.current_track != filename or force_restart:
-            self.stop_voice(fade_ms=0)
-        if not self.is_voice_playing():
+        if self.is_voice_playing():
+            self._duck_target = self.duck_level
+            self._duck_factor = min(self._duck_factor, self.duck_level)
+        else:
             self._duck_factor = 1.0
             self._duck_target = 1.0
         applied_volume = self._effective_bgm_volume()
@@ -250,7 +260,10 @@ class AudioManager:
                 pygame.mixer.music.pause()
         else:
             if pygame.mixer.get_init():
-                if not self.is_voice_playing():
+                if self.is_voice_playing():
+                    self._duck_target = self.duck_level
+                    self._duck_factor = min(self._duck_factor, self.duck_level)
+                else:
                     self._duck_factor = 1.0
                     self._duck_target = 1.0
                 pygame.mixer.music.set_volume(self._effective_bgm_volume())
@@ -265,20 +278,12 @@ class AudioManager:
         if self.sound_enabled:
             self.play_click()
         else:
-            self.stop_voice(fade_ms=0)
             self.sonarEscritura(False)
         return self.sound_enabled
 
     def set_sfx_volume(self, volume: float) -> float:
         self.sfx_volume = round(max(0.0, min(1.0, float(volume))), 2)
         self.settings.set("sfx_volume", self.sfx_volume)
-        voice_snd = getattr(self, "_voice_sound", None)
-        if voice_snd is not None and self.is_voice_playing():
-            try:
-                v_scale = getattr(self, "_voice_volume_scale", 1.0)
-                voice_snd.set_volume(max(0.0, min(1.0, self.sfx_volume * v_scale)) if self.sound_enabled else 0.0)
-            except Exception:
-                pass
         canal_esc = getattr(self, "canalEscritura", None)
         sonido_esc = getattr(self, "sonidoEscritura", None)
         if canal_esc is not None and sonido_esc is not None:
@@ -291,6 +296,70 @@ class AudioManager:
             except Exception:
                 pass
         return self.sfx_volume
+
+    def toggle_voice(self) -> bool:
+        self.voice_enabled = not self.voice_enabled
+        self.settings.set("voice_enabled", self.voice_enabled)
+        if self.voice_enabled:
+            if self.sound_enabled:
+                self.play_click()
+        else:
+            self.stop_voice(fade_ms=0)
+        return self.voice_enabled
+
+    def set_voice_volume(self, volume: float) -> float:
+        self.voice_volume = round(max(0.0, min(1.0, float(volume))), 2)
+        self.settings.set("voice_volume", self.voice_volume)
+        voice_snd = getattr(self, "_voice_sound", None)
+        if voice_snd is not None and self.is_voice_playing():
+            try:
+                v_scale = getattr(self, "_voice_volume_scale", 1.0)
+                voice_snd.set_volume(
+                    max(0.0, min(1.0, self.voice_volume * v_scale)) if self.voice_enabled else 0.0
+                )
+            except Exception:
+                pass
+        return self.voice_volume
+
+    def render_voice_muted_badge(
+        self,
+        surface: pygame.Surface,
+        right_top: tuple[int, int] = (1894, 110),
+    ) -> Optional[pygame.Rect]:
+        """Dibuja un indicador discreto estilo acuarela cuando las voces están silenciadas."""
+        if (self.voice_enabled and self.voice_volume > 0.0) or surface is None:
+            return None
+        try:
+            font = getattr(self, "_voice_badge_font", None)
+            if font is None:
+                from core.asset_manager import AssetManager
+                font = AssetManager.get_instance().cargarFuenteCuento(20, "Cuerpo")
+                self._voice_badge_font = font
+        except Exception:
+            font = pygame.font.SysFont("arial", 18, bold=True)
+
+        label_surf = font.render("Voces silenciadas", True, (98, 44, 38))
+        badge_w = label_surf.get_width() + 50
+        badge_h = 34
+        rect = pygame.Rect(0, 0, badge_w, badge_h)
+        rect.topright = right_top
+
+        pill = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
+        pygame.draw.rect(pill, (255, 246, 234, 228), (0, 0, badge_w, badge_h), border_radius=17)
+        pygame.draw.rect(pill, (196, 88, 72, 235), (0, 0, badge_w, badge_h), width=2, border_radius=17)
+
+        # Ícono discreto de altavoz tachado en tinta cálida
+        cx, cy = 19, badge_h // 2
+        pygame.draw.polygon(
+            pill,
+            (176, 68, 56),
+            [(cx - 7, cy - 3), (cx - 3, cy - 3), (cx + 2, cy - 7), (cx + 2, cy + 7), (cx - 3, cy + 3), (cx - 7, cy + 3)],
+        )
+        pygame.draw.line(pill, (176, 68, 56), (cx + 5, cy - 5), (cx + 11, cy + 5), 2)
+        pygame.draw.line(pill, (176, 68, 56), (cx + 11, cy - 5), (cx + 5, cy + 5), 2)
+        pill.blit(label_surf, (36, (badge_h - label_surf.get_height()) // 2))
+        surface.blit(pill, rect.topleft)
+        return rect
 
     def set_music_volume(self, volume: float) -> float:
         self.music_volume = round(max(0.0, min(1.0, float(volume))), 2)
@@ -407,7 +476,7 @@ class AudioManager:
 
     def is_voice_playing(self) -> bool:
         """Indica si hay una línea de voz activamente en reproducción."""
-        if not self.sound_enabled or not pygame.mixer.get_init():
+        if not self.voice_enabled or not pygame.mixer.get_init():
             return False
         ch = getattr(self, "_voice_channel", None)
         now = time.monotonic()
@@ -418,9 +487,11 @@ class AudioManager:
                 busy = False
             if not busy:
                 self._voice_end_time = 0.0
+                self._voice_clip_name = None
                 return False
             if self._voice_end_time > 0.0 and now >= self._voice_end_time:
                 self._voice_end_time = 0.0
+                self._voice_clip_name = None
                 return False
             return True
         return self._voice_end_time > now
@@ -438,6 +509,7 @@ class AudioManager:
                 pass
         self._voice_channel = None
         self._voice_sound = None
+        self._voice_clip_name = None
         self._voice_end_time = 0.0
         if not preserve_ducking:
             self._duck_target = 1.0
@@ -488,18 +560,21 @@ class AudioManager:
         buscando en 'assets/voces/' y luego en 'assets/', con caché y canal dedicado
         para evitar solapamiento y activar ducking suave sobre la música de fondo.
         """
-        if not self.sound_enabled:
+        if not self.voice_enabled:
             return None
 
         loaded_sound = self._load_voice_sound(clip_name)
-        target_sound = loaded_sound if loaded_sound is not None else fallback_sound
-        if target_sound is None:
+        if loaded_sound is not None:
+            target_sound = loaded_sound
+            volume = max(0.0, min(1.0, self.voice_volume * volume_scale))
+        elif fallback_sound is not None and self.sound_enabled:
+            target_sound = fallback_sound
+            volume = max(0.0, min(1.0, self.sfx_volume * volume_scale))
+        else:
             return None
 
         # Detener cualquier voz previa conservando el ducking activo para no dar saltos de BGM
         self.stop_voice(fade_ms=0, preserve_ducking=True)
-
-        volume = max(0.0, min(1.0, self.sfx_volume * volume_scale))
         try:
             target_sound.set_volume(volume)
         except Exception:
@@ -511,9 +586,9 @@ class AudioManager:
                 ch.set_volume(1.0)
                 ch.play(target_sound)
             except Exception:
-                ch = self.play_sfx(target_sound, volume_scale)
+                ch = target_sound.play() if loaded_sound is not None else self.play_sfx(target_sound, volume_scale)
         else:
-            ch = self.play_sfx(target_sound, volume_scale)
+            ch = target_sound.play() if loaded_sound is not None else self.play_sfx(target_sound, volume_scale)
 
         if ch is not None or loaded_sound is not None:
             try:
@@ -522,6 +597,7 @@ class AudioManager:
                 dur = 2.0
             self._voice_channel = ch
             self._voice_sound = target_sound
+            self._voice_clip_name = clip_name
             self._voice_volume_scale = volume_scale
             self._voice_end_time = time.monotonic() + max(0.1, dur + 0.05)
             self._duck_target = self.duck_level
