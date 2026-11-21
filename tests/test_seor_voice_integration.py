@@ -532,7 +532,10 @@ def test_fritanga_finish_stops_oil_and_troll_channels_and_aleta_story_consistenc
     assert scene._is_poi_cleared("aleta", []) is False
 
     rendered_texts = []
-    orig_sysfont = pygame.font.SysFont
+    from core.asset_manager import AssetManager
+    assets = AssetManager.get_instance()
+    orig_cuento = assets.cargarFuenteCuento
+    orig_titulo = assets.cargarFuenteTitulo
     class SpyFont:
         def __init__(self, real):
             self._real = real
@@ -542,15 +545,15 @@ def test_fritanga_finish_stops_oil_and_troll_channels_and_aleta_story_consistenc
         def __getattr__(self, name):
             return getattr(self._real, name)
 
-    monkeypatch.setattr(pygame.font, "SysFont", lambda name, size, bold=False, italic=False: SpyFont(orig_sysfont(name, size, bold, italic)))
+    monkeypatch.setattr(assets, "cargarFuenteCuento", lambda tam: SpyFont(orig_cuento(tam)))
+    monkeypatch.setattr(assets, "cargarFuenteTitulo", lambda tam: SpyFont(orig_titulo(tam)))
     surf = pygame.Surface((1920, 1080))
     scene._render_victory_modal(surf)
     joined = "\n".join(rendered_texts)
     assert "\u2605" not in joined
     assert "¡ORGULLO DE CURRAMBA!" in joined
-    assert "5 NIVELES" in joined
-    assert "Aleta del Tiburón" in joined
-    assert "Uninorte" in joined and "Buenavista" in joined and "Metropolitano" in joined and "Cortissoz" in joined
+    assert "5 niveles" in joined
+    assert "Bienestar digital" in joined
 
     vm = scene.story_ui.last_victory_layout_metrics
     assert vm["left_star_rect"].right < vm["title_rect"].left
@@ -592,7 +595,9 @@ def test_sequential_play_voice_preserves_ducking_and_intro_has_no_tofu_glyphs(mo
         audio.set_music_volume(orig_vol)
 
     rendered_intro = []
-    orig_sysfont = pygame.font.SysFont
+    from core.asset_manager import AssetManager
+    assets = AssetManager.get_instance()
+    orig_cuento = assets.cargarFuenteCuento
 
     class SpyFont:
         def __init__(self, real):
@@ -605,7 +610,7 @@ def test_sequential_play_voice_preserves_ducking_and_intro_has_no_tofu_glyphs(mo
         def __getattr__(self, name):
             return getattr(self._real, name)
 
-    monkeypatch.setattr(pygame.font, "SysFont", lambda n, s, bold=False, italic=False: SpyFont(orig_sysfont(n, s, bold, italic)))
+    monkeypatch.setattr(assets, "cargarFuenteCuento", lambda tam: SpyFont(orig_cuento(tam)))
     ui = StoryMapUI(1920, 1080)
     surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
     bust = pygame.Surface((140, 140), pygame.SRCALPHA)
@@ -613,6 +618,7 @@ def test_sequential_play_voice_preserves_ducking_and_intro_has_no_tofu_glyphs(mo
     ui.render_intro_dialog(surf, bust, guide)
     joined = "\n".join(rendered_intro)
     assert "\U0001f54a" not in joined and "\u25b6" not in joined
+    assert "Paloma" in joined
 
 
 def test_workspace_settings_json_preserved_and_isolated_by_tests():

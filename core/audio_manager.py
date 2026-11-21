@@ -330,34 +330,48 @@ class AudioManager:
         if (self.voice_enabled and self.voice_volume > 0.0) or surface is None:
             return None
         try:
+            from core.asset_manager import AssetManager
+            assets = AssetManager.get_instance()
             font = getattr(self, "_voice_badge_font", None)
             if font is None:
-                from core.asset_manager import AssetManager
-                font = AssetManager.get_instance().cargarFuenteCuento(20, "Cuerpo")
+                font = assets.cargarFuenteCuento(19)
                 self._voice_badge_font = font
         except Exception:
+            assets = None
             font = pygame.font.SysFont("arial", 18, bold=True)
 
-        label_surf = font.render("Voces silenciadas", True, (98, 44, 38))
-        badge_w = label_surf.get_width() + 50
-        badge_h = 34
+        label_surf = font.render("Voces silenciadas", True, (112, 46, 36))
+        badge_w = label_surf.get_width() + 58
+        badge_h = 38
         rect = pygame.Rect(0, 0, badge_w, badge_h)
         rect.topright = right_top
 
         pill = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
-        pygame.draw.rect(pill, (255, 246, 234, 228), (0, 0, badge_w, badge_h), border_radius=17)
-        pygame.draw.rect(pill, (196, 88, 72, 235), (0, 0, badge_w, badge_h), width=2, border_radius=17)
+        if assets is not None:
+            try:
+                bg_cache = getattr(self, "_voice_badge_bg_cache", {})
+                bg = bg_cache.get((badge_w, badge_h))
+                if bg is None:
+                    raw_bg = assets.load_cropped_surface(os.path.join("Interfaz", "pildora_clima_acuarela.png"))
+                    bg = pygame.transform.smoothscale(raw_bg, (badge_w, badge_h))
+                    bg_cache[(badge_w, badge_h)] = bg
+                    self._voice_badge_bg_cache = bg_cache
+                pill.blit(bg, (0, 0))
+            except Exception:
+                pass
+            try:
+                icon = getattr(self, "_voice_badge_icon", None)
+                if icon is None:
+                    raw_ic = assets.load_cropped_surface(os.path.join("Interfaz", "icono_voz_silenciada.png"))
+                    ih = 22
+                    iw = max(16, int(round(raw_ic.get_width() * (ih / float(max(1, raw_ic.get_height()))))))
+                    icon = pygame.transform.smoothscale(raw_ic, (iw, ih))
+                    self._voice_badge_icon = icon
+                pill.blit(icon, icon.get_rect(center=(23, badge_h // 2)))
+            except Exception:
+                pass
 
-        # Ícono discreto de altavoz tachado en tinta cálida
-        cx, cy = 19, badge_h // 2
-        pygame.draw.polygon(
-            pill,
-            (176, 68, 56),
-            [(cx - 7, cy - 3), (cx - 3, cy - 3), (cx + 2, cy - 7), (cx + 2, cy + 7), (cx - 3, cy + 3), (cx - 7, cy + 3)],
-        )
-        pygame.draw.line(pill, (176, 68, 56), (cx + 5, cy - 5), (cx + 11, cy + 5), 2)
-        pygame.draw.line(pill, (176, 68, 56), (cx + 11, cy - 5), (cx + 5, cy + 5), 2)
-        pill.blit(label_surf, (36, (badge_h - label_surf.get_height()) // 2))
+        pill.blit(label_surf, label_surf.get_rect(midleft=(40, badge_h // 2 + 1)))
         surface.blit(pill, rect.topleft)
         return rect
 

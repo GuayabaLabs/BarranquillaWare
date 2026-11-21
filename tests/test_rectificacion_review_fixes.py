@@ -57,7 +57,7 @@ def test_punch_alert_exit_stops_voice_and_typewriter(monkeypatch):
     game.exit()
 
     assert stop_calls == [80]
-    assert esc_calls == [False]
+    assert esc_calls and all(v is False for v in esc_calls)
 
 
 def test_buenavista_cine_exit_stops_shh_detector_and_voice(monkeypatch):

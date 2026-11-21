@@ -1,9 +1,12 @@
 """Pruebas para preview flotante estilo Mario Wonder, Quest Card, nodos y Menú Principal."""
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
+import numpy as np
+from PIL import Image
 import pygame
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -11,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+import core.asset_manager as asset_manager_mod
 from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
 from core.engine import SettingsManager
@@ -103,24 +107,215 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
 
     def test_quest_card_typography_hierarchy_and_thumbnail_all_pois(self) -> None:
         canvas = pygame.Surface((1920, 1080))
-        for poi_key in STORY_PLAYABLE_POIS:
-            self.scene._open_quest_card(poi_key)
-            self.scene.quest_card_anim_t = 1.0
-            self.scene._render_quest_card(canvas)
+        all_pois_to_check = list(STORY_PLAYABLE_POIS) + ["mallorquin", "ventana"]
+        for anim_t in (0.0, 0.5, 1.0):
+            for poi_key in all_pois_to_check:
+                self.scene._open_quest_card(poi_key)
+                self.scene.quest_card_anim_t = anim_t
+                self.scene._render_quest_card(canvas)
 
-            m = self.scene.last_quest_layout_metrics
-            self.assertEqual(m["poi"], poi_key)
-            self.assertGreater(m["title_size"], m["micro_size"], f"{poi_key}: título <= microjuego")
-            self.assertGreater(m["micro_size"], m["desc_size"], f"{poi_key}: microjuego <= descripción")
-            self.assertGreater(m["desc_size"], m["district_size"], f"{poi_key}: descripción <= distrito")
+                m = self.scene.last_quest_layout_metrics
+                self.assertEqual(m["poi"], poi_key)
+                # R3: Título claramente mayor; todo el resto de la tarjeta comparte exactamente el mismo tamaño
+                self.assertGreater(m["title_size"], m["micro_size"], f"{poi_key} t={anim_t}: título <= cuerpo")
+                self.assertEqual(m["district_size"], m["micro_size"], f"{poi_key} t={anim_t}: distrito != microjuego")
+                self.assertEqual(m["micro_size"], m["desc_size"], f"{poi_key} t={anim_t}: microjuego != descripción")
+                self.assertEqual(m["status_size"], m["desc_size"], f"{poi_key} t={anim_t}: estado != descripción")
 
-            card_rect = m["card_rect"]
-            title_rect = m["title_rect_screen"]
-            thumb_rect = m["thumb_rect_screen"]
-            # Título dentro de la zona segura de pergamino (sin tocar hibiscos izquierdos ni sello derecho)
-            self.assertGreaterEqual(title_rect.left, card_rect.left + 145, f"{poi_key}: título choca con flores")
-            self.assertLessEqual(title_rect.right, card_rect.right - 95, f"{poi_key}: título choca con sello X")
-            self.assertTrue(card_rect.contains(thumb_rect), f"{poi_key}: miniatura fuera del modal")
+                card_rect = m["card_rect"]
+                scale_t = card_rect.width / float(self.scene.quest_card_w)
+                title_rect = m["title_rect_screen"]
+                district_rect = m["district_rect_screen"]
+                thumb_rect = m["thumb_rect_screen"]
+                micro_rect = m["micro_rect_screen"]
+                desc_rect = m["desc_rect_screen"]
+                play_rect = m["play_rect_screen"]
+                close_rect = m["close_rect_screen"]
+
+                # Título dentro de la zona segura de pergamino (sin tocar hibiscos izquierdos ni sello derecho)
+                self.assertGreaterEqual(
+                    title_rect.left,
+                    card_rect.left + int(145 * scale_t),
+                    f"{poi_key} t={anim_t}: título choca con flores",
+                )
+                self.assertLessEqual(
+                    title_rect.right,
+                    card_rect.right - int(95 * scale_t),
+                    f"{poi_key} t={anim_t}: título choca con sello X",
+                )
+                for name, r in (
+                    ("title", title_rect),
+                    ("district", district_rect),
+                    ("thumb", thumb_rect),
+                    ("micro", micro_rect),
+                    ("desc", desc_rect),
+                    ("play", play_rect),
+                    ("close", close_rect),
+                ):
+                    self.assertTrue(card_rect.contains(r), f"{poi_key} t={anim_t}: {name} fuera del modal ({r} vs {card_rect})")
+
+                ordered_blocks = [
+                    ("title", title_rect),
+                    ("district", district_rect),
+                    ("thumb", thumb_rect),
+                    ("micro", micro_rect),
+                    ("desc", desc_rect),
+                    ("play", play_rect),
+                ]
+                for idx in range(len(ordered_blocks) - 1):
+                    n_a, r_a = ordered_blocks[idx]
+                    n_b, r_b = ordered_blocks[idx + 1]
+                    self.assertFalse(r_a.colliderect(r_b), f"{poi_key} t={anim_t}: solapamiento entre {n_a} ({r_a}) y {n_b} ({r_b})")
+                    self.assertLess(r_a.bottom, r_b.top, f"{poi_key} t={anim_t}: {n_a}.bottom >= {n_b}.top")
+
+                # Cero solapamientos por pares entre todos los bloques y el botón de cierre
+                all_blocks = ordered_blocks + [("close", close_rect)]
+                for i in range(len(all_blocks)):
+                    for j in range(i + 1, len(all_blocks)):
+                        n_a, r_a = all_blocks[i]
+                        n_b, r_b = all_blocks[j]
+                        self.assertFalse(
+                            r_a.colliderect(r_b),
+                            f"{poi_key} t={anim_t}: solapamiento par ({n_a}={r_a}, {n_b}={r_b})",
+                        )
+
+        # El escalado animado no debe mutar los sprites base ni el current_scale de los botones
+        self.assertEqual(self.scene.btn_quest_play.normal_sprite.get_size(), (268, 93))
+        self.assertEqual(self.scene.btn_quest_close.normal_sprite.get_size(), (64, 64))
+        self.assertAlmostEqual(self.scene.btn_quest_play.current_scale, 1.0, places=4)
+        self.assertAlmostEqual(self.scene.btn_quest_close.current_scale, 1.0, places=4)
+
+    def test_quest_card_assets_clean_alpha_and_no_yellow_sparks(self) -> None:
+        def _count_components(alpha_mask: np.ndarray) -> int:
+            h, w = alpha_mask.shape
+            visited = np.zeros_like(alpha_mask, dtype=bool)
+            count = 0
+            for y in range(h):
+                for x in range(w):
+                    if alpha_mask[y, x] and not visited[y, x]:
+                        count += 1
+                        stack = [(y, x)]
+                        visited[y, x] = True
+                        while stack:
+                            cy, cx = stack.pop()
+                            for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)):
+                                ny, nx = cy + dy, cx + dx
+                                if 0 <= ny < h and 0 <= nx < w and alpha_mask[ny, nx] and not visited[ny, nx]:
+                                    visited[ny, nx] = True
+                                    stack.append((ny, nx))
+            return count
+
+        assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets"))
+
+        # 1. recuadro_mision_nivel.png: sin chispas amarillas fuera del borde superior y 1 solo componente
+        card_arr = np.asarray(Image.open(os.path.join(assets_dir, "recuadro_mision_nivel.png")).convert("RGBA"))
+        self.assertEqual(int(card_arr[0, 0, 3]), 0)
+        self.assertEqual(int(card_arr[0, -1, 3]), 0)
+        self.assertEqual(int(card_arr[-1, 0, 3]), 0)
+        self.assertEqual(int(card_arr[-1, -1, 3]), 0)
+        self.assertEqual(int(card_arr[:38, 250:380, 3].max()), 0, "Persisten chispas amarillas arriba del marco")
+        self.assertEqual(int(card_arr[:58, 275:380, 3].max()), 0, "Persisten chispas amarillas arriba del marco")
+        self.assertEqual(_count_components(card_arr[:, :, 3] > 10), 1)
+
+        # 2. boton_jugar_modal.png: esquinas limpias, 1 solo componente (sin rayos) y sin ▶ ni 'Jugar' incrustados
+        play_arr = np.asarray(Image.open(os.path.join(assets_dir, "boton_jugar_modal.png")).convert("RGBA"))
+        self.assertEqual(int(play_arr[0, 0, 3]), 0)
+        self.assertEqual(int(play_arr[0, -1, 3]), 0)
+        self.assertEqual(int(play_arr[-1, 0, 3]), 0)
+        self.assertEqual(int(play_arr[-1, -1, 3]), 0)
+        self.assertEqual(_count_components(play_arr[:, :, 3] > 10), 1)
+        purple_ink = (
+            (play_arr[:, :, 3] > 100)
+            & (play_arr[:, :, 0] < 130)
+            & (play_arr[:, :, 2] > 70)
+            & (play_arr[:, :, 2] > play_arr[:, :, 1])
+        )
+        self.assertEqual(int(purple_ink.sum()), 0, "boton_jugar_modal.png todavía contiene ▶ o texto morado")
+
+        # 3. boton_cerrar_modal.png: X acuarela limpia sin anillo ni borde exterior
+        close_arr = np.asarray(Image.open(os.path.join(assets_dir, "boton_cerrar_modal.png")).convert("RGBA"))
+        self.assertEqual(int(close_arr[0, 0, 3]), 0)
+        self.assertEqual(int(close_arr[0, -1, 3]), 0)
+        self.assertEqual(int(close_arr[-1, 0, 3]), 0)
+        self.assertEqual(int(close_arr[-1, -1, 3]), 0)
+        self.assertEqual(_count_components(close_arr[:, :, 3] > 10), 1)
+        # Borde exterior transparente (sin doble anillo circular)
+        self.assertEqual(int(close_arr[:8, :, 3].max()), 0)
+        self.assertEqual(int(close_arr[-8:, :, 3].max()), 0)
+        self.assertEqual(int(close_arr[:, :8, 3].max()), 0)
+        self.assertEqual(int(close_arr[:, -8:, 3].max()), 0)
+
+    def test_quest_card_jugar_button_uses_indie_flower_centered(self) -> None:
+        self.assertEqual(os.path.basename(asset_manager_mod.rutaFuenteCuento), "IndieFlower-Regular.ttf")
+
+        called_sizes = []
+        orig_loader = self.scene.assets.cargarFuenteCuento
+
+        def _spy_font(tam: int):
+            called_sizes.append(tam)
+            return orig_loader(tam)
+
+        with patch.object(self.scene.assets, "cargarFuenteCuento", side_effect=_spy_font):
+            self.scene._init_quest_card()
+
+        self.assertIn(self.scene.quest_play_font_size, called_sizes)
+
+        self.scene._open_quest_card("aeropuerto")
+        self.scene.quest_card_anim_t = 1.0
+        canvas = pygame.Surface((1920, 1080))
+        self.scene._render_quest_card(canvas)
+        m = self.scene.last_quest_layout_metrics
+
+        play_rect = m["play_rect_screen"]
+        text_rect = m["play_text_rect_screen"]
+        self.assertLessEqual(abs(text_rect.centerx - play_rect.centerx), 2)
+        self.assertLessEqual(abs(text_rect.centery - play_rect.centery), 2)
+
+        sprite = self.scene.btn_quest_play.normal_sprite
+        rgba = pygame.surfarray.array3d(sprite)
+        alpha = pygame.surfarray.array_alpha(sprite)
+        pill_mask = alpha > 20
+        xs_p, ys_p = np.where(pill_mask)
+        pill_cx = (xs_p.min() + xs_p.max()) / 2.0
+        pill_cy = (ys_p.min() + ys_p.max()) / 2.0
+
+        # Tinta morada del texto "Jugar" dibujado por código sobre la píldora dorada
+        ink_mask = pill_mask & (rgba[:, :, 0] < 120) & (rgba[:, :, 2] > 70) & (rgba[:, :, 2] > rgba[:, :, 1])
+        xs_t, ys_t = np.where(ink_mask)
+        self.assertGreater(len(xs_t), 120, "No se detectó tinta de texto 'Jugar' renderizada sobre el botón")
+        text_cx = (xs_t.min() + xs_t.max()) / 2.0
+        text_cy = (ys_t.min() + ys_t.max()) / 2.0
+        self.assertLessEqual(abs(text_cx - pill_cx), 4.0)
+        self.assertLessEqual(abs(text_cy - pill_cy), 6.0)
+
+    def test_quest_card_close_x_centered_and_clickable_without_double_border(self) -> None:
+        self.scene._open_quest_card("buenavista")
+        self.scene.quest_card_anim_t = 1.0
+        canvas = pygame.Surface((1920, 1080))
+        self.scene._render_quest_card(canvas)
+        m = self.scene.last_quest_layout_metrics
+
+        card_rect = m["card_rect"]
+        expected_close_center = (
+            card_rect.left + int(card_rect.width * StoryMapScene.QUEST_CLOSE_NORM_X),
+            card_rect.top + int(card_rect.height * StoryMapScene.QUEST_CLOSE_NORM_Y),
+        )
+        self.assertEqual(m["close_center"], expected_close_center)
+        self.assertEqual(self.scene.btn_quest_close.rect.center, expected_close_center)
+
+        close_sprite = self.scene.btn_quest_close.normal_sprite
+        close_alpha = pygame.surfarray.array_alpha(close_sprite) > 20
+        xs_x, ys_x = np.where(close_alpha)
+        x_cx = (xs_x.min() + xs_x.max()) / 2.0
+        x_cy = (ys_x.min() + ys_x.max()) / 2.0
+        self.assertLessEqual(abs(x_cx - (close_sprite.get_width() - 1) / 2.0), 2.0)
+        self.assertLessEqual(abs(x_cy - (close_sprite.get_height() - 1) / 2.0), 2.0)
+
+        # Clic en la X debe cerrar la tarjeta modal
+        close_pos = self.scene.btn_quest_close.rect.center
+        self.scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_pos}))
+        self.scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": 1, "pos": close_pos}))
+        self.assertFalse(self.scene.quest_card_open)
 
     def test_quest_card_button_hover_shimmer_updates_when_open(self) -> None:
         self.scene._open_quest_card("buenavista")
@@ -401,13 +596,17 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
             info = self.scene.poi_registry[pk]
             self.assertNotIn("\u00b7", info["microgame_title"])
             self.assertNotIn("\u00b7", info["district"])
-        # Renderizado en estado DESPEJADO no falla y muestra estado correcto
-        self.settings.update_story_progress(completed_microgames=["uninorte_sprint", "uninorte_concentrate"])
+        # Renderizado en estado DESPEJADO (uninorte completado) y pendiente (malecon) no falla
+        completed = ["uninorte_sprint", "uninorte_concentrate"]
+        self.settings.update_story_progress(completed_microgames=completed)
+        self.assertTrue(self.scene._is_poi_cleared("uninorte", completed))
+        self.assertFalse(self.scene._is_poi_cleared("malecon", completed))
         canvas = pygame.Surface((1920, 1080))
-        self.scene._open_quest_card("malecon")
-        self.scene.quest_card_anim_t = 1.0
-        self.scene._render_quest_card(canvas)
-        self.assertEqual(self.scene.last_quest_layout_metrics["poi"], "malecon")
+        for poi_key in ("uninorte", "malecon"):
+            self.scene._open_quest_card(poi_key)
+            self.scene.quest_card_anim_t = 1.0
+            self.scene._render_quest_card(canvas)
+            self.assertEqual(self.scene.last_quest_layout_metrics["poi"], poi_key)
 
     def test_callout_tail_avoids_social_hud_and_hides_when_parked_offscreen(self) -> None:
         canvas = pygame.Surface((1920, 1080))
@@ -597,7 +796,7 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
                 self.assertLessEqual(callout_rect.bottom, 1080)
 
     def test_map_keeps_main_markers_and_preview_avoids_them(self) -> None:
-        self.assertEqual(self.scene.poi_pin_surf.get_size(), (36, 44))
+        self.assertEqual(self.scene.poi_pin_surf.get_size(), (38, 50))
         self.assertEqual(self.scene.poi_star_surf.get_size(), (44, 44))
 
         # Verificar que callout y cola jamás colisionan con la envolvente de marcadores (incluido bob_y)
@@ -712,4 +911,9 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if "BARRANQUILLAWARE_SETTINGS_FILE" not in os.environ:
+        with tempfile.TemporaryDirectory() as _tmp_dir:
+            os.environ["BARRANQUILLAWARE_SETTINGS_FILE"] = os.path.join(_tmp_dir, "settings.json")
+            unittest.main()
+    else:
+        unittest.main()

@@ -364,28 +364,16 @@ class MicrogamePauseState(BaseState):
         n_items = len(self.items)
         primerBoton = cajas[0].top if cajas else ventana.top + 400
         ultimoBoton = cajas[-1].bottom if cajas else ventana.top + 760
-        espacioEstado = 40 if self.save_callback else 0
-        titulo_x = self.centroPapel + 36 if n_items >= 7 else (self.centroPapel + 18 if n_items >= 6 else self.centroPapel)
-        titulo_gap = 38 if n_items >= 7 else (42 if n_items >= 6 else 44)
+        espacioEstado = 34 if (self.save_callback and self.save_feedback_timer > 0.0) else 0
+        titulo_x = self.centroPapel + 44 if n_items >= 7 else (self.centroPapel + 24 if n_items >= 6 else self.centroPapel)
+        titulo_gap = 26 if n_items >= 7 else (30 if n_items >= 6 else 36)
         titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (110, 62, 150), (255, 250, 238))
         surface.blit(titulo, titulo.get_rect(midbottom=(titulo_x, primerBoton - titulo_gap - espacioEstado)))
 
-        if self.save_callback:
-            if self.save_feedback_timer > 0.0:
-                estado_txt = "Partida guardada — Retoma en Cargar Partida"
-                estado_col = (38, 134, 68)
-            else:
-                estado_txt = "Auto-guardado activo tras cada misión"
-                estado_col = (116, 76, 48)
-            estado_surf = self.fuenteEstadoPausa.render(estado_txt, True, estado_col)
-            if n_items >= 6 and estado_surf.get_width() > 295:
-                scale_w = 295 / float(estado_surf.get_width())
-                estado_surf = pygame.transform.smoothscale(
-                    estado_surf,
-                    (295, max(1, int(round(estado_surf.get_height() * scale_w)))),
-                )
-            estado_x = self.centroPapel + 10 if n_items >= 7 else (self.centroPapel + 2 if n_items >= 6 else self.centroPapel)
-            estado_y = primerBoton - 20 if n_items >= 7 else (primerBoton - 24 if n_items >= 6 else primerBoton - 26)
+        if self.save_callback and self.save_feedback_timer > 0.0:
+            estado_surf = self.fuenteEstadoPausa.render("¡Partida guardada!", True, (38, 134, 68))
+            estado_x = self.centroPapel + 10 if n_items >= 7 else self.centroPapel
+            estado_y = primerBoton - 18
             surface.blit(estado_surf, estado_surf.get_rect(center=(estado_x, estado_y)))
 
         for it in self.items:
@@ -401,13 +389,11 @@ class MicrogamePauseState(BaseState):
             texto = self.textoConContorno(self.fuenteBotonPausa, etiqueta, (255, 248, 236), contorno)
             surface.blit(texto, texto.get_rect(center=(caja.centerx, caja.centery - 3)))
 
-        # Ayuda corta debajo de los botones, centrada en el papel
-        ayuda_x = self.centroPapel - 26 if n_items >= 7 else (self.centroPapel - 10 if n_items >= 6 else self.centroPapel)
-        ayuda_y0 = (ultimoBoton + 10) if n_items >= 7 else ((ultimoBoton + 12) if n_items >= 6 else max(ventana.top + 790, ultimoBoton + 16))
-        ayuda_step = 26 if n_items >= 7 else (28 if n_items >= 6 else 30)
-        for i, linea in enumerate(("Enter para aceptar", "Esc para seguir")):
-            ayuda = self.fuenteAyudaPausa.render(linea, True, (126, 90, 62))
-            surface.blit(ayuda, ayuda.get_rect(midtop=(ayuda_x, ayuda_y0 + i * ayuda_step)))
+        # Ayuda corta en una sola línea despejada de las flores inferiores
+        ayuda_x = self.centroPapel - 32 if n_items >= 7 else (self.centroPapel - 16 if n_items >= 6 else self.centroPapel)
+        ayuda_y = ultimoBoton + 14
+        ayuda = self.fuenteAyudaPausa.render("Enter: aceptar · Esc: seguir", True, (126, 90, 62))
+        surface.blit(ayuda, ayuda.get_rect(midtop=(ayuda_x, ayuda_y)))
         if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
             self.audio.render_voice_muted_badge(surface)
         return True

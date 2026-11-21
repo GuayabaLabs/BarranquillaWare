@@ -156,9 +156,10 @@ class StoryMapUI:
         btn_explore: UIButton,
         btn_menu: UIButton,
     ) -> None:
-        """Renderiza el modal de victoria final con confeti y opciones."""
+        """Renderiza el modal acuarela de victoria final con confeti y botones ilustrados."""
+        assets = AssetManager.get_instance()
         dim_surf = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
-        dim_surf.fill((10, 12, 25, 190))
+        dim_surf.fill((22, 16, 36, 175))
         surface.blit(dim_surf, (0, 0))
 
         for cf in confetti:
@@ -166,50 +167,71 @@ class StoryMapUI:
             pygame.draw.circle(c_surf, (*cf["color"], 235), (8, 8), int(cf["size"]))
             surface.blit(c_surf, (int(cf["x"]), int(cf["y"])))
 
-        vw, vh = 860, 520
+        vw, vh = 1120, 700
         vx = (self.screen_w - vw) // 2
         vy = (self.screen_h - vh) // 2
 
-        vic_surf = pygame.Surface((vw, vh), pygame.SRCALPHA)
-        pygame.draw.rect(vic_surf, (20, 25, 42, 250), (0, 0, vw, vh), border_radius=28)
-        pygame.draw.rect(vic_surf, (255, 215, 60), (0, 0, vw, vh), width=4, border_radius=28)
+        if getattr(self, "_victory_frame_surf", None) is None:
+            try:
+                raw_frame = assets.load_cropped_surface(os.path.join("Interfaz", "modal_victoria_carnaval.png"))
+                self._victory_frame_surf = pygame.transform.smoothscale(raw_frame, (vw, vh))
+            except Exception:
+                raw_frame = assets.load_cropped_surface("recuadro_partida_guardada.png")
+                self._victory_frame_surf = pygame.transform.smoothscale(raw_frame, (vw, vh))
 
-        assets = AssetManager.get_instance()
-        font_v_title = assets.cargarFuenteTitulo(44)
-        font_v_sub = assets.cargarFuenteTitulo(26)
-        font_v_body = pygame.font.SysFont("Arial, sans-serif", 17)
+        vic_surf = self._victory_frame_surf.copy()
+
+        from scenes.load_game import render_outlined_text
+        font_v_title = assets.cargarFuenteTitulo(46)
+        font_v_sub = assets.cargarFuenteTitulo(28)
+        font_badge = assets.cargarFuenteCuento(24)
+        font_v_body = assets.cargarFuenteCuento(24)
 
         title_text = "¡ORGULLO DE CURRAMBA!"
-        txt_vt = font_v_title.render(title_text, True, (255, 225, 80))
-        vt_rect = txt_vt.get_rect(center=(vw // 2, 70))
+        txt_vt = render_outlined_text(font_v_title, title_text, (92, 46, 126), (255, 250, 238), thickness=2)
+        vt_rect = txt_vt.get_rect(center=(vw // 2, 152))
         vic_surf.blit(txt_vt, vt_rect)
 
-        star_size = 34
+        star_size = 44
         if getattr(self, "_victory_star_surf", None) is None:
-            self._victory_star_surf = self._build_victory_star(star_size)
+            try:
+                raw_star = assets.load_cropped_surface("emblema_estrella_modal.png", alpha_threshold=12)
+                self._victory_star_surf = pygame.transform.smoothscale(raw_star, (star_size, star_size))
+            except Exception:
+                self._victory_star_surf = self._build_victory_star(star_size)
+
         star_gap = 18
         left_star_rect = self._victory_star_surf.get_rect(
-            center=(max(star_size // 2 + 24, vt_rect.left - star_gap - star_size // 2), vt_rect.centery)
+            center=(max(star_size // 2 + 84, vt_rect.left - star_gap - star_size // 2), vt_rect.centery)
         )
         right_star_rect = self._victory_star_surf.get_rect(
-            center=(min(vw - star_size // 2 - 24, vt_rect.right + star_gap + star_size // 2), vt_rect.centery)
+            center=(min(vw - star_size // 2 - 84, vt_rect.right + star_gap + star_size // 2), vt_rect.centery)
         )
         vic_surf.blit(self._victory_star_surf, left_star_rect)
         vic_surf.blit(self._victory_star_surf, right_star_rect)
 
-        txt_vs = font_v_sub.render("¡COMPLETASTE LOS 5 NIVELES DE LA HISTORIA!", True, (255, 255, 255))
-        vic_surf.blit(txt_vs, txt_vs.get_rect(center=(vw // 2, 135)))
+        txt_vs = font_v_sub.render("¡Completaste los 5 niveles de la historia!", True, (96, 56, 36))
+        vic_surf.blit(txt_vs, txt_vs.get_rect(center=(vw // 2, 240)))
 
-        font_badge = pygame.font.SysFont("Arial Black, Impact", 20)
-        txt_b = font_badge.render("BIENESTAR DIGITAL: 100% EN ARMONÍA", True, (230, 255, 240))
-        badge_w = min(vw - 80, max(540, txt_b.get_width() + 64))
-        badge_h = max(50, txt_b.get_height() + 18)
-        badge_s = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
-        pygame.draw.rect(badge_s, (35, 130, 70), (0, 0, badge_w, badge_h), border_radius=14)
-        pygame.draw.rect(badge_s, (110, 250, 160), (0, 0, badge_w, badge_h), width=2, border_radius=14)
-        badge_s.blit(txt_b, txt_b.get_rect(center=(badge_w // 2, badge_h // 2)))
-        badge_rect = badge_s.get_rect(center=(vw // 2, 205))
+        badge_text = "Bienestar digital en armonía"
+        txt_b = font_badge.render(badge_text, True, (32, 118, 64))
+        badge_w = min(vw - 240, max(500, txt_b.get_width() + 92))
+        badge_h = max(56, txt_b.get_height() + 20)
+        try:
+            raw_rib = assets.load_cropped_surface("cinta_estado_modal.png")
+            badge_s = pygame.transform.smoothscale(raw_rib, (badge_w, badge_h))
+        except Exception:
+            badge_s = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
+        badge_s.blit(txt_b, txt_b.get_rect(center=(badge_w // 2, badge_h // 2 - 1)))
+        badge_rect = badge_s.get_rect(center=(vw // 2, 326))
         vic_surf.blit(badge_s, badge_rect)
+
+        line_clean = font_v_body.render(
+            "Barranquilla brilla cuando disfrutas el presente al ritmo de la brisa.",
+            True,
+            (116, 74, 48),
+        )
+        vic_surf.blit(line_clean, line_clean.get_rect(center=(vw // 2, 412)))
 
         self.last_victory_layout_metrics = {
             "title_text": title_text,
@@ -221,18 +243,6 @@ class StoryMapUI:
             "badge_size": (badge_w, badge_h),
         }
 
-        desc = [
-            "Recorriste Barranquilla junto a la Paloma aprendiendo a desconectar con calma:",
-            "Campus Uninorte, C.C. Buenavista, Estadio Metropolitano,",
-            "Aeropuerto Cortissoz y la Aleta del Tiburón.",
-            "¡La ciudad brilla más bonito cuando disfrutas el presente al ritmo de la brisa!"
-        ]
-        dy = 258
-        for d in desc:
-            txt_d = font_v_body.render(d, True, (200, 215, 240))
-            vic_surf.blit(txt_d, txt_d.get_rect(center=(vw // 2, dy)))
-            dy += 26
-
         surface.blit(vic_surf, (vx, vy))
         btn_explore.render(surface)
         btn_menu.render(surface)
@@ -243,41 +253,51 @@ class StoryMapUI:
         character_bust: pygame.Surface,
         paloma_guide: pygame.Surface,
     ) -> None:
-        """Renderiza el cuadro de diálogo de bienvenida al mapa."""
-        dw, dh = 960, 200
-        dx = (self.screen_w - dw) // 2
-        dy = self.screen_h - dh - 40
+        """Renderiza el cuadro de diálogo de bienvenida en estilo acuarela oficial (VentanaAviso.jpg)."""
+        assets = AssetManager.get_instance()
+        dw = 940
+        if getattr(self, "_intro_frame_surf", None) is None:
+            self._intro_frame_surf = assets.cargarSinFondo(os.path.join("Interfaz", "VentanaAviso.jpg"), dw)
+        frame = self._intro_frame_surf.copy()
+        fw, fh = frame.get_size()
+        dx = (self.screen_w - fw) // 2
+        dy = (self.screen_h - fh) // 2
 
-        d_surf = pygame.Surface((dw, dh), pygame.SRCALPHA)
-        pygame.draw.rect(d_surf, (20, 24, 38, 245), (0, 0, dw, dh), border_radius=24)
-        pygame.draw.rect(d_surf, (245, 195, 75), (0, 0, dw, dh), width=3, border_radius=24)
+        shade = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+        shade.fill((22, 16, 36, 150))
+        surface.blit(shade, (0, 0))
 
-        d_surf.blit(character_bust, (30, 20))
-        d_surf.blit(paloma_guide, (dw - paloma_guide.get_width() - 32, 24))
+        # Bustos despejados de las flores en las esquinas
+        bust_h = 150
+        bust_w = max(70, int(round(character_bust.get_width() * (bust_h / float(max(1, character_bust.get_height()))))))
+        bust_s = pygame.transform.smoothscale(character_bust, (bust_w, bust_h))
+        frame.blit(bust_s, bust_s.get_rect(midleft=(96, fh // 2 + 12)))
 
-        char_name = "LA PALOMA GUÍA"
-        font_d_title = AssetManager.get_instance().cargarFuenteTitulo(26)
-        font_d_body = pygame.font.SysFont("Arial, sans-serif", 16)
-        font_d_sub = pygame.font.SysFont("Arial Black, Impact", 13)
+        pal_h = 128
+        pal_w = max(70, int(round(paloma_guide.get_width() * (pal_h / float(max(1, paloma_guide.get_height()))))))
+        pal_s = pygame.transform.smoothscale(paloma_guide, (pal_w, pal_h))
+        frame.blit(pal_s, pal_s.get_rect(midright=(fw - 96, fh // 2 - 10)))
 
-        txt_d_title = font_d_title.render(f"¡{char_name.upper()} TE DA LA BIENVENIDA!", True, (255, 220, 80))
-        d_surf.blit(txt_d_title, (210, 25))
+        font_d_title = assets.cargarFuenteCuento(34)
+        font_d_body = assets.cargarFuenteCuento(24)
+        font_d_sub = assets.cargarFuenteCuento(20)
+
+        txt_d_title = font_d_title.render("¡La Paloma guía te da la bienvenida!", True, (92, 46, 126))
+        frame.blit(txt_d_title, txt_d_title.get_rect(center=(fw // 2, int(fh * 0.34))))
 
         lines = [
-            "Soy la paloma mensajera de Curramba: conozco cada atajo y cada reto.",
-            "Sígueme por los 8 distritos; algunos desafíos solo aparecen en su barrio.",
-            "Supera los retos, ilumina las rutas y ayuda a despertar el Carnaval."
+            "Recorre los barrios de Barranquilla a tu ritmo.",
+            "Supera los retos e ilumina cada ruta del mapa.",
         ]
-        ly = 68
+        ly = int(fh * 0.48)
         for line in lines:
-            txt_l = font_d_body.render(line, True, (240, 245, 255))
-            d_surf.blit(txt_l, (210, ly))
-            ly += 26
+            txt_l = font_d_body.render(line, True, (78, 51, 35))
+            frame.blit(txt_l, txt_l.get_rect(center=(fw // 2, ly)))
+            ly += 38
 
-        pygame.draw.polygon(d_surf, (120, 235, 160), [(210, 162), (210, 174), (221, 168)])
-        txt_prompt = font_d_sub.render("PULSA ESPACIO O HAZ CLICK PARA EMPEZAR A EXPLORAR", True, (120, 235, 160))
-        d_surf.blit(txt_prompt, (228, 160))
-        surface.blit(d_surf, (dx, dy))
+        txt_prompt = font_d_sub.render("Pulsa ESPACIO o haz clic para empezar", True, (36, 128, 70))
+        frame.blit(txt_prompt, txt_prompt.get_rect(center=(fw // 2, int(fh * 0.77))))
+        surface.blit(frame, (dx, dy))
 
 
 class AvisoTrofeo:

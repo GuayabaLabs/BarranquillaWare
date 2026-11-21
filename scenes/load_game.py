@@ -396,13 +396,13 @@ class StorySaveModalPanel:
         if self.mode == "load_screen":
             title_txt = "CARGAR PARTIDA" if has_save else "HISTORIAL DE PARTIDA"
             sub_txt = (
-                "Retoma tu recorrido por Barranquilla o gestiona tu progreso guardado."
+                "Retoma tu recorrido por Barranquilla."
                 if has_save
-                else "Consulta aquí tu avance guardado en el Modo Historia."
+                else "Aún no tienes un recorrido guardado."
             )
         else:
             title_txt = "PARTIDA GUARDADA ENCONTRADA"
-            sub_txt = "¿Deseas continuar tu recorrido por Barranquilla o empezar desde cero?"
+            sub_txt = "¿Deseas continuar tu recorrido o empezar uno nuevo?"
 
         t_surf = self._render_fitted_text(surface, title_txt, 42, (84, 52, 112), max_w=700, titulo=True)
         t_sh = self._render_fitted_text(surface, title_txt, 42, (255, 255, 255), max_w=700, titulo=True)
@@ -425,69 +425,48 @@ class StorySaveModalPanel:
 
         if has_save:
             name_surf = self._render_fitted_text(
-                surface, f"Explorador: {summary['character_name']}", 33, (76, 48, 102), max_w=365
+                surface, summary["character_name"], 38, (76, 48, 102), max_w=365
             )
             prog_surf = self._render_fitted_text(
                 surface,
-                f"Retos: {summary['levels_cleared']}/{summary['total_levels']} distritos",
-                24,
+                f"{summary['levels_cleared']}/{summary['total_levels']} distritos",
+                27,
                 (30, 128, 68),
                 max_w=230,
             )
-            surface.blit(name_surf, name_surf.get_rect(midleft=(info_left, self.slot_rect.top + 48)))
-            surface.blit(prog_surf, prog_surf.get_rect(midright=(info_right, self.slot_rect.top + 48)))
+            surface.blit(name_surf, name_surf.get_rect(midleft=(info_left, self.slot_rect.top + 66)))
+            surface.blit(prog_surf, prog_surf.get_rect(midright=(info_right, self.slot_rect.top + 66)))
 
             dest_surf = self._render_fitted_text(
                 surface,
                 f"Próximo destino: {summary['next_district']}",
-                24,
+                26,
                 (118, 72, 42),
                 max_w=info_w,
             )
-            surface.blit(dest_surf, dest_surf.get_rect(midleft=(info_left, self.slot_rect.top + 92)))
+            surface.blit(dest_surf, dest_surf.get_rect(midleft=(info_left, self.slot_rect.top + 124)))
 
-            surface.blit(self.sep_surf, self.sep_surf.get_rect(center=(info_cx, self.slot_rect.top + 128)))
+            surface.blit(self.sep_surf, self.sep_surf.get_rect(center=(info_cx, self.slot_rect.top + 174)))
 
-            row_metrics = (
-                f"Seguidores: {summary['followers_text']}   •   "
-                f"Likes: {summary['likes_text']}   •   "
-                f"Puntos: {summary['high_score']}"
-            )
-            m_surf = self._render_fitted_text(surface, row_metrics, 24, (168, 86, 36), max_w=info_w)
-            surface.blit(m_surf, m_surf.get_rect(midleft=(info_left, self.slot_rect.top + 168)))
-
-            row_extra = (
-                f"Logros: {summary['trophies_count']}/{summary['trophies_total']}   •   "
-                f"Clima: {summary['weather_label']}"
-            )
-            e_surf = self._render_fitted_text(surface, row_extra, 23, (88, 56, 120), max_w=info_w)
-            surface.blit(e_surf, e_surf.get_rect(midleft=(info_left, self.slot_rect.top + 212)))
-
-            row_saved = (
-                f"Último guardado: {summary['saved_at']} ({summary['save_source_label']})  |  "
-                f"Auto-guardado activo"
-            )
-            sv_surf = self._render_fitted_text(surface, row_saved, 20, (124, 96, 74), max_w=info_w)
-            surface.blit(sv_surf, sv_surf.get_rect(midleft=(info_left, self.slot_rect.top + 258)))
+            saved_lbl = summary["saved_at"] or "Reciente"
+            row_saved = f"Guardado: {saved_lbl}"
+            sv_surf = self._render_fitted_text(surface, row_saved, 23, (124, 96, 74), max_w=info_w)
+            surface.blit(sv_surf, sv_surf.get_rect(midleft=(info_left, self.slot_rect.top + 228)))
         else:
             empty_title = self._render_fitted_text(
                 surface, "AÚN NO HAY PARTIDA GUARDADA", 32, (84, 52, 112), max_w=info_w, titulo=True
             )
-            surface.blit(empty_title, empty_title.get_rect(center=(info_cx, self.slot_rect.top + 58)))
-            surface.blit(self.sep_surf, self.sep_surf.get_rect(center=(info_cx, self.slot_rect.top + 102)))
+            surface.blit(empty_title, empty_title.get_rect(center=(info_cx, self.slot_rect.top + 74)))
+            surface.blit(self.sep_surf, self.sep_surf.get_rect(center=(info_cx, self.slot_rect.top + 126)))
 
             line1 = self._render_fitted_text(
-                surface, "Inicia el Modo Historia y elige tu personaje para comenzar.", 24, (92, 58, 36), max_w=info_w
+                surface, "Inicia el Modo Historia y elige tu personaje.", 25, (92, 58, 36), max_w=info_w
             )
             line2 = self._render_fitted_text(
-                surface, "Tu avance se guarda automáticamente al superar misiones", 22, (124, 88, 62), max_w=info_w
+                surface, "Tu avance se guardará automáticamente.", 23, (124, 88, 62), max_w=info_w
             )
-            line3 = self._render_fitted_text(
-                surface, "y también de forma manual en Pausa > Guardar partida.", 22, (124, 88, 62), max_w=info_w
-            )
-            surface.blit(line1, line1.get_rect(center=(info_cx, self.slot_rect.top + 150)))
-            surface.blit(line2, line2.get_rect(center=(info_cx, self.slot_rect.top + 196)))
-            surface.blit(line3, line3.get_rect(center=(info_cx, self.slot_rect.top + 238)))
+            surface.blit(line1, line1.get_rect(center=(info_cx, self.slot_rect.top + 178)))
+            surface.blit(line2, line2.get_rect(center=(info_cx, self.slot_rect.top + 228)))
 
         for btn in self.buttons:
             btn.render(surface)
