@@ -42,7 +42,7 @@ def test_settings_save_load_summary_and_clean_reset():
 
     settings.update_story_progress(
         has_active_save=True,
-        character_id="shakira",
+        character_id="valdiri",
         high_score=200,
         completed_microgames=["uninorte_sprint", "uninorte_concentrate"],
         unlocked_locations=["uninorte", "buenavista"],
@@ -56,8 +56,8 @@ def test_settings_save_load_summary_and_clean_reset():
     assert settings.has_saved_story() is True
     summary = settings.get_story_save_summary()
     assert summary["has_save"] is True
-    assert summary["character_id"] == "shakira"
-    assert summary["character_name"] == "Shakira"
+    assert summary["character_id"] == "valdiri"
+    assert summary["character_name"] == "Valdiri"
     assert summary["levels_cleared"] == 1
     assert summary["total_levels"] == 5
     assert summary["next_district"] == "C.C. Buenavista"
@@ -189,7 +189,7 @@ def test_mode_select_watercolor_save_modal_bounds():
     assert panel.btn_close.rect.width >= 90
 
     # Verificar retrato ampliado (> 230 px de alto) para los personajes del catálogo y respaldo seguro
-    for cid in ("westcol", "char", "katherine", "shakira", "mujer"):
+    for cid in ("westcol", "char", "katherine", "valdiri", "mujer"):
         portrait = panel._get_portrait(cid, True)
         assert portrait.get_bounding_rect().width > 160
         assert portrait.get_bounding_rect().height > 230
@@ -350,3 +350,27 @@ def test_story_map_weather_restore_drawer_and_pause_save_feedback():
     story_map._on_exit_from_pause()
     assert exited["called"] is True
     assert len(sm._states) == 1
+
+
+def test_legacy_shakira_save_uses_valdiri_without_losing_progress(tmp_path):
+    import json
+
+    save_path = tmp_path / "legacy_settings.json"
+    save_path.write_text(json.dumps({"story_progress": {
+        "character_id": "shakira", "has_active_save": True,
+        "high_score": 200, "current_node_id": 5,
+        "completed_microgames": ["uninorte_sprint", "uninorte_concentrate"],
+        "unlocked_locations": ["uninorte", "buenavista"],
+        "weather": "sunset", "followers": 103700000,
+    }}), encoding="utf-8")
+    settings = SettingsManager(filepath=str(save_path))
+    progress = settings.get_story_progress()
+    assert progress["character_id"] == "valdiri"
+    assert progress["followers"] == 10400000
+    assert progress["high_score"] == 200
+    assert progress["current_node_id"] == 5
+    assert progress["unlocked_locations"] == ["uninorte", "buenavista"]
+    assert progress["weather"] == "sunset"
+    assert settings.get_story_save_summary()["character_name"] == "Valdiri"
+    settings.save()
+    assert SettingsManager(filepath=str(save_path)).get_story_progress() == progress

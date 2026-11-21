@@ -92,9 +92,17 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         bar_frame = self._load_focus_bar_frame(target_w=760)
         self.progress_bar = ProgressBar(bar_frame, center_top_pos=(self.screen_w // 2, 18))
 
-        # 5. Cursor en forma de lapicero oficial
-        pencil_sprite = self._load_pencil_cursor_sprite(target_w=84)
+        # 5. Puntero de Valdiri o lapicero oficial para los demás personajes
+        pencil_sprite = (
+            self._load_character_cursor_sprite(target_h=118)
+            if self.character_id == "valdiri"
+            else self._load_pencil_cursor_sprite(target_w=84)
+        )
         self.cursor = VirtualCursor(self.screen_w, self.screen_h, pencil_surface=pencil_sprite)
+        if self.character_id == "valdiri":
+            # La punta del índice ocupa otra posición que la punta del lapicero.
+            self.cursor.tip_offset_x = int(pencil_sprite.get_width() * (0.44 - 0.5))
+            self.cursor.tip_offset_y = int(pencil_sprite.get_height() * (0.23 - 0.5))
 
         # 6. Gestor de puntuación y rachas (interno)
         self.score_manager = ScoreManager()
@@ -137,9 +145,9 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         1. Westcol (Traje de gala con moño y collar)
         2. Char (Gorra Juniorista / Barranquilla)
         3. Katherine (Carnet Uninorte y libro)
-        4. Shakira (Pulseras doradas y micrófono)
+        4. Valdiri (Pulsera dorada y celular)
         """
-        char_order = ["westcol", "char", "katherine", "shakira"]
+        char_order = ["westcol", "char", "katherine", "valdiri"]
         idx = 0
         cid = getattr(self, "character_id", "westcol").lower()
         for i, name in enumerate(char_order):
@@ -153,13 +161,18 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             return cached
 
         try:
-            sheet = self.assets.load_surface(
-                "spritesheet_punteros_concentracion_microjuego.png", has_alpha=True
-            )
-            sw, sh = sheet.get_size()
-            cw = sw // 4
-            cell_rect = pygame.Rect(idx * cw, 0, cw, sh)
-            sub = sheet.subsurface(cell_rect).copy()
+            if cid == "valdiri":
+                sub = self.assets.load_surface(
+                    "valdiri_puntero_concentracion_microjuego.png", has_alpha=True
+                ).copy()
+            else:
+                sheet = self.assets.load_surface(
+                    "spritesheet_punteros_concentracion_microjuego.png", has_alpha=True
+                )
+                sw, sh = sheet.get_size()
+                cw = sw // 4
+                cell_rect = pygame.Rect(idx * cw, 0, cw, sh)
+                sub = sheet.subsurface(cell_rect).copy()
             bbox = sub.get_bounding_rect(min_alpha=20)
             if bbox.width > 0 and bbox.height > 0:
                 sub = sub.subsurface(bbox).copy()

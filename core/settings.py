@@ -11,7 +11,7 @@ CHARACTER_DISPLAY_NAMES: Dict[str, str] = {
     "westcol": "Westcol",
     "char": "Alex Char",
     "katherine": "Katherine",
-    "shakira": "Shakira",
+    "valdiri": "Valdiri",
 }
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
@@ -52,7 +52,7 @@ CHARACTER_BASE_FOLLOWERS: Dict[str, int] = {
     "westcol": 6700000,      # 6.7M (tarjeta oficial)
     "char": 810000,          # 810K (tarjeta oficial)
     "katherine": 250,        # 250 (tarjeta oficial)
-    "shakira": 103300000,    # 103.3M (tarjeta oficial)
+    "valdiri": 10000000,     # 10M (tarjeta oficial)
 }
 
 def format_social_count(value: int) -> str:
@@ -79,7 +79,7 @@ def compute_social_metrics(character_id: str, high_score: int, completed_levels_
 
     # Crecimiento proporcional por ronda superada para que el número en la cápsula cambie visiblemente
     if base_followers >= 10_000_000:
-        follower_Step = 200_000      # +0.2M por ronda (103.3M -> 103.5M -> 103.7M...)
+        follower_Step = 200_000      # +0.2M por ronda (10M -> 10.2M -> 10.4M...)
         likes_step = 450_000         # +450K likes por ronda
     elif base_followers >= 1_000_000:
         follower_Step = 100_000      # +0.1M por ronda (6.7M -> 6.8M -> 6.9M...)
@@ -132,6 +132,12 @@ class SettingsManager:
             merged["completed_microgames"] = []
         if not isinstance(merged.get("unlocked_achievements"), list):
             merged["unlocked_achievements"] = []
+        # Las partidas anteriores conservan su progreso con el personaje sustituto.
+        if str(merged.get("character_id", "")).lower() == "shakira":
+            merged["character_id"] = "valdiri"
+            metrics = compute_social_metrics("valdiri", int(merged.get("high_score", 0)), 0)
+            merged["followers"] = metrics["followers"]
+            merged["likes"] = metrics["likes"]
         return merged
 
     def load(self) -> None:

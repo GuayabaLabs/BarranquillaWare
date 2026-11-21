@@ -27,7 +27,7 @@ def test_overworld_navigation_suite():
     print(f"[OK] Inicialización en nodo {scene.player_node_id} en posición {scene.player_pos}")
 
     # 2. Verificación de tokens y chibis para los distintos personajes
-    for char_id in ["shakira", "katherine", "char", "westcol"]:
+    for char_id in ["valdiri", "katherine", "char", "westcol"]:
         scene.character_id = char_id
         scene._build_player_token()
         scene._load_player_chibi()

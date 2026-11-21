@@ -140,7 +140,7 @@ def test_folcloricos_microgames():
     print("[OK] Fritanga de la 84 (Arepa de Huevo) probado y verificado.")
 
     # 2. Test La Troja
-    troja = TrojaBaileMicrogame(character_id="shakira")
+    troja = TrojaBaileMicrogame(character_id="valdiri")
     assert troja.time_limit == 4.0
     troja.phase = troja.PHASE_PLAY
     troja.time_left = 0.04

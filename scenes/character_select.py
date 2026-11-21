@@ -29,9 +29,9 @@ CHARACTER_CATALOG: List[Dict[str, Any]] = [
         "theme_color": (135, 215, 150),  # Verde menta pastel
     },
     {
-        "id": "shakira",
-        "name": "SHAKIRA",
-        "asset_filename": "shakira_seleccion_personaje.png",
+        "id": "valdiri",
+        "name": "VALDIRI",
+        "asset_filename": "valdiri_seleccion_personaje.png",
         "theme_color": (250, 145, 190),  # Rosa coral pop
     }
 ]
@@ -159,7 +159,7 @@ class CharacterCard:
 class CharacterSelectScene(BaseState):
     """
     Escena de Selección de Personajes de BarranquillaWare a 1920x1080 Full HD:
-    - 4 Tarjetas oficiales donde la imagen en sí es la caja (Westcol, Alex Char, Katherine, Shakira).
+    - 4 Tarjetas oficiales donde la imagen en sí es la caja (Westcol, Alex Char, Katherine, Valdiri).
     - Cabecera nativa con título e iconos ensamblados proporcionalmente sin deformación.
     - Soporte completo de shaders GLSL de partículas (ModernGL).
     - Botón 'SELECCIONAR' con aura dorada palpitante y destello Shimmer integrado.

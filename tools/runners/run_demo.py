@@ -42,7 +42,7 @@ def main():
                         help="Escena inicial a cargar")
     parser.add_argument("--game", choices=["flamenco", "sprint", "ventana", "rueda", "penalty", "aeropuerto", "boss", "fritanga", "troja"], default=None,
                         help="Microjuego específico a probar directamente")
-    parser.add_argument("--char", default="westcol", choices=["westcol", "char", "katherine", "shakira"],
+    parser.add_argument("--char", default="westcol", choices=["westcol", "char", "katherine", "valdiri"],
                         help="Personaje activo a utilizar")
     parser.add_argument("--software", action="store_true", help="Forzar renderizado por software (sin ModernGL)")
 

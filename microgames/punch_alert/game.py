@@ -21,7 +21,7 @@ class PunchAlertMicrogame(BaseMicrogame):
     con la misma firma `(character_id, on_complete_callback)` que `UninorteSprintMicrogame`.
     
     1. Voces Reactivas por Personaje al Golpear Notificaciones (`CHARACTER_PUNCH_VOICES`):
-       - Arquitectura preparada para que cada personaje (`char`, `katherine`, `shakira`, `westcol`)
+       - Arquitectura preparada para que cada personaje (`char`, `katherine`, `valdiri`, `westcol`)
          tenga su propio banco de audios al conectar un golpe.
        - Por ahora, todos los personajes utilizan como fallback activo las 4 voces de `char`
          (`char_audio_0_microjuego_puño.ogg` .. `char_audio_3_microjuego_puño.ogg`), pero tan pronto
@@ -58,11 +58,11 @@ class PunchAlertMicrogame(BaseMicrogame):
             "katherine_audio_2_microjuego_puño.ogg",
             "katherine_audio_3_microjuego_puño.ogg",
         ],
-        "shakira": [
-            "shakira_audio_0_microjuego_puño.ogg",
-            "shakira_audio_1_microjuego_puño.ogg",
-            "shakira_audio_2_microjuego_puño.ogg",
-            "shakira_audio_3_microjuego_puño.ogg",
+        "valdiri": [
+            "valdiri_audio_0_microjuego_puño.ogg",
+            "valdiri_audio_1_microjuego_puño.ogg",
+            "valdiri_audio_2_microjuego_puño.ogg",
+            "valdiri_audio_3_microjuego_puño.ogg",
         ],
         "westcol": [
             "westcol_audio_0_microjuego_puño.ogg",
@@ -197,7 +197,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         # Fallback a las voces de 'char' con modulación tímbrica por personaje si no tiene audios grabados propios
         if not self.punch_voices:
             pitch_profiles = {
-                "shakira": 1.32,    # Agudo y enérgico
+                "valdiri": 1.32,    # Agudo y enérgico
                 "katherine": 1.22,  # Tono femenino claro y dinámico
                 "westcol": 0.94,    # Tono ligeramente más grave y raspado
                 "char": 1.0,        # Tono nativo

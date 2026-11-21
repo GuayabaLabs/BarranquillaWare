@@ -54,7 +54,7 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     settings = SettingsManager.get_instance()
     settings.reset_story_progress()
 
-    scene = StoryMapScene(character_id="shakira")
+    scene = StoryMapScene(character_id="valdiri")
     test_screen = pygame.Surface((1920, 1080))
 
     # 1. Verificar orden de los 4 niveles y configuración de etapas

@@ -18,7 +18,7 @@ def test_uninorte_concentrate_components_and_loop() -> None:
     pygame.font.init()
     pygame.display.set_mode((1920, 1080), pygame.NOFRAME)
 
-    game = UninorteConcentrateMicrogame(character_id="westcol")
+    game = UninorteConcentrateMicrogame(character_id="valdiri")
     surface = pygame.Surface((1920, 1080))
 
     # 1. Validar carga de las 6 nubes de redes sociales y duración de 25s

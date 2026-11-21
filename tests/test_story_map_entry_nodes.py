@@ -21,7 +21,7 @@ class TestStoryMapEntryNodes(unittest.TestCase):
         pygame.init()
         pygame.display.set_mode((1920, 1080))
         SettingsManager.get_instance().reset_story_progress()
-        cls.scene = StoryMapScene(character_id="shakira")
+        cls.scene = StoryMapScene(character_id="valdiri")
 
     def _park(self, nid: int) -> None:
         _, _, node_map, _, _ = self.scene._get_street_graph()
@@ -97,7 +97,7 @@ class TestStoryMapCameraWalk(unittest.TestCase):
         pygame.init()
         pygame.display.set_mode((1920, 1080))
         SettingsManager.get_instance().reset_story_progress()
-        cls.scene = StoryMapScene(character_id="shakira")
+        cls.scene = StoryMapScene(character_id="valdiri")
 
     def test_camera_walk_and_pointer_disabled(self):
         from core.engine import Engine
