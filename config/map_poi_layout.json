@@ -40,8 +40,8 @@
       "width": 125,
       "angle": 0.0,
       "level_id": "ventana",
-      "microgame_id": "",
-      "kind": "extra",
+      "microgame_id": "punch_alert",
+      "kind": "level",
       "control_mode": "keyboard_gamepad"
     },
     "malecon": {
@@ -84,7 +84,7 @@
       "width": 540,
       "angle": 0.0,
       "level_id": "aeropuerto",
-      "microgame_id": "punch_alert",
+      "microgame_id": "",
       "kind": "level",
       "control_mode": "keyboard_gamepad"
     }

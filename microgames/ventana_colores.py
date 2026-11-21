@@ -60,9 +60,9 @@ class VentanaColoresMicrogame(BaseMicrogame):
             bx = start_x + i * (btn_w + spacing)
             self.buttons.append({"idx": i, "rect": pygame.Rect(bx, btn_y, btn_w, btn_h), "data": col})
 
-        self.font_banner = self.assets.cargarFuenteCuento(22)
+        self.font_banner = self.assets.cargarFuenteTitulo(22)
         self.font_q = self.assets.cargarFuenteCuento(26)
-        self.font_btn = self.assets.cargarFuenteCuento(24)
+        self.font_btn = self.assets.cargarFuenteTitulo(24)
         self.font_num = self.assets.cargarFuenteCuento(18)
 
         self._load_character()

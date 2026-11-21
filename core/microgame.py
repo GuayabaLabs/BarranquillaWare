@@ -82,8 +82,8 @@ class BaseMicrogame(BaseState):
         self.shake_offset_y: int = 0
 
         # Tipografías oficiales de Microjuego con fallback empaquetado
-        self.font_command = self.assets.get_font("Arial Black, Impact, sans-serif", 72)
-        self.font_outro = self.assets.get_font("Arial Black, Impact, sans-serif", 84)
+        self.font_command = self.assets.cargarFuenteTitulo(72)
+        self.font_outro = self.assets.cargarFuenteTitulo(84)
         self.font_timer = self.assets.get_font("Arial Black, Impact, sans-serif", 28)
         self._outro_shader_cache: dict = {}
 
@@ -609,7 +609,7 @@ class BaseMicrogame(BaseState):
                 import os
                 fondo = self.assets.cargarSinFondo(os.path.join("Interfaz", "fondoInstruccion.jpg"), 1150)
                 lineas = self.command_text.split("\n")
-                fuenteGrande = self.assets.cargarFuenteCuento(96)
+                fuenteGrande = self.assets.cargarFuenteTitulo(88)
                 fuenteChica = self.assets.cargarFuenteCuento(52)
                 textos = []
                 for i, linea in enumerate(lineas):

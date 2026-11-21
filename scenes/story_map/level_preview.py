@@ -188,11 +188,11 @@ class LevelPreviewBuilder:
 
         # 1. Título destacado en cabecera con fuente de Coaster (evitando el pétalo rosa en x~352)
         title_size = 24
-        f_title = self.assets.cargarFuenteCuento(title_size)
+        f_title = self.assets.cargarFuenteTitulo(title_size)
         txt_title = f_title.render(title_str, True, (42, 26, 16))
         while txt_title.get_width() > 296 and title_size > 17:
             title_size -= 1
-            f_title = self.assets.cargarFuenteCuento(title_size)
+            f_title = self.assets.cargarFuenteTitulo(title_size)
             txt_title = f_title.render(title_str, True, (42, 26, 16))
         title_rect = txt_title.get_rect(center=(self.INTERIOR_CX - 6, 55))
         card.blit(txt_title, title_rect)

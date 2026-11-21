@@ -540,7 +540,8 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
             ("buenavista", "building", 320.0, 140.0),
             ("buenavista", "building", 480.0, 140.0),
             ("metropolitano", "building", 0.0, float(self.scene.world_h - 1080)),
-            ("aeropuerto", "building", float(self.scene.world_w - 1920), float(self.scene.world_h - 1080)),
+            ("aleta", "building", float(self.scene.world_w - 1920), float(self.scene.world_h - 1080)),
+            ("ventana", "building", 960.0, 0.0),
             ("malecon", "building", float(self.scene.world_w - 1920), 0.0),
         ]
         for poi_key, source_mode, cx, cy in edge_cases:

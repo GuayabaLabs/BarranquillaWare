@@ -7,11 +7,183 @@ import numpy as np
 
 from core.microgame import BaseMicrogame
 from core.camera_gestures import CameraGestureInput
-from core.asset_manager import AssetManager
+from core.asset_manager import AssetManager, quitarBlanco
 
 # Cachés compartidas a nivel de módulo para reutilizar sprites procesados y buffers de audio
 _SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
 _AUDIO_CACHE: Dict[Tuple[Any, ...], Any] = {}
+
+escalaArbolito = 0.696
+esquinaArbolito = (0.25802, 0.00352)
+pasosTono = 12
+segundosPorPaso = 1.2
+realceTono = 1.9
+estrellasExtra = 26
+pausaFugaz = (2.5, 6.5)
+
+ideasPublicacion = [
+    ("ubicacion", "Estamos aquí ahorita", True),
+    ("casa", "La dirección de la casa", True),
+    ("viaje", "Mañana nos vamos de viaje", True),
+    ("ninos", "Fotos de los niños sin permiso", True),
+    ("regalos", "Los regalos caros que compramos", True),
+    ("placa", "La placa del carro", True),
+    ("tiquete", "El tiquete con su código", True),
+    ("rutina", "Venimos todos los viernes a esta hora", True),
+    ("lucecitas", "Filtro de lucecitas", False),
+    ("arbolito", "¡Qué belleza de arbolito!", False),
+    ("villancico", "Villancico de fondo", False),
+    ("felicitacion", "¡Feliz Navidad, familia!", False),
+    ("despues", "Publicarlo cuando ya se fueron", False),
+    ("permiso", "Pedir permiso antes de etiquetar", False),
+    ("cercanos", "Solo para familia y amigos", False),
+    ("album", "Guardarla en el álbum familiar", False),
+]
+ensenanzasRiesgo = {
+    "ninos": "Esa carita no decidió estar en internet. Decidiste tú por ella.",
+    "casa": "Ahora medio mundo sabe dónde duermes.",
+    "viaje": "Le contaste a medio mundo cuándo se queda sola tu casa.",
+    "ubicacion": "Publicaste dónde estaban. Y alguien que no conoces ya va pa' allá.",
+    "rutina": "Si siempre estás aquí a la misma hora, cualquiera puede esperarte.",
+    "tiquete": "Ese código dice quién eres, a dónde vas y cuándo.",
+    "regalos": "Mostraste lo que tienes. Alguien ya está pensando cómo quitártelo.",
+    "placa": "Con una placa, cualquiera te encuentra en la calle.",
+}
+ordenGravedad = ["ninos", "casa", "viaje", "ubicacion", "rutina", "tiquete", "regalos", "placa"]
+cierreEnsenanza = "Comparte el momento, no tu vida entera."
+ensenanzaSegura = ["Subiste lo bonito y te guardaste lo tuyo.",
+                   "Así sí, mi llave: los recuerdos se comparten, los datos se cuidan."]
+ensenanzaVacia = ["Cuidar tus datos no es borrarlo todo.", "Lo bonito también se comparte, mi llave."]
+destinoIdea = {
+    "ubicacion": "descripcion", "casa": "descripcion", "viaje": "descripcion", "ninos": "descripcion",
+    "regalos": "descripcion", "placa": "descripcion", "tiquete": "descripcion", "rutina": "descripcion",
+    "arbolito": "descripcion", "felicitacion": "descripcion", "permiso": "descripcion",
+    "lucecitas": "filtro", "villancico": "cancion", "despues": "hora", "cercanos": "publico", "album": "guardar",
+}
+textosDescripcion = {
+    "ubicacion": "En la Ventana al Mundo ahorita mismo.",
+    "casa": "Ya pa' la casa: calle 58 #43-21.",
+    "viaje": "Mañana nos vamos de viaje toda la familia.",
+    "ninos": "Con los niños, Sofi y Juanchito.",
+    "regalos": "Ya compramos la tele y el celular nuevos.",
+    "placa": "Llegamos en el carro, placa BAQ 284.",
+    "tiquete": "Tiquete listo, código XJ7K2.",
+    "rutina": "Aquí todos los viernes a las 7.",
+    "arbolito": "¡Qué belleza de arbolito!",
+    "felicitacion": "¡Feliz Navidad, familia!",
+    "permiso": "Etiqueté a la familia con su permiso.",
+}
+cancionPost = "Los peces en el río"
+horaPost = "Se publica mañana, ya en la casa"
+publicoPost = "Familia y amigos"
+guardarPost = (1360, 1588, 60, 73)
+puntosPost = (1359, 386, 66, 12)
+letrasPorSegundo = 34.0
+colorAcierto = (255, 214, 130)
+colorPost = (255, 194, 214)
+colorError = (206, 176, 255)
+contornoTexto = (60, 36, 70)
+
+tituloBuenas = "Buenas pa' compartir"
+tituloMalas = "Mejor guárdatelas"
+marcaPublicada = "la publicaste"
+marcaBorrada = "la borraste"
+
+cajaPost = (289, 227, 1262, 1850)
+fotoPost = (405, 505, 1030, 1034)
+avatarPost = (474, 393, 62)
+usuarioPost = (578, 369, 330, 46)
+likesPost = (415, 1712, 372, 54)
+renglonesPost = (422, 1000, (1819, 1881, 1944))
+altoPost = 700
+esquinaPost = (52, 168)
+rectFoto = (560, 100, 960, 960)
+ladoFotoVista = 600
+duracionPublicar = 3.4
+velocidadCaida = (340.0, 430.0)
+separacionTarjetas = 1.6
+
+
+def partirTexto(texto: str, fuente: pygame.font.Font, ancho: int) -> List[str]:
+    lineas, actual = [], ""
+    for palabra in texto.split():
+        prueba = (actual + " " + palabra).strip()
+        if actual and fuente.size(prueba)[0] > ancho:
+            lineas.append(actual)
+            actual = palabra
+        else:
+            actual = prueba
+    if actual:
+        lineas.append(actual)
+    return lineas
+
+
+def suavizar(x: float) -> float:
+    x = max(0.0, min(1.0, x))
+    return x * x * (3.0 - 2.0 * x)
+
+
+def prepararTono(rgb: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    maximo = rgb.max(axis=-1)
+    minimo = rgb.min(axis=-1)
+    rango = maximo - minimo
+    seguro = np.where(rango == 0, 1.0, rango)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    tono = np.where(maximo == r, ((g - b) / seguro) % 6.0,
+                    np.where(maximo == g, (b - r) / seguro + 2.0, (r - g) / seguro + 4.0)) * 60.0
+    tono = np.where(rango == 0, 0.0, tono)
+    saturacion = np.where(maximo == 0, 0.0, rango / np.where(maximo == 0, 1.0, maximo))
+    peso = np.clip(1.0 - np.abs(tono - 185.0) / 45.0, 0.0, 1.0) * np.clip(saturacion / 0.12, 0.0, 1.0)
+    return tono, saturacion, maximo, peso
+
+
+def girarTono(rgb: np.ndarray, datos: Tuple[np.ndarray, ...], grados: float) -> np.ndarray:
+    tono, saturacion, maximo, peso = datos
+    nuevo = (tono + grados) % 360.0 / 60.0
+    c = maximo * np.minimum(1.0, saturacion * realceTono)
+    x = c * (1.0 - np.abs(nuevo % 2.0 - 1.0))
+    m = maximo - c
+    sector = nuevo.astype(int) % 6
+    ceros = np.zeros_like(c)
+    rr = np.choose(sector, [c, x, ceros, ceros, x, c])
+    gg = np.choose(sector, [x, c, c, x, ceros, ceros])
+    bb = np.choose(sector, [ceros, ceros, x, c, c, x])
+    girado = np.stack([rr + m, gg + m, bb + m], axis=-1)
+    return rgb * (1.0 - peso[..., None]) + girado * peso[..., None]
+
+
+def brilloEstrella(lado: int) -> pygame.Surface:
+    centro = (lado - 1) / 2.0
+    ys, xs = np.mgrid[0:lado, 0:lado]
+    dx, dy = xs - centro, ys - centro
+    distancia = np.hypot(dx, dy)
+    escala = lado / 25.0
+    nucleo = np.exp(-(distancia / (1.6 * escala)) ** 2)
+    halo = 0.35 * np.exp(-(distancia / (5.5 * escala)) ** 2)
+    rayos = (np.exp(-(dx / (0.8 * escala)) ** 2) * np.exp(-np.abs(dy) / (4.0 * escala))
+             + np.exp(-(dy / (0.8 * escala)) ** 2) * np.exp(-np.abs(dx) / (4.0 * escala)))
+    alfa = np.clip(nucleo + halo + 0.45 * rayos, 0.0, 1.0)
+    capa = pygame.Surface((lado, lado), pygame.SRCALPHA)
+    capa.fill((236, 242, 255, 0))
+    pixeles = pygame.surfarray.pixels_alpha(capa)
+    pixeles[:] = (alfa.T * 255).astype(np.uint8)
+    del pixeles
+    return capa
+
+
+def estelaFugaz(largo: int = 220, grueso: int = 17) -> pygame.Surface:
+    ys, xs = np.mgrid[0:grueso, 0:largo]
+    centro = (grueso - 1) / 2.0
+    cruzado = np.exp(-((ys - centro) / 2.0) ** 2) + 0.35 * np.exp(-((ys - centro) / 5.0) ** 2)
+    avance = (xs / float(largo)) ** 1.5
+    cabeza = np.exp(-(((xs - (largo - 8)) / 5.0) ** 2 + ((ys - centro) / 3.2) ** 2))
+    alfa = np.clip(cruzado * avance + 1.3 * cabeza, 0.0, 1.0)
+    capa = pygame.Surface((largo, grueso), pygame.SRCALPHA)
+    capa.fill((228, 236, 255, 0))
+    pixeles = pygame.surfarray.pixels_alpha(capa)
+    pixeles[:] = (alfa.T * 255).astype(np.uint8)
+    del pixeles
+    return capa
 
 class PunchAlertMicrogame(BaseMicrogame):
     CAMERA_POINTER = False  # Usa la cámara directamente
@@ -45,6 +217,8 @@ class PunchAlertMicrogame(BaseMicrogame):
     # Cada personaje tiene su propia lista de archivos de voz al golpear una notificación.
     # Si los archivos específicos de un personaje aún no están en `assets/`, el cargador
     # usa automáticamente las voces de `char` como fallback activo.
+    ensenanzaFinal = {"gana": [cierreEnsenanza], "pierde": [cierreEnsenanza]}
+
     CHARACTER_PUNCH_VOICES: Dict[str, List[str]] = {
         "char": [
             "char_audio_0_microjuego_puño.ogg",
@@ -76,8 +250,8 @@ class PunchAlertMicrogame(BaseMicrogame):
         self,
         character_id: str = "westcol",
         on_complete_callback: Optional[Callable[[bool], None]] = None,
-        command_text: str = "¡DESPACHA EL SPAM!",
-        time_limit: float = 15.0
+        command_text: str = "¡Cuida tu publicación!\nGolpea lo que no debes compartir",
+        time_limit: float = 22.0
     ) -> None:
         self.character_id = character_id
         super().__init__(
@@ -87,6 +261,11 @@ class PunchAlertMicrogame(BaseMicrogame):
         )
 
     def enter(self, params: Optional[dict] = None) -> None:
+        if pygame.mixer.get_init():
+            pygame.mixer.music.fadeout(400)
+        self.audio.current_track = None
+
+    def ponerMusica(self) -> None:
         self.audio.play_bgm("PunchMusic.mp3", volume_scale=0.35)
 
     def _extract_tight_surface(self, surface: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
@@ -125,6 +304,718 @@ class PunchAlertMicrogame(BaseMicrogame):
         if bbox.width > 0 and bbox.height > 0:
             return sub.subsurface(bbox).copy()
         return sub
+
+    def cargarArbolito(self) -> None:
+        clave = ("arbolito", self.screen_w, self.screen_h)
+        if clave in _SURFACE_CACHE:
+            self.arbolitos, self.posArbolito = _SURFACE_CACHE[clave]
+            return
+        self.arbolitos, self.posArbolito = [], (0, 0)
+        try:
+            hoja = self.assets.load_surface(os.path.join("Punch", "arbolito.png"), has_alpha=False)
+        except Exception:
+            _SURFACE_CACHE[clave] = (self.arbolitos, self.posArbolito)
+            return
+        luz = pygame.surfarray.array3d(hoja).max(axis=2)
+        xs, ys = np.nonzero(luz > 8)
+        if xs.size == 0:
+            _SURFACE_CACHE[clave] = (self.arbolitos, self.posArbolito)
+            return
+        caja = pygame.Rect(int(xs.min()), int(ys.min()), int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1))
+        escala = escalaArbolito * self.screen_w / float(hoja.get_width())
+        medida = (max(1, round(caja.w * escala)), max(1, round(caja.h * escala)))
+        pequeno = pygame.transform.smoothscale(hoja.subsurface(caja), medida)
+        rgb = pygame.surfarray.array3d(pequeno).astype(np.float32) / 255.0
+        alfa = np.clip(rgb.max(axis=2) / 0.3, 0.0, 1.0)
+        limpio = rgb / np.maximum(alfa, 0.02)[..., None]
+        datos = prepararTono(limpio)
+        for paso in range(pasosTono):
+            grados = paso * 360.0 / pasosTono
+            color = np.clip(girarTono(limpio, datos, grados), 0.0, 1.0)
+            capa = pygame.Surface(medida, pygame.SRCALPHA)
+            pygame.surfarray.blit_array(capa, (color * 255).astype(np.uint8))
+            pixeles = pygame.surfarray.pixels_alpha(capa)
+            pixeles[:] = (alfa * 255).astype(np.uint8)
+            del pixeles
+            self.arbolitos.append(capa)
+        self.posArbolito = (round(esquinaArbolito[0] * self.screen_w + caja.x * escala),
+                            round(esquinaArbolito[1] * self.screen_h + caja.y * escala))
+        _SURFACE_CACHE[clave] = (self.arbolitos, self.posArbolito)
+
+    def cargarCielo(self) -> None:
+        self.fugaces: List[dict] = []
+        self.proximaFugaz = None
+        clave = ("cielo", self.screen_w, self.screen_h)
+        if clave in _SURFACE_CACHE:
+            self.estrellasCielo, self.mascaraCielo, self.estelaCielo = _SURFACE_CACHE[clave]
+            return
+        w, h = self.screen_w, self.screen_h
+        rgb = pygame.surfarray.array3d(self.bg_surface).astype(np.int16)
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        luz = rgb.mean(axis=2)
+        cielo = (b > r + 35) & (b > g + 15) & (luz < 140)
+        cielo[:, int(h * 0.58):] = False
+        plano = pygame.Surface((w, h))
+        pygame.surfarray.blit_array(plano, np.repeat((cielo * 255).astype(np.uint8)[..., None], 3, axis=2))
+        borroso = pygame.transform.smoothscale(pygame.transform.smoothscale(plano, (w // 12, h // 12)), (w, h))
+        mascara = np.clip((pygame.surfarray.array3d(borroso)[..., 0] / 255.0 - 0.6) / 0.3, 0.0, 1.0)
+        plano = pygame.Surface((w, h))
+        pygame.surfarray.blit_array(plano, np.repeat(luz.astype(np.uint8)[..., None], 3, axis=2))
+        entorno = pygame.surfarray.array3d(pygame.transform.smoothscale(
+            pygame.transform.smoothscale(plano, (w // 16, h // 16)), (w, h)))[..., 0].astype(np.int16)
+        rango = rgb.max(axis=2) - rgb.min(axis=2)
+        brillantes = (luz > 150) & (luz - entorno > 70) & (rango < 90) & (mascara > 0.95)
+        xs, ys = np.nonzero(brillantes)
+        orden = np.argsort(-luz[xs, ys])
+        azar = random.Random(7)
+        grande, chica = brilloEstrella(27), brilloEstrella(15)
+        puntos: List[Tuple[int, int]] = []
+        self.estrellasCielo = []
+        for i in orden:
+            x, y = int(xs[i]), int(ys[i])
+            if all((x - px) ** 2 + (y - py) ** 2 > 144 for px, py in puntos):
+                puntos.append((x, y))
+                self.estrellasCielo.append((x, y, azar.uniform(0, math.tau), azar.uniform(0.35, 0.9), 1.0, grande))
+        libres = np.argwhere(mascara > 0.97)
+        intentos, limite = 0, len(puntos) + estrellasExtra
+        while libres.size and len(puntos) < limite and intentos < 600:
+            intentos += 1
+            x, y = (int(v) for v in libres[azar.randrange(len(libres))])
+            if all((x - px) ** 2 + (y - py) ** 2 > 1600 for px, py in puntos):
+                puntos.append((x, y))
+                self.estrellasCielo.append((x, y, azar.uniform(0, math.tau), azar.uniform(0.25, 0.7), 0.75, chica))
+        self.mascaraCielo = mascara
+        self.estelaCielo = estelaFugaz()
+        _SURFACE_CACHE[clave] = (self.estrellasCielo, self.mascaraCielo, self.estelaCielo)
+
+    def lanzarFugaz(self, t: float) -> None:
+        angulo = random.uniform(16.0, 32.0)
+        direccion = (-math.cos(math.radians(angulo)), math.sin(math.radians(angulo)))
+        self.fugaces.append({
+            "inicio": t,
+            "vida": random.uniform(0.7, 1.0),
+            "origen": (random.uniform(0.4, 0.98) * self.screen_w, random.uniform(0.02, 0.2) * self.screen_h),
+            "direccion": direccion,
+            "rapidez": random.uniform(650.0, 900.0),
+            "imagen": pygame.transform.rotozoom(self.estelaCielo, 180.0 + angulo, 1.0),
+        })
+
+    def dibujarCielo(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        if not getattr(self, "estrellasCielo", None):
+            return
+        t = pygame.time.get_ticks() / 1000.0
+        for x, y, fase, rapidez, fuerza, imagen in self.estrellasCielo:
+            onda = 0.5 + 0.5 * math.sin(t * rapidez * math.tau + fase)
+            intensidad = fuerza * onda ** 3
+            if intensidad < 0.04:
+                continue
+            imagen.set_alpha(int(255 * intensidad))
+            surface.blit(imagen, imagen.get_rect(center=(x + ox, y + oy)))
+        if self.proximaFugaz is None:
+            self.proximaFugaz = t + random.uniform(1.0, 2.5)
+        if t >= self.proximaFugaz:
+            self.lanzarFugaz(t)
+            self.proximaFugaz = t + random.uniform(*pausaFugaz)
+        vivas = []
+        for fugaz in self.fugaces:
+            edad = t - fugaz["inicio"]
+            if edad > fugaz["vida"]:
+                continue
+            vivas.append(fugaz)
+            avance = fugaz["rapidez"] * edad
+            dx, dy = fugaz["direccion"]
+            cabeza = (fugaz["origen"][0] + dx * avance, fugaz["origen"][1] + dy * avance)
+            mitad = self.estelaCielo.get_width() / 2.0 - 7.0
+            imagen = fugaz["imagen"]
+            caja = imagen.get_rect(center=(round(cabeza[0] - dx * mitad), round(cabeza[1] - dy * mitad)))
+            visible = caja.clip(pygame.Rect(0, 0, self.screen_w, self.screen_h))
+            if visible.w <= 0 or visible.h <= 0:
+                continue
+            fuerza = min(1.0, edad / 0.12) * min(1.0, (fugaz["vida"] - edad) / 0.3)
+            trozo = imagen.subsurface(visible.move(-caja.x, -caja.y)).copy()
+            pixeles = pygame.surfarray.pixels_alpha(trozo)
+            filtro = self.mascaraCielo[visible.x:visible.right, visible.y:visible.bottom]
+            pixeles[:] = (pixeles * filtro * fuerza).astype(np.uint8)
+            del pixeles
+            surface.blit(trozo, (visible.x + ox, visible.y + oy))
+        self.fugaces = vivas
+
+    def dibujarArbolito(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        if not getattr(self, "arbolitos", None):
+            return
+        t = pygame.time.get_ticks() / 1000.0
+        vuelta = (t / segundosPorPaso) % len(self.arbolitos)
+        actual = int(vuelta) % len(self.arbolitos)
+        siguiente = (actual + 1) % len(self.arbolitos)
+        mezcla = vuelta - int(vuelta)
+        punto = (self.posArbolito[0] + ox, self.posArbolito[1] + oy)
+        surface.blit(self.arbolitos[actual], punto)
+        if mezcla > 0:
+            capa = self.arbolitos[siguiente]
+            capa.set_alpha(int(255 * mezcla))
+            surface.blit(capa, punto)
+            capa.set_alpha(255)
+
+    def tramosOcupados(self, valores, minimo: int = 50) -> List[Tuple[int, int]]:
+        tramos, inicio = [], None
+        for i, lleno in enumerate(list(valores) + [False]):
+            if lleno and inicio is None:
+                inicio = i
+            elif not lleno and inicio is not None:
+                if i - inicio > minimo:
+                    tramos.append((inicio, i))
+                inicio = None
+        return tramos
+
+    def escribirEnTarjeta(self, tarjeta: pygame.Surface, texto: str) -> None:
+        w, h = tarjeta.get_size()
+        zona = pygame.Rect(int(w * 0.46), int(h * 0.16), int(w * 0.47), int(h * 0.68))
+        for tam in (34, 31, 28, 25, 22):
+            fuente = self.assets.cargarFuenteCuento(tam)
+            lineas = partirTexto(texto, fuente, zona.w)
+            if len(lineas) <= 3 and len(lineas) * fuente.get_linesize() <= zona.h:
+                break
+        alto = fuente.get_linesize()
+        y = zona.centery - alto * len(lineas) // 2
+        for linea in lineas:
+            letras = fuente.render(linea, True, (88, 52, 96))
+            tarjeta.blit(letras, letras.get_rect(midtop=(zona.centerx, y)))
+            y += alto
+
+    def recortarIcono(self, tarjeta: pygame.Surface) -> pygame.Surface:
+        w, h = tarjeta.get_size()
+        rgb = pygame.surfarray.array3d(tarjeta).astype(np.int16)
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        marco = (r > 165) & (r < 220) & (g > 135) & (g < 182) & (b > 145) & (b < 192) & (r - g > 15)
+        izquierda, derecha = int(w * 0.05), w // 2
+        arriba, abajo = int(h * 0.07), int(h * 0.93)
+        filas = [np.flatnonzero(marco[izquierda:derecha, y]) + izquierda for y in (h // 2 - 12, h // 2, h // 2 + 12)]
+        filas = [f for f in filas if f.size >= 2]
+        if not filas:
+            lado = int(h * 0.7)
+            caja = pygame.Rect(int(w * 0.07), (h - lado) // 2, lado, lado)
+        else:
+            x0 = int(np.median([f.min() for f in filas]))
+            x1 = int(np.median([f.max() for f in filas]))
+            columnas = [np.flatnonzero(marco[x, arriba:abajo]) + arriba for x in ((x0 + x1) // 2 - 12, (x0 + x1) // 2, (x0 + x1) // 2 + 12)]
+            columnas = [c for c in columnas if c.size >= 2]
+            if columnas:
+                y0 = int(np.median([c.min() for c in columnas]))
+                y1 = int(np.median([c.max() for c in columnas]))
+            else:
+                y0, y1 = h // 2 - (x1 - x0) // 2, h // 2 + (x1 - x0) // 2
+            lado = max(x1 - x0, y1 - y0) + 1 + 8
+            caja = pygame.Rect(0, 0, lado, lado)
+            caja.center = ((x0 + x1 + 1) // 2, (y0 + y1 + 1) // 2)
+        caja = caja.clip(tarjeta.get_rect())
+        icono = tarjeta.subsurface(caja).copy()
+        mascara = pygame.Surface(caja.size, pygame.SRCALPHA)
+        pygame.draw.rect(mascara, (255, 255, 255, 255), mascara.get_rect(), border_radius=round(caja.w * 0.22))
+        icono.blit(mascara, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        return self.suavizarOrilla(icono)
+
+    def cargarTarjetas(self, ancho: int, alto: int) -> None:
+        clave = ("tarjetasPost", ancho, alto)
+        if clave not in _SURFACE_CACHE:
+            hoja = self.assets.load_surface(os.path.join("Punch", "tarjetas.png"))
+            opaco = pygame.surfarray.array_alpha(hoja) > 120
+            columnas = self.tramosOcupados(opaco.sum(axis=1) > 20)
+            filas = self.tramosOcupados(opaco.sum(axis=0) > 20)
+            ideas = []
+            for n, (codigo, texto, riesgosa) in enumerate(ideasPublicacion):
+                (x0, x1), (y0, y1) = columnas[n % 4], filas[n // 4]
+                recorte = self._extract_tight_surface(hoja, pygame.Rect(x0, y0, x1 - x0, y1 - y0))
+                base = pygame.transform.smoothscale(recorte, (ancho, alto))
+                icono = self.recortarIcono(base)
+                tarjeta = base.copy()
+                self.escribirEnTarjeta(tarjeta, texto)
+                ideas.append({"codigo": codigo, "texto": texto, "riesgosa": riesgosa, "sprite": tarjeta, "icono": icono})
+            _SURFACE_CACHE[clave] = ideas
+        self.ideas = _SURFACE_CACHE[clave]
+        self.trash_sprites = [idea["sprite"] for idea in self.ideas if idea["riesgosa"]]
+        self.safe_sprites = [idea["sprite"] for idea in self.ideas if not idea["riesgosa"]]
+
+    def cargarPublicacion(self) -> None:
+        clave = ("publicacion", altoPost)
+        if clave not in _SURFACE_CACHE:
+            hoja = self.assets.load_surface(os.path.join("Punch", "publicacion.png"), has_alpha=False)
+            escala = altoPost / float(cajaPost[3])
+            medida = (round(cajaPost[2] * escala), altoPost)
+            plano = pygame.transform.smoothscale(hoja.subsurface(pygame.Rect(cajaPost)), medida).convert_alpha()
+            limpio = quitarBlanco(plano)
+            if limpio.get_size() != medida:
+                lienzo = pygame.Surface(medida, pygame.SRCALPHA)
+                lienzo.blit(limpio, ((medida[0] - limpio.get_width()) // 2, (medida[1] - limpio.get_height()) // 2))
+                limpio = lienzo
+            conBorde = self.ponerBordeFino(self.suavizarOrilla(limpio), (118, 92, 146), 2)
+            margen = (conBorde.get_width() - medida[0]) // 2
+            corazon = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), 40)
+            _SURFACE_CACHE[clave] = (conBorde, escala, margen, corazon)
+        self.marcoPost, self.escalaPost, self.margenPost, self.corazonPost = _SURFACE_CACHE[clave]
+        self.huecoPost = self.rectLocal(fotoPost)
+        self.marcoListo: Optional[pygame.Surface] = None
+
+    def puntoLocal(self, x: float, y: float) -> Tuple[int, int]:
+        return (round((x - cajaPost[0]) * self.escalaPost) + self.margenPost,
+                round((y - cajaPost[1]) * self.escalaPost) + self.margenPost)
+
+    def rectLocal(self, caja) -> pygame.Rect:
+        x, y = self.puntoLocal(caja[0], caja[1])
+        return pygame.Rect(x, y, round(caja[2] * self.escalaPost), round(caja[3] * self.escalaPost))
+
+    def cargarSonido(self, ruta: str) -> Optional[pygame.mixer.Sound]:
+        if ruta not in _AUDIO_CACHE:
+            sonido = None
+            if pygame.mixer.get_init() and os.path.exists(ruta):
+                try:
+                    sonido = pygame.mixer.Sound(ruta)
+                except pygame.error:
+                    sonido = None
+            _AUDIO_CACHE[ruta] = sonido
+        return _AUDIO_CACHE[ruta]
+
+    def cargarSonidosPost(self) -> None:
+        self.sonidoMalo = self.cargarSonido(os.path.join("assets", "fail.mp3"))
+        self.sonidoFoto = self.cargarSonido(os.path.join("assets", "Punch", "foto.mp3"))
+
+    def armarMarco(self) -> pygame.Surface:
+        marco = self.marcoPost.copy()
+        e = self.escalaPost
+        cx, cy, radio = avatarPost
+        centro = self.puntoLocal(cx, cy)
+        r = round(radio * e)
+        anchoPj, altoPj = self.sprite_idle.get_size()
+        lado = int(altoPj * 0.56)
+        caja = pygame.Rect(anchoPj // 2 - lado // 2, int(altoPj * 0.02), lado, lado).clip(self.sprite_idle.get_rect())
+        cara = self.sprite_idle.subsurface(caja).copy()
+        cara = pygame.transform.smoothscale(cara, (r * 2, r * 2))
+        circulo = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(circulo, (52, 62, 108, 255), (r, r), r)
+        circulo.blit(cara, (0, 0))
+        recorte = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(recorte, (255, 255, 255, 255), (r, r), r)
+        circulo.blit(recorte, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        marco.blit(circulo, (centro[0] - r, centro[1] - r))
+        pygame.draw.circle(marco, (60, 50, 56), centro, r, 2)
+        barra = self.rectLocal(usuarioPost).inflate(6, 6)
+        marco.blit(marco.subsurface(barra.move(round(345 * e), 0)).copy(), barra)
+        barraLikes = self.rectLocal(likesPost).inflate(6, 6)
+        self.parcheLikes = marco.subsurface(barraLikes.move(round(420 * e), 0)).copy()
+        self.barraUsuario = barra
+        return marco
+
+    def avance(self, parte: str, duracion: float = 0.5) -> float:
+        if parte not in self.partesPost:
+            return 0.0
+        return suavizar((self.relojPost - self.partesPost[parte]) / duracion)
+
+    def textoDescripcion(self) -> str:
+        visibles = []
+        for texto, inicio in self.descripcion:
+            letras = int(max(0.0, self.relojPost - inicio) * letrasPorSegundo)
+            visibles.append(texto[:letras])
+        return " ".join(parte for parte in visibles if parte)
+
+    def componerPost(self, likes: Optional[int] = None) -> pygame.Surface:
+        if self.marcoListo is None:
+            self.marcoListo = self.armarMarco()
+        lienzo = self.marcoListo.copy()
+        hueco = self.huecoPost
+        color = (70, 52, 60)
+        if self.fotoEnPost is not None and self.etapa != "foto":
+            lienzo.blit(self.fotoEnPost, hueco)
+            filtro = self.avance("filtro", 0.9)
+            if filtro > 0.0:
+                self.fotoCalida.set_alpha(int(255 * filtro))
+                lienzo.blit(self.fotoCalida, hueco)
+                for x, y, fase, imagen in self.lucesFiltro:
+                    brillo = filtro * (0.35 + 0.65 * (0.5 + 0.5 * math.sin(self.relojPost * 3.2 + fase)) ** 2)
+                    imagen.set_alpha(int(255 * brillo))
+                    lienzo.blit(imagen, imagen.get_rect(center=(hueco.x + x * hueco.w, hueco.y + y * hueco.h)))
+        barra = self.barraUsuario
+        cancion = self.avance("cancion")
+        letras = self.assets.cargarFuenteCuento(22).render(self.nombreUsuario, True, color)
+        lienzo.blit(letras, letras.get_rect(midleft=(barra.x + 2, round(barra.centery - 9 * cancion))))
+        if cancion > 0.0:
+            nota = self.fuenteNota.render("♪", True, color)
+            tema = self.assets.cargarFuenteCuento(15).render(cancionPost, True, color)
+            linea = pygame.Surface((nota.get_width() + 4 + tema.get_width(), max(nota.get_height(), tema.get_height())), pygame.SRCALPHA)
+            linea.blit(nota, nota.get_rect(midleft=(0, linea.get_height() // 2)))
+            linea.blit(tema, tema.get_rect(midleft=(nota.get_width() + 4, linea.get_height() // 2)))
+            linea.set_alpha(int(255 * cancion))
+            lienzo.blit(linea, linea.get_rect(midleft=(barra.x + 2, round(barra.centery + 12))))
+        publico = self.avance("publico")
+        if publico > 0.0:
+            texto = self.assets.cargarFuenteCuento(14).render(publicoPost, True, (255, 255, 255))
+            pastilla = pygame.Surface((texto.get_width() + 16, texto.get_height() + 4), pygame.SRCALPHA)
+            pygame.draw.rect(pastilla, (118, 92, 146), pastilla.get_rect(), border_radius=pastilla.get_height() // 2)
+            pastilla.blit(texto, texto.get_rect(center=pastilla.get_rect().center))
+            pastilla.set_alpha(int(255 * publico))
+            puntos = self.rectLocal(puntosPost)
+            lienzo.blit(pastilla, pastilla.get_rect(midright=(puntos.x - 6, puntos.centery)))
+        guardar = self.avance("guardar", 0.35)
+        if guardar > 0.0:
+            caja = self.rectLocal(guardarPost)
+            forma = [caja.topleft, caja.topright, caja.bottomright, (caja.centerx, caja.bottom - caja.h * 0.3), caja.bottomleft]
+            relleno = pygame.Surface(lienzo.get_size(), pygame.SRCALPHA)
+            pygame.draw.polygon(relleno, (*color, int(255 * guardar)), forma)
+            lienzo.blit(relleno, (0, 0))
+        if likes is not None:
+            barraLikes = self.rectLocal(likesPost).inflate(6, 6)
+            lienzo.blit(self.parcheLikes, barraLikes)
+            cifra = f"{likes:,}".replace(",", ".")
+            letras = self.assets.cargarFuenteCuento(20).render(f"{cifra} me gusta", True, color)
+            lienzo.blit(letras, letras.get_rect(midleft=(barraLikes.x + 2, barraLikes.centery)))
+        descripcion = self.textoDescripcion()
+        if descripcion:
+            fuente = self.assets.cargarFuenteCuento(16)
+            x0, anchoRenglon, ys = renglonesPost
+            ancho = round(anchoRenglon * self.escalaPost)
+            lineas = partirTexto(descripcion, fuente, ancho)
+            if len(lineas) > len(ys):
+                lineas = lineas[:len(ys)]
+                while lineas[-1] and fuente.size(lineas[-1] + "…")[0] > ancho:
+                    lineas[-1] = lineas[-1][:-1]
+                lineas[-1] += "…"
+            for linea, y in zip(lineas, ys):
+                letras = fuente.render(linea, True, color)
+                izquierda, base = self.puntoLocal(x0, y)
+                lienzo.blit(letras, letras.get_rect(bottomleft=(izquierda, base - 1)))
+        hora = self.avance("hora")
+        if hora > 0.0:
+            letras = self.assets.cargarFuenteCuento(14).render(horaPost, True, (140, 120, 128))
+            letras.set_alpha(int(255 * hora))
+            izquierda, base = self.puntoLocal(renglonesPost[0], 2016)
+            lienzo.blit(letras, letras.get_rect(bottomleft=(izquierda, base)))
+        return lienzo
+
+    def capturarFoto(self, surface: pygame.Surface) -> None:
+        self.foto = surface.subsurface(pygame.Rect(rectFoto)).copy()
+        self.fotoEnPost = pygame.transform.smoothscale(self.foto, self.huecoPost.size)
+        self.fotoCalida = self.fotoEnPost.copy()
+        self.fotoCalida.fill((255, 232, 200), special_flags=pygame.BLEND_RGB_MULT)
+        self.fotoCalida.fill((34, 20, 4), special_flags=pygame.BLEND_RGB_ADD)
+        azar = random.Random(11)
+        tamanos = (brilloEstrella(19), brilloEstrella(27), brilloEstrella(35))
+        self.lucesFiltro = [(azar.uniform(0.05, 0.95), azar.uniform(0.04, 0.6), azar.uniform(0.0, math.tau),
+                             azar.choice(tamanos).copy()) for _ in range(22)]
+        if self.sonidoFoto is not None:
+            self._play_sfx(self.sonidoFoto)
+        elif hasattr(self.audio, "play_click"):
+            self.audio.play_click()
+
+    def mandarAlPost(self, notif: dict) -> None:
+        self.vuelos.append({"idea": notif["idea"], "desde": (notif["x"], notif["y"]), "t": 0.0})
+
+    def llegarAlPost(self, idea: dict) -> None:
+        destino = destinoIdea[idea["codigo"]]
+        self.textosPost.append(idea["texto"])
+        if destino == "descripcion":
+            inicio = self.relojPost
+            if self.descripcion:
+                anterior, desde = self.descripcion[-1]
+                inicio = max(inicio, desde + len(anterior) / letrasPorSegundo)
+            self.descripcion.append((textosDescripcion[idea["codigo"]], inicio))
+        else:
+            self.partesPost[destino] = self.relojPost
+        if idea["riesgosa"]:
+            self.riesgosPublicados.append(idea["codigo"])
+            self._play_sfx(self.sonidoMalo)
+
+    def puntoHueco(self, pos: Tuple[float, float]) -> Tuple[float, float]:
+        return (esquinaPost[0] - self.margenPost + self.huecoPost.x + pos[0] * self.huecoPost.w,
+                esquinaPost[1] - self.margenPost + self.huecoPost.y + pos[1] * self.huecoPost.h)
+
+    def puntoPantalla(self, x: float, y: float) -> Tuple[float, float]:
+        lx, ly = self.puntoLocal(x, y)
+        return (esquinaPost[0] - self.margenPost + lx, esquinaPost[1] - self.margenPost + ly)
+
+    def destinoVuelo(self, idea: dict) -> Tuple[float, float]:
+        destino = destinoIdea[idea["codigo"]]
+        if destino == "filtro":
+            return self.puntoHueco((0.5, 0.5))
+        if destino == "cancion":
+            return self.puntoPantalla(usuarioPost[0] + 160, 430)
+        if destino == "publico":
+            return self.puntoPantalla(puntosPost[0] - 120, puntosPost[1] + 6)
+        if destino == "guardar":
+            return self.puntoPantalla(guardarPost[0] + 30, guardarPost[1] + 36)
+        if destino == "hora":
+            return self.puntoPantalla(renglonesPost[0] + 260, 2005)
+        return self.puntoPantalla(renglonesPost[0] + renglonesPost[1] / 2, renglonesPost[2][1])
+
+    def actualizarPost(self, dt: float) -> None:
+        self.relojPost += dt
+        for vuelo in list(self.vuelos):
+            vuelo["t"] += dt
+            if vuelo["t"] >= 0.6:
+                self.vuelos.remove(vuelo)
+                self.llegarAlPost(vuelo["idea"])
+        if self.etapa == "publicar":
+            for corazon in list(self.corazones):
+                corazon["t"] += dt
+                if corazon["t"] > 1.4:
+                    self.corazones.remove(corazon)
+            if 0.9 <= self.tEtapa <= duracionPublicar - 0.4:
+                self.esperaCorazon -= dt
+                if self.esperaCorazon <= 0.0:
+                    self.esperaCorazon = 0.17
+                    self.corazones.append({"t": 0.0, "dx": random.uniform(-110.0, 110.0), "giro": random.uniform(-25.0, 25.0),
+                                           "fase": random.uniform(0.0, math.tau)})
+
+    def empezarPublicacion(self, gano: bool) -> None:
+        if self.etapa == "publicar" or self.is_finished:
+            return
+        self.etapa = "publicar"
+        self.tEtapa = 0.0
+        self.ganoPublicacion = gano
+        self.tiempoCongelado = max(self.time_left, 0.001)
+        self.popups.clear()
+        self.spark_particles.clear()
+        self.shockwaves.clear()
+        self.is_punching = False
+        self.corazones: List[dict] = []
+        self.esperaCorazon = 0.0
+        for notif in self.wave_queue:
+            if notif["spawned"] and notif["state"] == "falling":
+                notif["state"] = "done"
+        self.likesMeta = 180 + 140 * len(self.textosPost) + 650 * len(self.riesgosPublicados) + random.randint(0, 90)
+
+    def dibujarPublicacion(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        if self.etapa == "foto":
+            aparece = suavizar((self.tEtapa - 0.5 * self.fotoDuracion) / (0.3 * self.fotoDuracion))
+            if aparece <= 0.0:
+                return
+        else:
+            aparece = 1.0
+        if self.etapa == "publicar":
+            return
+        post = self.componerPost()
+        if aparece < 1.0:
+            post.set_alpha(int(255 * aparece))
+        surface.blit(post, (esquinaPost[0] - self.margenPost + ox, esquinaPost[1] - self.margenPost + oy))
+
+    def dibujarVuelos(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        lado = round(self.huecoPost.w * 0.22)
+        for vuelo in self.vuelos:
+            p = suavizar(vuelo["t"] / 0.6)
+            tarjeta = vuelo["idea"]["sprite"]
+            destino = self.destinoVuelo(vuelo["idea"])
+            desde = (vuelo["desde"][0] + tarjeta.get_width() / 2, vuelo["desde"][1] + tarjeta.get_height() / 2)
+            centro = (desde[0] + (destino[0] - desde[0]) * p, desde[1] + (destino[1] - desde[1]) * p - math.sin(p * math.pi) * 120)
+            escala = 1.0 + (lado / float(tarjeta.get_width()) - 1.0) * p
+            imagen = pygame.transform.rotozoom(tarjeta, 0.0, escala)
+            imagen.set_alpha(int(255 * (1.0 - suavizar((p - 0.65) / 0.35))))
+            surface.blit(imagen, imagen.get_rect(center=(round(centro[0]) + ox, round(centro[1]) + oy)))
+
+    def dibujarFoto(self, surface: pygame.Surface) -> None:
+        if self.etapa != "foto" or self.foto is None:
+            return
+        t = self.tEtapa
+        mostrar = 0.55 * self.fotoDuracion
+        volar = 0.9 * self.fotoDuracion
+        vuelo = suavizar((t - mostrar) / (volar - mostrar))
+        velo = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+        velo.fill((10, 8, 20, int(150 * (1.0 - vuelo))))
+        surface.blit(velo, (0, 0))
+        if t < volar:
+            entrada = min(1.0, t / 0.35)
+            rebote = 1.0 + 2.7 * (entrada - 1.0) ** 3 + 1.7 * (entrada - 1.0) ** 2
+            centroVista = (self.screen_w / 2, self.screen_h / 2 - 30)
+            destino = self.puntoHueco((0.5, 0.5))
+            lado = ladoFotoVista * (0.8 + 0.2 * rebote) + (self.huecoPost.w - ladoFotoVista) * vuelo
+            centro = (centroVista[0] + (destino[0] - centroVista[0]) * vuelo,
+                      centroVista[1] + (destino[1] - centroVista[1]) * vuelo)
+            margen = 16 * (1.0 - vuelo)
+            foto = pygame.transform.smoothscale(self.foto, (max(1, round(lado)), max(1, round(lado))))
+            marco = pygame.Surface((foto.get_width() + round(margen) * 2, foto.get_height() + round(margen) * 2), pygame.SRCALPHA)
+            marco.fill((252, 248, 240, 255))
+            marco.blit(foto, (round(margen), round(margen)))
+            pygame.draw.rect(marco, (60, 50, 70), marco.get_rect(), 2)
+            girada = pygame.transform.rotozoom(marco, -3.0 * (1.0 - vuelo), 1.0)
+            surface.blit(girada, girada.get_rect(center=(round(centro[0]), round(centro[1]))))
+        destello = max(0.0, 1.0 - t / 0.45)
+        if destello > 0.0:
+            flash = pygame.Surface((self.screen_w, self.screen_h))
+            flash.fill((255, 255, 255))
+            flash.set_alpha(int(255 * destello))
+            surface.blit(flash, (0, 0))
+
+    def dibujarPublicando(self, surface: pygame.Surface) -> None:
+        if self.etapa != "publicar":
+            return
+        p = suavizar(self.tEtapa / 0.9)
+        velo = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+        velo.fill((10, 8, 20, int(165 * p)))
+        surface.blit(velo, (0, 0))
+        cuenta = suavizar((self.tEtapa - 0.9) / 1.6)
+        post = self.componerPost(int(self.likesMeta * cuenta) if self.tEtapa >= 0.9 else None)
+        escala = 1.0 + 0.3 * p
+        medida = (round(post.get_width() * escala), round(post.get_height() * escala))
+        post = pygame.transform.smoothscale(post, medida)
+        inicio = (esquinaPost[0] - self.margenPost + self.marcoPost.get_width() / 2,
+                  esquinaPost[1] - self.margenPost + self.marcoPost.get_height() / 2)
+        destino = (self.screen_w / 2, self.screen_h / 2 - 20)
+        centro = (inicio[0] + (destino[0] - inicio[0]) * p, inicio[1] + (destino[1] - inicio[1]) * p)
+        caja = post.get_rect(center=(round(centro[0]), round(centro[1])))
+        surface.blit(post, caja)
+        corazonX, corazonY = self.puntoLocal(430, 1640)
+        icono = (caja.x + corazonX * escala, caja.y + corazonY * escala)
+        if self.is_finished:
+            return
+        for corazon in self.corazones:
+            vida = corazon["t"] / 1.4
+            imagen = pygame.transform.rotozoom(self.corazonPost, corazon["giro"], 0.6 + 0.5 * vida)
+            imagen.set_alpha(int(255 * (1.0 - vida) ** 0.7))
+            vaiven = math.sin(corazon["t"] * 6.0 + corazon["fase"]) * 14.0
+            surface.blit(imagen, imagen.get_rect(center=(round(icono[0] + corazon["dx"] * vida + vaiven),
+                                                         round(icono[1] - 280 * vida))))
+
+    def armarEnsenanza(self, gano: bool) -> List[str]:
+        graves = [codigo for codigo in ordenGravedad if codigo in self.riesgosPublicados][:2]
+        if graves:
+            return [ensenanzasRiesgo[codigo] for codigo in graves] + [cierreEnsenanza]
+        return list(ensenanzaSegura) if gano else list(ensenanzaVacia)
+
+    def finish_game(self, won: bool) -> None:
+        yaTerminado = self.is_finished
+        if not yaTerminado:
+            self.lineasEnsenanza = self.armarEnsenanza(won)
+            self.repaso = [(notif["idea"], notif["resultado"]) for notif in self.wave_queue if notif.get("resultado")]
+        super().finish_game(won)
+        if yaTerminado:
+            return
+        if getattr(self, "finLetrero", None):
+            lectura = 3.0 + (5.5 if self.repaso else 0.0)
+            self.outro_duration = max(self.outro_duration, self.finLetrero + self.horarioFinal()[-1] + lectura)
+
+    def lineasFinales(self) -> List[Tuple[str, bool]]:
+        if getattr(self, "fuenteFinal", None) is None:
+            self.fuenteFinal = self.assets.cargarFuenteCuento(52 if getattr(self, "repaso", None) else 60)
+        clave = tuple(self.lineasEnsenanza)
+        if getattr(self, "claveFinal", None) != clave:
+            self.claveFinal = clave
+            self.lineasPartidas = []
+            for i, frase in enumerate(self.lineasEnsenanza):
+                dorada = i == len(self.lineasEnsenanza) - 1
+                partes = partirTexto(frase, self.fuenteFinal, 1500)
+                if len(partes) > 1 and ". " in frase:
+                    corte = frase.index(". ") + 1
+                    oraciones = [frase[:corte], frase[corte + 1:]]
+                    if all(self.fuenteFinal.size(o)[0] <= 1500 for o in oraciones):
+                        partes = oraciones
+                for linea in partes:
+                    self.lineasPartidas.append((linea, dorada))
+        return self.lineasPartidas
+
+    def horarioFinal(self) -> List[float]:
+        horario, momento = [], 0.5
+        lineas = self.lineasFinales()
+        for i, (linea, dorada) in enumerate(lineas):
+            if dorada and i > 0 and not lineas[i - 1][1]:
+                momento += 0.5
+            horario.append(momento)
+            momento += len(linea) / 24.0 + 0.45
+        horario.append(momento)
+        return horario
+
+    def dibujarEnsenanzaFinal(self, surface: pygame.Surface) -> None:
+        inicio = getattr(self, "finLetrero", None)
+        if not inicio or self.outro_timer < inicio or not self.lineasEnsenanza:
+            return
+        t = self.outro_timer - inicio
+        if not getattr(self, "musicaApagada", False):
+            self.musicaApagada = True
+            if pygame.mixer.get_init():
+                pygame.mixer.music.fadeout(700)
+            self.audio.current_track = None
+        lineas = self.lineasFinales()
+        horario = self.horarioFinal()
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(any(horario[i] <= t < horario[i] + len(linea) / 24.0
+                                          for i, (linea, _) in enumerate(lineas)))
+        if t < 0.3 and int(t * 20) % 2 == 0:
+            return
+        surface.fill((8, 6, 12))
+        repaso = getattr(self, "repaso", None)
+        alto = self.fuenteFinal.get_linesize() + (14 if repaso else 20)
+        separacion = (36 if repaso else 50) if any(d for _, d in lineas) and not all(d for _, d in lineas) else 0
+        altoTexto = alto * len(lineas) + separacion
+        if repaso:
+            columnas = self.armarRepaso()
+            filas = max(len(filasColumna) for _, filasColumna in columnas)
+            altoRepaso = 60 + filas * 58
+            y = (self.screen_h - (altoTexto + 70 + altoRepaso)) // 2
+        else:
+            y = self.screen_h // 2 - altoTexto // 2
+        for i, (linea, dorada) in enumerate(lineas):
+            if dorada and i > 0 and not lineas[i - 1][1]:
+                y += separacion
+            letras = min(len(linea), int(max(0.0, t - horario[i]) * 24))
+            if letras > 0:
+                color = (255, 214, 120) if dorada else (255, 247, 230)
+                texto = self.textoConBorde(self.fuenteFinal, linea[:letras], color, (60, 50, 70), 3)
+                izquierda = self.screen_w // 2 - self.fuenteFinal.size(linea)[0] // 2
+                surface.blit(texto, texto.get_rect(midleft=(izquierda, y + alto // 2)))
+            y += alto
+        if repaso:
+            self.dibujarRepaso(surface, t - horario[-1], y + 70)
+        fin = self.outro_duration - self.outro_timer
+        if fin < 0.35:
+            surface.fill([int(255 * max(0.0, fin) / 0.35)] * 3, special_flags=pygame.BLEND_RGB_MULT)
+
+    def armarRepaso(self) -> List[Tuple[pygame.Surface, List[pygame.Surface]]]:
+        if getattr(self, "columnasRepaso", None) is not None:
+            return self.columnasRepaso
+        rutaTitulos = os.path.join("assets", "Titulos.ttf")
+        fuenteTitulo = pygame.font.Font(rutaTitulos, 40) if os.path.exists(rutaTitulos) else self.assets.cargarFuenteCuento(40)
+        fuente = self.assets.cargarFuenteCuento(30)
+        fuenteMarca = self.assets.cargarFuenteCuento(24)
+        self.columnasRepaso = []
+        for titulo, riesgosas, colorTitulo in ((tituloBuenas, False, colorAcierto), (tituloMalas, True, colorError)):
+            pares = [par for par in self.repaso if par[0]["riesgosa"] == riesgosas]
+            if not pares:
+                continue
+            filas = []
+            for idea, resultado in pares:
+                icono = pygame.transform.smoothscale_by(idea["icono"], 46.0 / idea["icono"].get_height())
+                texto = self.textoConBorde(fuente, idea["texto"], (255, 247, 230), (40, 30, 46), 2)
+                marca = None
+                if resultado == ("publicada" if riesgosas else "borrada"):
+                    marca = self.textoConBorde(fuenteMarca, marcaPublicada if riesgosas else marcaBorrada,
+                                               colorPost, (40, 30, 46), 2)
+                ancho = icono.get_width() + 16 + texto.get_width() + (12 + marca.get_width() if marca else 0)
+                fila = pygame.Surface((ancho, 54), pygame.SRCALPHA)
+                fila.blit(icono, icono.get_rect(midleft=(0, 27)))
+                fila.blit(texto, texto.get_rect(midleft=(icono.get_width() + 16, 27)))
+                if marca:
+                    fila.blit(marca, marca.get_rect(midleft=(icono.get_width() + 28 + texto.get_width(), 29)))
+                filas.append(fila)
+            self.columnasRepaso.append((self.textoConBorde(fuenteTitulo, titulo, colorTitulo, (40, 30, 46), 3), filas))
+        return self.columnasRepaso
+
+    def dibujarRepaso(self, surface: pygame.Surface, t: float, arriba: int) -> None:
+        if t <= 0.0:
+            return
+        columnas = self.armarRepaso()
+        anchos = [max([titulo.get_width()] + [fila.get_width() for fila in filas]) for titulo, filas in columnas]
+        espacio = 140
+        izquierda = (self.screen_w - (sum(anchos) + espacio * (len(anchos) - 1))) // 2
+        orden = 0
+        for (titulo, filas), ancho in zip(columnas, anchos):
+            aparece = suavizar((t - 0.2) / 0.4)
+            if aparece > 0.0:
+                titulo.set_alpha(int(255 * aparece))
+                surface.blit(titulo, titulo.get_rect(bottomleft=(izquierda, arriba + 52)))
+            y = arriba + 60
+            for fila in filas:
+                orden += 1
+                aparece = suavizar((t - 0.35 - 0.12 * orden) / 0.4)
+                if aparece > 0.0:
+                    fila.set_alpha(int(255 * aparece))
+                    surface.blit(fila, (izquierda, y))
+                y += 58
+            izquierda += ancho + espacio
 
     def _load_optional_ui(self, filename: str, target_h: int) -> Optional[pygame.Surface]:
         """Carga un elemento de UI opcional manteniendo su relación de aspecto."""
@@ -331,7 +1222,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         if cached_bg is not None:
             self.bg_surface = cached_bg
         else:
-            raw_bg = self.assets.load_surface("fondo_box_microjuego.png")
+            raw_bg = self.assets.load_surface(os.path.join("Punch", "fondo_punch.png"), has_alpha=False)
             if raw_bg:
                 self.bg_surface = pygame.transform.smoothscale(raw_bg, (self.screen_w, self.screen_h))
                 _SURFACE_CACHE[bg_key] = self.bg_surface
@@ -339,55 +1230,18 @@ class PunchAlertMicrogame(BaseMicrogame):
                 self.bg_surface = pygame.Surface((self.screen_w, self.screen_h))
                 self.bg_surface.fill((25, 25, 35))
 
+        self.cargarArbolito()
+        self.cargarCielo()
+
         # 2. Cargar contador gráfico oficial (igual que en UninorteSprint / Crossy Road)
         self.spr_counter = self._load_optional_ui("contador_microjuegos.png", target_h=96)
 
         # 3. Notificaciones con límites exactos del nuevo sheet (4 Filas x 4 Columnas)
         target_card_w = 430
-        target_card_h = 205
-        notif_key = ("notif_cards", target_card_w, target_card_h)
-        cached_notifs = _SURFACE_CACHE.get(notif_key)
-        if cached_notifs is not None:
-            safe_tuple, trash_tuple = cached_notifs
-            self.safe_sprites = list(safe_tuple)
-            self.trash_sprites = list(trash_tuple)
-        else:
-            notif_sheet = self.assets.load_surface("notificaciones_microjuego.png")
-            self.safe_sprites = []
-            self.trash_sprites = []
-
-            row_intervals = [(10, 248), (246, 463), (462, 661), (660, 868)]
-            col_intervals = [(0, 439), (441, 883), (886, 1328), (1331, 1773)]
-            safe_cells = {(2, 0), (2, 1), (2, 2), (2, 3), (1, 2)}
-
-            if notif_sheet:
-                for r_idx, (y1, y2) in enumerate(row_intervals):
-                    for c_idx, (x1, x2) in enumerate(col_intervals):
-                        cell_rect = pygame.Rect(x1, y1, x2 - x1, y2 - y1)
-                        clean_card = self._extract_clean_card_surface(notif_sheet, cell_rect)
-                        cw, ch = clean_card.get_size()
-                        scale = min(target_card_w / float(cw), target_card_h / float(ch))
-                        final_w = int(cw * scale)
-                        final_h = int(ch * scale)
-                        scaled_inner = pygame.transform.smoothscale(clean_card, (final_w, final_h))
-
-                        card_canvas = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
-                        card_x = (target_card_w - final_w) // 2
-                        card_y = (target_card_h - final_h) // 2
-                        card_canvas.blit(scaled_inner, (card_x, card_y))
-
-                        if (r_idx, c_idx) in safe_cells:
-                            self.safe_sprites.append(card_canvas)
-                        else:
-                            self.trash_sprites.append(card_canvas)
-                _SURFACE_CACHE[notif_key] = (tuple(self.safe_sprites), tuple(self.trash_sprites))
-            else:
-                ph_trash = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
-                ph_trash.fill((220, 50, 50, 220))
-                self.trash_sprites.append(ph_trash)
-                ph_safe = pygame.Surface((target_card_w, target_card_h), pygame.SRCALPHA)
-                ph_safe.fill((50, 220, 50, 220))
-                self.safe_sprites.append(ph_safe)
+        target_card_h = 223
+        self.cargarTarjetas(target_card_w, target_card_h)
+        self.cargarPublicacion()
+        self.cargarSonidosPost()
 
         # 4. Personaje Boxeador con separación dinámica por valle de transparencia
         char_render_h = 540
@@ -493,38 +1347,51 @@ class PunchAlertMicrogame(BaseMicrogame):
         # 8. Reglas de Victoria / Derrota (Oleada Extendida de 11 Notificaciones en 15s)
         self.strikes: int = 0
         self.max_strikes: int = 3
-        self.total_wave_count: int = 11
         self.processed_count: int = 0
 
         # 9. Diseño de Curva de Pacing de la Oleada
+        self.etapa = "foto"
+        self.tEtapa = 0.0
+        self.fotoDuracion = min(2.4, self.time_limit * 0.18)
+        self.foto: Optional[pygame.Surface] = None
+        self.fotoEnPost: Optional[pygame.Surface] = None
+        self.partesPost: Dict[str, float] = {}
+        self.descripcion: List[Tuple[str, float]] = []
+        self.relojPost = 0.0
+        self.textosPost: List[str] = []
+        from core.settings import CHARACTER_DISPLAY_NAMES
+        self.nombreUsuario = CHARACTER_DISPLAY_NAMES.get(self.character_id, self.character_id).lower().replace(" ", "")
+        self.fuenteNota = pygame.font.SysFont("segoeuisymbol,seguisym,dejavusans,arial", 16)
+        self.riesgosPublicados: List[str] = []
+        self.vuelos: List[dict] = []
+        self.ganoPublicacion = True
+        self.tiempoCongelado = 0.0
+        self.lineasEnsenanza: List[str] = []
+        self.sonoFlash = False
+
         self.wave_queue: List[dict] = []
-        wave_blueprint = [
-            # Fase 1: Calentamiento
-            ("trash", 0.45, 580.0),
-            ("trash", 1.70, 600.0),
-            ("safe",  2.95, 600.0),
-            # Fase 2: Ritmo de Crucero
-            ("trash", 4.20, 640.0),
-            ("trash", 5.35, 650.0),
-            ("safe",  6.50, 650.0),
-            ("trash", 7.65, 670.0),
-            # Fase 3: Ráfaga Final
-            ("trash", 8.75, 700.0),
-            ("safe",  9.85, 700.0),
-            ("trash", 10.95, 720.0),
-            ("trash", 12.00, 740.0),
-        ]
+        inicio = self.fotoDuracion + 0.35
+        fin = max(inicio, self.time_limit - 3.3)
+        cantidad = max(1, min(10, int((fin - inicio) / separacionTarjetas) + 1))
+        separacion = (fin - inicio) / max(1, cantidad - 1)
+        riesgosas = [idea for idea in self.ideas if idea["riesgosa"]]
+        seguras = [idea for idea in self.ideas if not idea["riesgosa"]]
+        random.shuffle(riesgosas)
+        random.shuffle(seguras)
+        cuantasRiesgosas = max(1, round(cantidad * 0.6))
+        tipos = [True] + random.sample([True] * (cuantasRiesgosas - 1) + [False] * (cantidad - cuantasRiesgosas), cantidad - 1)
+        wave_blueprint = []
+        for i, riesgosa in enumerate(tipos):
+            idea = riesgosas.pop() if riesgosa and riesgosas else seguras.pop()
+            rapidez = velocidadCaida[0] + (velocidadCaida[1] - velocidadCaida[0]) * i / max(1, cantidad - 1)
+            wave_blueprint.append((idea, inicio + i * separacion, rapidez))
+        self.total_wave_count: int = len(wave_blueprint)
 
-        middle_types = ["trash", "trash", "safe", "trash"]
-        random.shuffle(middle_types)
-        for idx, m_type in enumerate(middle_types):
-            _, sp_time, sp_speed = wave_blueprint[3 + idx]
-            wave_blueprint[3 + idx] = (m_type, sp_time, sp_speed)
-
-        for t_name, sp_time, sp_speed in wave_blueprint:
-            is_safe = (t_name == "safe")
-            sprite = random.choice(self.safe_sprites) if is_safe else random.choice(self.trash_sprites)
+        for idea, sp_time, sp_speed in wave_blueprint:
+            is_safe = not idea["riesgosa"]
+            sprite = idea["sprite"]
             self.wave_queue.append({
+                "idea": idea,
                 "spawn_time": sp_time,
                 "spawned": False,
                 "is_safe": is_safe,
@@ -553,8 +1420,13 @@ class PunchAlertMicrogame(BaseMicrogame):
         self.strike_flash_alpha: float = 0.0
 
         # Tipografías
-        self.font_juice = pygame.font.SysFont("Impact, Arial Black, sans-serif", 58)
-        self.font_prompt = pygame.font.SysFont("Impact, Arial Black, sans-serif", 34)
+        rutaTitulos = os.path.join("assets", "Titulos.ttf")
+        if os.path.exists(rutaTitulos):
+            self.font_juice = pygame.font.Font(rutaTitulos, 60)
+            self.font_prompt = pygame.font.Font(rutaTitulos, 38)
+        else:
+            self.font_juice = pygame.font.SysFont("Impact, Arial Black, sans-serif", 58)
+            self.font_prompt = pygame.font.SysFont("Impact, Arial Black, sans-serif", 34)
         self.font_strike_x = pygame.font.SysFont("Impact, Arial Black, sans-serif", 46)
         self.font_timer = pygame.font.SysFont("Arial Black, Impact, sans-serif", 32)
 
@@ -569,7 +1441,8 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
-        pass
+        if hasattr(self.audio, "sonarEscritura"):
+            self.audio.sonarEscritura(False)
 
     def add_trauma(self, amount: float) -> None:
         """Agrega trauma con clamp en 1.0."""
@@ -608,7 +1481,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         Penaliza el spam de tecla (whiff): si golpeas al aire cuando la notificación aún no ha
         encajado en la caja, aplica bloqueo extendido (0.65s) y si spameas 2 veces al aire -> +1 Strike.
         """
-        if self.cooldown_timer > 0.0 or self.is_punching:
+        if self.cooldown_timer > 0.0 or self.is_punching or self.etapa != "juego":
             return
 
         self.is_punching = True
@@ -637,14 +1510,15 @@ class PunchAlertMicrogame(BaseMicrogame):
                 # Reproducir la voz del personaje al pegarle a la notificación
                 self._play_character_punch_voice()
 
+                notif["resultado"] = "borrada"
                 if notif["is_safe"]:
                     self.combo_streak = 0
-                    self.on_strike("¡ERA IMPORTANTE!")
+                    self.on_strike("¡ESA NO TENÍA NADA DE MALO!")
                     notif["state"] = "hit_fly"
                     notif["fly_vx"] = random.choice([-550.0, 550.0])
                     notif["fly_vy"] = -850.0
                     notif["fly_rot_speed"] = random.uniform(-400.0, 400.0)
-                    self.spawn_impact_sparks(self.lane_center_x, notif_center_y, 14, (255, 60, 60))
+                    self.spawn_impact_sparks(self.lane_center_x, notif_center_y, 14, colorError)
                 else:
                     self.on_successful_hit(notif)
                 break
@@ -669,7 +1543,7 @@ class PunchAlertMicrogame(BaseMicrogame):
                     "y": float(self.hit_zone_y_min - 28),
                     "timer": 0.60,
                     "max_timer": 0.60,
-                    "color": (255, 140, 60)
+                    "color": colorError
                 })
 
     def on_successful_hit(self, notif: dict) -> None:
@@ -688,9 +1562,9 @@ class PunchAlertMicrogame(BaseMicrogame):
         self.add_trauma(0.55)
 
         impact_y = notif["y"] + (notif["h"] // 2)
-        self.spawn_impact_sparks(self.lane_center_x, impact_y, count=24, color_base=(255, 235, 70))
+        self.spawn_impact_sparks(self.lane_center_x, impact_y, count=24, color_base=colorAcierto)
 
-        words = ["¡DESPACHADA!", "¡EN MUTE!", "¡HOME RUN!", "¡A LA BASURA!"]
+        words = ["¡FUERA DEL POST!", "¡ESO NO SE PUBLICA!", "¡NI SIN CULPA!", "¡BORRADO!"]
         text = random.choice(words)
         if self.combo_streak >= 3:
             text = f"{text} x{self.combo_streak}"
@@ -701,7 +1575,7 @@ class PunchAlertMicrogame(BaseMicrogame):
             "y": float(notif["y"] - 20),
             "timer": 0.65,
             "max_timer": 0.65,
-            "color": (255, 235, 45)
+            "color": colorAcierto
         })
 
         self.processed_count += 1
@@ -715,16 +1589,16 @@ class PunchAlertMicrogame(BaseMicrogame):
         self.add_trauma(0.85)
 
         self.popups.append({
-            "text": f"¡STRIKE! {reason}",
+            "text": reason,
             "x": float(self.lane_center_x),
             "y": float(self.hit_zone_y_min - 30),
             "timer": 0.85,
             "max_timer": 0.85,
-            "color": (255, 60, 60)
+            "color": colorError
         })
 
         if self.strikes >= self.max_strikes:
-            self.finish_game(won=False)
+            self.empezarPublicacion(False)
 
     def check_wave_progress(self) -> None:
         """Verifica victoria si se procesaron todas las notificaciones."""
@@ -732,7 +1606,7 @@ class PunchAlertMicrogame(BaseMicrogame):
             return
 
         if self.processed_count >= self.total_wave_count:
-            self.finish_game(won=True)
+            self.empezarPublicacion(True)
 
     def update_game(self, dt: float) -> None:
         """Actualiza física, estado de Sweet Spot, ondas expansivas, trauma y partículas."""
@@ -740,6 +1614,18 @@ class PunchAlertMicrogame(BaseMicrogame):
         if cam and cam.enabled and (cam.consume_punch() or cam.consume_fist()):
             self.trigger_punch()
         self.pulse_clock += dt * 10.0
+        self.tEtapa += dt
+        self.actualizarPost(dt)
+        if self.etapa == "foto" and self.tEtapa >= self.fotoDuracion:
+            self.etapa = "juego"
+            self.ponerMusica()
+        if self.etapa == "publicar":
+            self.time_left = self.tiempoCongelado
+            self.trauma = max(0.0, self.trauma - dt * 1.6)
+            self.strike_flash_alpha = max(0.0, self.strike_flash_alpha - dt * 320.0)
+            if self.tEtapa >= duracionPublicar and not self.is_finished:
+                self.finish_game(self.ganoPublicacion)
+            return
 
         if self.hit_stop_timer > 0.0:
             self.hit_stop_timer -= dt
@@ -779,19 +1665,23 @@ class PunchAlertMicrogame(BaseMicrogame):
                 if notif_center_y > self.hit_zone_y_max + 20:
                     notif["state"] = "passed"
                     notif["in_sweet_spot"] = False
+                    notif["resultado"] = "publicada"
+                    self.mandarAlPost(notif)
                     if not notif["is_safe"]:
                         self.combo_streak = 0
-                        self.on_strike("¡SE PASÓ EL SPAM!")
+                        self.on_strike("¡SE COLÓ EN TU POST!")
                     else:
                         self._play_sfx(self.snd_safe)
                         self.combo_streak += 1
+                        recupera = self.strikes > 0
+                        self.strikes = max(0, self.strikes - 1)
                         self.popups.append({
-                            "text": "¡RECIBIDA A SALVO!",
+                            "text": "¡ESO, MI LLAVE! +1 VIDA" if recupera else "¡A TU POST!",
                             "x": float(self.lane_center_x),
                             "y": float(self.hit_zone_y_max - 20),
                             "timer": 0.55,
                             "max_timer": 0.55,
-                            "color": (80, 255, 130)
+                            "color": colorPost
                         })
                     self.processed_count += 1
                     self.check_wave_progress()
@@ -832,10 +1722,8 @@ class PunchAlertMicrogame(BaseMicrogame):
                 self.popups.remove(pop)
 
         if self.time_left <= 0.0 and not self.is_finished:
-            if self.strikes < self.max_strikes:
-                self.finish_game(won=True)
-            else:
-                self.finish_game(won=False)
+            self.empezarPublicacion(self.strikes < self.max_strikes)
+            self.time_left = self.tiempoCongelado
 
     def _render_sweet_spot_guide(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         """Dibuja la guía visual de la Zona de Bateo ("Sweet Spot") con feedback de color y texto."""
@@ -855,41 +1743,35 @@ class PunchAlertMicrogame(BaseMicrogame):
 
         if self.is_whiff_penalized and self.cooldown_timer > 0.0:
             # Estado de bloqueo por spamear antes de tiempo (Castigo visual en rojo/naranja)
-            border_color = (255, 75, 65, 210)
-            glow_color = (255, 50, 50, 45)
+            border_color = (*colorError, 210)
+            glow_color = (*colorError, 45)
             pygame.draw.rect(guide_surf, glow_color, (0, 0, zone_w, zone_h), border_radius=28)
             pygame.draw.rect(guide_surf, border_color, (0, 0, zone_w, zone_h), width=5, border_radius=28)
 
-            prompt_surf = self.font_prompt.render("¡RECARGANDO GUANTE!", True, (255, 95, 85))
-            prompt_bg = self.font_prompt.render("¡RECARGANDO GUANTE!", True, (25, 10, 10))
+            prompt_surf = self.textoConBorde(self.font_prompt, "¡RECARGANDO GUANTE!", colorError, contornoTexto, 3)
             px = zone_x + zone_w + 18
             py = zone_y + (zone_h // 2) - (prompt_surf.get_height() // 2)
-            surface.blit(prompt_bg, (px + 2, py + 2))
             surface.blit(prompt_surf, (px, py))
         elif active_notif is not None:
             if not active_notif["is_safe"]:
-                border_color = (90, 255, 110, int(195 + 55 * pulse))
-                glow_color = (90, 255, 110, int(45 + 35 * pulse))
+                border_color = (*colorAcierto, int(195 + 55 * pulse))
+                glow_color = (*colorAcierto, int(45 + 35 * pulse))
                 pygame.draw.rect(guide_surf, glow_color, (0, 0, zone_w, zone_h), border_radius=28)
                 pygame.draw.rect(guide_surf, border_color, (0, 0, zone_w, zone_h), width=5, border_radius=28)
 
-                prompt_surf = self.font_prompt.render("¡BATEA! [ESPACIO]", True, (110, 255, 120))
-                prompt_bg = self.font_prompt.render("¡BATEA! [ESPACIO]", True, (15, 25, 15))
+                prompt_surf = self.textoConBorde(self.font_prompt, "¡NO LA PUBLIQUES! [ESPACIO]", colorAcierto, contornoTexto, 3)
                 px = zone_x + zone_w + 18
                 py = zone_y + (zone_h // 2) - (prompt_surf.get_height() // 2)
-                surface.blit(prompt_bg, (px + 2, py + 2))
                 surface.blit(prompt_surf, (px, py))
             else:
-                border_color = (255, 215, 70, int(165 + 50 * pulse))
-                glow_color = (255, 215, 70, 32)
+                border_color = (*colorPost, int(165 + 50 * pulse))
+                glow_color = (*colorPost, 32)
                 pygame.draw.rect(guide_surf, glow_color, (0, 0, zone_w, zone_h), border_radius=28)
                 pygame.draw.rect(guide_surf, border_color, (0, 0, zone_w, zone_h), width=4, border_radius=28)
 
-                prompt_surf = self.font_prompt.render("¡NO PEGUES! (SEGURA)", True, (255, 225, 90))
-                prompt_bg = self.font_prompt.render("¡NO PEGUES! (SEGURA)", True, (25, 20, 10))
+                prompt_surf = self.textoConBorde(self.font_prompt, "¡DÉJALA PASAR!", colorPost, contornoTexto, 3)
                 px = zone_x + zone_w + 18
                 py = zone_y + (zone_h // 2) - (prompt_surf.get_height() // 2)
-                surface.blit(prompt_bg, (px + 2, py + 2))
                 surface.blit(prompt_surf, (px, py))
         else:
             bracket_color = (255, 255, 255, 115)
@@ -934,11 +1816,11 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def _render_hud_overlay(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         """
-        Renderiza el HUD limpio con el mismo estándar visual de UninorteSprint:
-        - Izquierda: Únicamente la barra de Strikes con sus 'X' en los circulitos (sin contador extra).
-        - Derecha: Reloj Contador Oficial (`contador_microjuegos.png`) con dígitos dinámicos.
+        Renderiza el HUD limpio: las vidas como corazones de acuarela dentro del recuadro del juego del piano.
         """
         # 1. Barra de Strikes (Esquina superior izquierda)
+        if self.dibujarVidas(surface, ox, oy):
+            return
         hud_x = 55 + ox
         hud_y = 35 + oy
         surface.blit(self.strike_hud_base, (hud_x, hud_y))
@@ -959,6 +1841,46 @@ class PunchAlertMicrogame(BaseMicrogame):
 
         # 2. Reloj Contador Gráfico Oficial suprimido (se utiliza la barra de tiempo inferior)
 
+    def cargarVidas(self) -> bool:
+        clave = ("vidas", self.max_strikes)
+        if clave not in _SURFACE_CACHE:
+            try:
+                lado, espacio = 60, 18
+                lleno = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), lado)
+                vacio = self.assets.cargarSinFondo(os.path.join("Piano", "corazonVacio.jpg"), lado)
+                panel = self.assets.cargarSinFondo(os.path.join("Piano", "panelCorazones.jpg"), 600)
+                panel = pygame.transform.smoothscale_by(panel, 96 / float(panel.get_height()))
+                panel = self.estirarCentro(panel, self.max_strikes * lado + (self.max_strikes - 1) * espacio + 84)
+                _SURFACE_CACHE[clave] = (panel, lleno, vacio, lado + espacio)
+            except Exception as e:
+                print(f"[PunchAlert] Aviso: no se pudieron cargar los corazones: {e}")
+                _SURFACE_CACHE[clave] = None
+        self.imagenesVidas = _SURFACE_CACHE[clave]
+        return self.imagenesVidas is not None
+
+    def dibujarVidas(self, surface: pygame.Surface, ox: int, oy: int) -> bool:
+        if getattr(self, "imagenesVidas", None) is None and not self.cargarVidas():
+            return False
+        panel, lleno, vacio, paso = self.imagenesVidas
+        vidas = max(0, min(self.max_strikes, self.max_strikes - self.strikes))
+        ahora = pygame.time.get_ticks() / 1000.0
+        anteriores = getattr(self, "vidasMostradas", self.max_strikes)
+        if vidas != anteriores:
+            self.cambioVida = (min(vidas, anteriores), ahora)
+            self.vidasMostradas = vidas
+        caja = panel.get_rect(topleft=(48 + ox, 30 + oy))
+        surface.blit(panel, caja)
+        inicio = caja.centerx - paso * (self.max_strikes - 1) / 2.0
+        indice, cuando = getattr(self, "cambioVida", (-1, -10.0))
+        for i in range(self.max_strikes):
+            imagen = lleno if i < vidas else vacio
+            centro = (round(inicio + i * paso), caja.centery)
+            if i == indice:
+                p = min(1.0, (ahora - cuando) / 0.45)
+                imagen = pygame.transform.rotozoom(imagen, math.sin(p * math.pi * 3) * 10 * (1 - p), 1.0 + 0.35 * (1 - p))
+            surface.blit(imagen, imagen.get_rect(center=centro))
+        return True
+
     def render_game(self, surface: pygame.Surface) -> None:
         """Renderizado completo con jerarquía de capas, ondas expansivas y HUD limpio."""
         shake_magnitude = (self.trauma ** 2) * self.max_shake_offset
@@ -971,12 +1893,17 @@ class PunchAlertMicrogame(BaseMicrogame):
 
         # 1. Fondo oficial
         surface.blit(self.bg_surface, (ox, oy))
+        self.dibujarCielo(surface, ox, oy)
+        self.dibujarArbolito(surface, ox, oy)
 
         # 2. Personaje con sombra elíptica, respiración y lunge de uppercut
         self._render_player_character(surface, ox, oy)
+        if self.foto is None and self.phase == self.PHASE_PLAY:
+            self.capturarFoto(surface)
 
         # 3. Retícula del "Sweet Spot" (Zona de Bateo) frente al personaje
-        self._render_sweet_spot_guide(surface, ox, oy)
+        if self.etapa == "juego":
+            self._render_sweet_spot_guide(surface, ox, oy)
 
         # 4. Ondas de choque de impacto (Shockwave Rings)
         for sw in self.shockwaves:
@@ -1013,6 +1940,9 @@ class PunchAlertMicrogame(BaseMicrogame):
                 else:
                     surface.blit(spr, (int(notif["x"]) + ox, int(notif["y"]) + oy))
 
+        self.dibujarPublicacion(surface, ox, oy)
+        self.dibujarVuelos(surface, ox, oy)
+
         # 6. Partículas de impacto
         for p in self.spark_particles:
             ratio = max(0.0, p["life"] / p["max_life"])
@@ -1030,18 +1960,20 @@ class PunchAlertMicrogame(BaseMicrogame):
 
         # 7. Popups de impacto
         for pop in self.popups:
-            rendered_text = self.font_juice.render(pop["text"], True, pop["color"])
-            shadow = self.font_juice.render(pop["text"], True, (15, 15, 15))
+            if "imagen" not in pop:
+                pop["imagen"] = self.textoConBorde(self.font_juice, pop["text"], pop["color"], contornoTexto, 4)
+            rendered_text = pop["imagen"]
             rx = int(pop["x"] - (rendered_text.get_width() // 2)) + ox
             ry = int(pop["y"]) + oy
-            surface.blit(shadow, (rx + 3, ry + 3))
             surface.blit(rendered_text, (rx, ry))
 
         # 8. HUD Overlay Unificado (Solo Barra de Strikes + Reloj Contador Oficial)
         self._render_hud_overlay(surface, ox, oy)
+        self.dibujarFoto(surface)
+        self.dibujarPublicando(surface)
 
         # 9. Flash perimetral en Strike
         if self.strike_flash_alpha > 0.0:
             flash_overlay = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
-            flash_overlay.fill((230, 20, 20, int(self.strike_flash_alpha)))
+            flash_overlay.fill((70, 34, 104, int(self.strike_flash_alpha * 0.6)))
             surface.blit(flash_overlay, (0, 0))

@@ -79,11 +79,11 @@ def make_watercolor_button_surface(
         plate = pygame.transform.smoothscale(raw_plate, (w, h))
 
     cur_size = font_size
-    font = assets.cargarFuenteCuento(cur_size)
+    font = assets.cargarFuenteTitulo(cur_size)
     max_text_w = int(w * 0.86)
     while font.size(text)[0] > max_text_w and cur_size > 15:
         cur_size -= 1
-        font = assets.cargarFuenteCuento(cur_size)
+        font = assets.cargarFuenteTitulo(cur_size)
 
     label_surf = render_outlined_text(font, text, fill_col, outline_col, thickness=2)
     plate.blit(label_surf, label_surf.get_rect(center=(w // 2, h // 2 - 2)))
@@ -184,7 +184,7 @@ class StorySaveModalPanel:
         max_text_w = int(btn_w * 0.86)
         size = start_size
         while size > min_size:
-            font = self.assets.cargarFuenteCuento(size)
+            font = self.assets.cargarFuenteTitulo(size)
             if all(font.size(lbl)[0] <= max_text_w for lbl in labels):
                 return size
             size -= 1
@@ -368,12 +368,14 @@ class StorySaveModalPanel:
         color: Tuple[int, int, int],
         max_w: int,
         min_size: int = 14,
+        titulo: bool = False,
     ) -> pygame.Surface:
+        cargar = self.assets.cargarFuenteTitulo if titulo else self.assets.cargarFuenteCuento
         size = start_size
-        font = self.assets.cargarFuenteCuento(size)
+        font = cargar(size)
         while font.size(text)[0] > max_w and size > min_size:
             size -= 1
-            font = self.assets.cargarFuenteCuento(size)
+            font = cargar(size)
         return font.render(text, True, color)
 
     def render(self, surface: pygame.Surface, draw_backdrop: bool = True) -> None:
@@ -402,8 +404,8 @@ class StorySaveModalPanel:
             title_txt = "PARTIDA GUARDADA ENCONTRADA"
             sub_txt = "¿Deseas continuar tu recorrido por Barranquilla o empezar desde cero?"
 
-        t_surf = self._render_fitted_text(surface, title_txt, 42, (84, 52, 112), max_w=700)
-        t_sh = self._render_fitted_text(surface, title_txt, 42, (255, 255, 255), max_w=700)
+        t_surf = self._render_fitted_text(surface, title_txt, 42, (84, 52, 112), max_w=700, titulo=True)
+        t_sh = self._render_fitted_text(surface, title_txt, 42, (255, 255, 255), max_w=700, titulo=True)
         surface.blit(t_sh, t_sh.get_rect(center=(header_cx + 1, ft + 162)))
         surface.blit(t_surf, t_surf.get_rect(center=(header_cx, ft + 160)))
 
@@ -469,7 +471,7 @@ class StorySaveModalPanel:
             surface.blit(sv_surf, sv_surf.get_rect(midleft=(info_left, self.slot_rect.top + 258)))
         else:
             empty_title = self._render_fitted_text(
-                surface, "AÚN NO HAY PARTIDA GUARDADA", 32, (84, 52, 112), max_w=info_w
+                surface, "AÚN NO HAY PARTIDA GUARDADA", 32, (84, 52, 112), max_w=info_w, titulo=True
             )
             surface.blit(empty_title, empty_title.get_rect(center=(info_cx, self.slot_rect.top + 58)))
             surface.blit(self.sep_surf, self.sep_surf.get_rect(center=(info_cx, self.slot_rect.top + 102)))

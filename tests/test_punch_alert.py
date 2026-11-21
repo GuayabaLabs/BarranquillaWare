@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from core.engine import Engine
 from microgames.punch_alert import PunchAlertMicrogame
+from microgames.punch_alert.game import ensenanzasRiesgo
 
 def test_punch_alert_standalone():
     """Valida la carga, renderizado y gameloop sin errores."""
@@ -18,9 +19,10 @@ def test_punch_alert_standalone():
     game = PunchAlertMicrogame(character_id="valdiri", time_limit=15.0)
     surface = pygame.Surface((1920, 1080))
 
-    assert game.total_wave_count == 11
-    assert len(game.safe_sprites) == 5
-    assert len(game.trash_sprites) == 11
+    assert game.total_wave_count == len(game.wave_queue) == 6
+    assert len(game.safe_sprites) == 8
+    assert len(game.trash_sprites) == 8
+    assert game.wave_queue[0]["is_safe"] is False
     assert len(game.punch_voices) == 4
 
     # Ejecutar 60 ticks de simulación
@@ -31,6 +33,7 @@ def test_punch_alert_standalone():
     # Simular 1er golpe al aire (whiff_streak debe guardarse en 1)
     event = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE})
     game.phase = PunchAlertMicrogame.PHASE_PLAY
+    game.etapa = "juego"
     game.cooldown_timer = 0.0
     game.is_punching = False
     game.handle_game_event(event)
@@ -53,6 +56,29 @@ def test_punch_alert_standalone():
     for _ in range(30):
         game.update(1.0 / 60.0)
         game.render(surface)
+
+    riesgosa = next(n for n in game.wave_queue if not n["is_safe"])
+    riesgosa["resultado"] = "publicada"
+    game.mandarAlPost(riesgosa)
+    game.actualizarPost(0.7)
+    assert riesgosa["idea"]["texto"] in game.textosPost
+    assert riesgosa["idea"]["codigo"] in game.riesgosPublicados
+
+    buena = next(n for n in game.wave_queue if n["is_safe"])
+    game.strikes = 1
+    buena.update(spawned=True, state="falling", y=float(game.hit_zone_y_max + 30))
+    game.update(1.0 / 60.0)
+    assert game.strikes == 0
+    assert buena["resultado"] == "publicada"
+
+    game.empezarPublicacion(True)
+    for _ in range(int(3.6 * 60)):
+        game.update(1.0 / 60.0)
+    assert game.is_finished
+    assert game.lineasEnsenanza[0] in ensenanzasRiesgo.values()
+    assert (riesgosa["idea"], "publicada") in game.repaso
+    assert (buena["idea"], "publicada") in game.repaso
+    game.render(surface)
 
     print("TEST STANDALONE PASSED: PunchAlertMicrogame funciona correctamente.")
 
