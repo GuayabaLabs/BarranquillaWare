@@ -13,6 +13,7 @@ from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
 from scenes.story_map.ciclo_dia import CicloDia, HORA_DE_CLIMA, HORAS_POR_NIVEL, NOMBRE_FASE
 from scenes.story_map.rio import RioAnimado
+from scenes.story_map.luces_lugares import LucesLugares
 from scenes.story_map.faroles import Faroles, _halo as halo_aditivo
 from core.camera import Camera2D
 from ui.button import UIButton
@@ -153,7 +154,8 @@ class StoryMapScene(BaseState):
         self.faroles = Faroles()
         # Halos de luz precalculados en 12 intensidades (teñir cada frame es caro)
         self.halos_cami = [halo_aditivo(300, 210, (190, 160, 110), 0.85 * (i + 1) / 12, 1.6) for i in range(12)]
-        self.halos_nivel = [halo_aditivo(380, 300, (200, 165, 90), 0.75 * (i + 1) / 12, 1.7) for i in range(12)]
+        # Lugares emblemáticos iluminados de noche (silueta de cada edificio) y luces del aeropuerto
+        self.luces_lugares = LucesLugares(self._siluetas_lugares())
 
         # 3. Inicializar sistema de Nubes Algodonosas Caribeñas Chiquitas (Cozy Clouds)
         self._init_cozy_clouds()
@@ -650,6 +652,16 @@ class StoryMapScene(BaseState):
         ("metropolitano", "metropolitano_mapa.png", 1725, 1154, 440, 288, (20, 30, 50, 48), (10, 14)),
         ("aeropuerto", "aeropuerto_ernesto_cortissoz_mapa.png", 2611, 1311, 540, 353, (20, 30, 50, 48), (10, 14)),
     ]
+
+    def _siluetas_lugares(self) -> Dict[str, Tuple[pygame.Surface, pygame.Rect]]:
+        """Sprite y posición de cada lugar emblemático, tal como está estampado en el mapa."""
+        siluetas = {}
+        for key, asset, dx, dy, dw, dh, scol, soff in self.POI_SPECS:
+            try:
+                siluetas[key] = self._prepare_poi_transform(asset, key, dx, dy, dw)
+            except Exception:
+                pass
+        return siluetas
 
     def _stamp_all_pois(self) -> None:
         """Estampa todos los POIs configurables sobre el mapa mundial actual."""
@@ -3170,6 +3182,7 @@ class StoryMapScene(BaseState):
         if not hasattr(self, "_night_halo_cache"):
             self._night_halo_cache = {}
 
+        pines = []  # (x, y, completado) de cada estrella/pin visible, para su luz nocturna
         for p_key in STORY_PLAYABLE_POIS:
             p_info = self.poi_registry.get(p_key)
             if not p_info:
@@ -3212,6 +3225,7 @@ class StoryMapScene(BaseState):
                     vuelta = (self.timer * 0.45 + (sum(map(ord, p_key)) % 100) / 100.0) % 1.0
                     pin_to_draw = self.estrellaConBrillo(vuelta * 2.4)
                 surface.blit(pin_to_draw, pin_to_draw.get_rect(center=(pin_center_x, pin_center_y)))
+                pines.append((int(pin_center_x), int(pin_center_y), is_cleared))
 
         # 3. Renderizar nubes algodonosas caribeñas con profundidad parallax
         for cloud in self.clouds:
@@ -3237,22 +3251,20 @@ class StoryMapScene(BaseState):
                 py = int(self.player_pos[1] - cam_y)
                 halo = self.halos_cami[min(11, int(fuerza * 12))]
                 lm.blit(halo, halo.get_rect(center=(px, py + 10)), special_flags=aditivo)
-                for p_key in STORY_PLAYABLE_POIS:
-                    p_info = self.poi_registry.get(p_key)
-                    if not p_info:
-                        continue
-                    pr = p_info["rect"]
-                    hx, hy = pr.centerx - cam_x, pr.bottom - 30 - cam_y
-                    if -250 < hx < self.screen_w + 250 and -250 < hy < self.screen_h + 250:
-                        hecho = p_info["microgame_id"] in completed_games
-                        pulso = 0.82 + 0.18 * math.sin(self.timer * 2.2 + pr.x * 0.01)
-                        k = fuerza * pulso * (0.55 if hecho else 1.0)
-                        halo = self.halos_nivel[max(0, min(11, int(k * 12)))]
-                        lm.blit(halo, halo.get_rect(center=(hx, hy)), special_flags=aditivo)
+                # Lugares emblemáticos: el edificio se ve iluminado; las calles siguen oscuras
+                self.luces_lugares.iluminar(lm, cam_x, cam_y, fuerza)
+                # Las estrellas/pines de los niveles dan luz a su alrededor
+                self.luces_lugares.iluminar_estrellas(lm, pines, fuerza)
                 hubo_luces = True
         self.ciclo._hubo_luces = hubo_luces
         self.ciclo.aplicar(surface, lm)
         self.faroles.render(surface, cam_x, cam_y, oscuridad, self.timer)
+        if oscuridad > 0.28:
+            self.luces_lugares.brillar_estrellas(surface, pines, min(1.0, (oscuridad - 0.28) / 0.4), self.timer)
+        # Aeropuerto: luces rojas de guía de pista y baliza de la torre
+        aero = self.poi_registry.get("aeropuerto")
+        if aero:
+            self.luces_lugares.luces_aeropuerto(surface, aero["rect"], cam_x, cam_y, oscuridad, self.timer)
 
         # Lluvia: velo fresco, gotas y salpicaduras (a cualquier hora)
         if self.ciclo.lluvia:

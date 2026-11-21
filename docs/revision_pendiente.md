@@ -94,7 +94,7 @@ python microgames/emoji_catch.py
       la pantalla. Probar en ventana normal, maximizada y F11 que el clic funcione sobre el botón (no debajo).
       Si `settings.json` tenía guardada una ventana de 1920x1080, al abrir se ajustará sola.
 
-## 7. Tiempo en el mapa, río, faroles, Junior instrumental y aeropuerto
+## 7. Tiempo en el mapa, río, faroles y aeropuerto
 
 - [ ] **Paso del tiempo**: la píldora de arriba a la derecha muestra la hora (ej. `18:20 ATARDECER`). Un día dura
       6 minutos reales y **cada nivel completado adelanta 3 horas** (se ve anochecer mientras la Paloma felicita).
@@ -109,7 +109,17 @@ python microgames/emoji_catch.py
       Ajustes en `scenes/story_map/rio.py` (`FLUJO`, `DENSIDAD_OLAS`).
 - [ ] **Rendimiento**: medido sin pantalla: 4-12 ms por cuadro (noche es lo más caro). Revisar en el PC real que
       el mapa vaya fluido de noche.
-- [ ] **Junior instrumental**: el estadio busca `assets/JuniorCancion_instrumental.mp3` (u `.ogg`); si no está,
-      suena la canción con voz. **Falta conseguir el instrumental.**
 - [ ] **Aeropuerto**: ahora se juega CurramGram desde su nodo amarillo, con diálogo propio de la Paloma. Es un
       nivel extra (como el Malecón): no cambia el conteo de los 5 niveles de la campaña.
+
+## 8. Lugares iluminados de noche y luces del aeropuerto
+
+- [ ] De noche los lugares emblemáticos (estadio, Buenavista, Ventana, Uninorte, Malecón, Aleta, Mallorquín,
+      aeropuerto) se ven iluminados con sus colores; las calles y zonas vacías siguen oscuras. Las estrellas
+      y pines de los niveles dan luz a su alrededor. Ajustes en `scenes/story_map/luces_lugares.py`
+      (`COLOR_EDIFICIO`, `INTENSIDAD_LUGAR`).
+- [ ] Aeropuerto: luces rojas en los bordes de la pista que corren hacia la cabecera, barras rojas en ambas
+      cabeceras y baliza que parpadea en la torre. De día se ven tenues. Si se mueve el aeropuerto en el mapa,
+      las luces lo siguen; si se cambia su dibujo, ajustar `BORDE_A`, `BORDE_B`, `CABECERA_*` y `TORRE`.
+- [ ] Rendimiento medido sin pantalla: unos 11 ms por cuadro de mediana, con picos de 20-30 ms durante el
+      anochecer. Revisar en el PC real que no se note tironeo al caer la noche.

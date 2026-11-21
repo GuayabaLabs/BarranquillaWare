@@ -78,21 +78,8 @@ class MetropolitanoModeracionMicrogame(BaseMicrogame):
         self.intro_duration = 0.7 if self.arcade_mode else 1.0
         self.outro_duration = 1.0 if self.arcade_mode else 1.8
 
-    # Música del estadio: versión instrumental de la canción del Junior (sin voz, para no tapar el juego).
-    # Si todavía no está en assets/, suena la versión original.
-    JUNIOR_INSTRUMENTAL = ("JuniorCancion_instrumental.mp3", "JuniorCancion_instrumental.ogg")
-    JUNIOR_ORIGINAL = "JuniorCancion.mp3"
-
-    @classmethod
-    def musica_estadio(cls) -> str:
-        import os
-        for nombre in cls.JUNIOR_INSTRUMENTAL:
-            if os.path.exists(os.path.join("assets", nombre)):
-                return nombre
-        return cls.JUNIOR_ORIGINAL
-
     def enter(self, params: Optional[dict] = None) -> None:
-        self.audio.play_bgm(self.musica_estadio(), volume_scale=0.45)
+        self.audio.play_bgm("JuniorCancion.mp3", volume_scale=0.45)
 
     def setup_game(self) -> None:
         """Inicializa estructuras del tablero 3x3, slots y assets."""

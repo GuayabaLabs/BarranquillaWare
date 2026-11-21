@@ -357,9 +357,7 @@ def test_punch_alert_procedural_peaks_and_sprint_jump_and_bgm_scaling(monkeypatc
     )
     MetropolitanoModeracionMicrogame().enter()
     UninorteConcentrateMicrogame().enter()
-    # Instrumental si está en assets/, si no la original (MetropolitanoModeracionMicrogame.musica_estadio)
-    from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
-    assert (MetropolitanoModeracionMicrogame.musica_estadio(), 0.45) in bgm_calls
+    assert ("JuniorCancion.mp3", 0.45) in bgm_calls
     assert ("concentracionMusic.mp3", 0.65) in bgm_calls
 
 

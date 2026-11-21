@@ -107,6 +107,42 @@ class TestRio(unittest.TestCase):
         self.assertGreater(int((np.abs(cuadros[0] - cuadros[1]).sum(axis=2) > 0).sum()), 500, "el agua no se movió")
 
 
+class TestLucesLugares(unittest.TestCase):
+    def test_edificios_iluminados_calles_oscuras_y_luces_de_pista(self):
+        pygame.init()
+        pygame.display.set_mode((1920, 1080))
+        from scenes.story_map import StoryMapScene
+
+        mapa = StoryMapScene(character_id="valdiri")
+        mapa.cinematic_timer = mapa.cinematic_duration
+        estadio = mapa.poi_registry["metropolitano"]["rect"]
+        mapa.player_pos = (estadio.centerx, estadio.centery)
+        mapa.camera.x = mapa.camera.target_x = estadio.centerx - 960
+        mapa.camera.y = mapa.camera.target_y = estadio.centery - 540
+        s = pygame.Surface((1920, 1080))
+        brillo = lambda p: sum(s.get_at(p)[:3])
+        centro = (960, 540)  # sobre el estadio
+        calle = (60, 1000)   # esquina lejos de lugares
+        mapa.ciclo.hora = 12.0
+        mapa.update(1 / 60)
+        mapa.render(s)
+        dia_estadio, dia_calle = brillo(centro), brillo(calle)
+        mapa.ciclo.hora = 23.0
+        mapa.update(1 / 60)
+        mapa.render(s)
+        # De noche el estadio conserva buena parte de su luz y la calle oscurece mucho más
+        self.assertGreater(brillo(centro) / max(1, dia_estadio), 0.7)
+        self.assertLess(brillo(calle) / max(1, dia_calle), 0.55)
+
+        # Aeropuerto: hay luces rojas sobre la pista
+        aero = mapa.poi_registry["aeropuerto"]["rect"]
+        sup = pygame.Surface((1920, 1080))
+        mapa.luces_lugares.luces_aeropuerto(sup, aero, aero.x - 300, aero.y - 300, 1.0, 0.3)
+        arr = pygame.surfarray.array3d(sup).astype(int)
+        rojos = ((arr[..., 0] > 150) & (arr[..., 1] < 80) & (arr[..., 2] < 80)).sum()
+        self.assertGreater(int(rojos), 40)
+
+
 class TestAeropuertoCurramGram(unittest.TestCase):
     def test_aeropuerto_lanza_curramgram_y_el_tiempo_avanza(self):
         pygame.init()

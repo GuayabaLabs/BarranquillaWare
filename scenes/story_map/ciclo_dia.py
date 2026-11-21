@@ -139,23 +139,16 @@ class CicloDia:
             if pygame.display.get_surface() is not None:
                 lm = lm.convert()
             self._lm = lm
-        lm.fill(self.multiplicador())
+        # El tinte cálido del cielo va dentro del mismo mapa de luz (sin otra pasada por toda la pantalla).
+        m = self.multiplicador()
+        c = self.calidez()
+        lm.fill(tuple(min(255, a + 2 * b) for a, b in zip(m, c)))
         return lm
 
     def aplicar(self, surface: pygame.Surface, lm: pygame.Surface) -> None:
         """Multiplica lo dibujado del mundo por el mapa de luz y suma la calidez del cielo."""
-        if self.multiplicador() != (255, 255, 255) or getattr(self, "_hubo_luces", False):
+        if self.multiplicador() != (255, 255, 255) or any(self.calidez()) or getattr(self, "_hubo_luces", False):
             surface.blit(lm, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
-        c = self.calidez()
-        if any(c):
-            capa = getattr(self, "_calor", None)
-            if capa is None or capa.get_size() != surface.get_size():
-                capa = pygame.Surface(surface.get_size())
-                if pygame.display.get_surface() is not None:
-                    capa = capa.convert()
-                self._calor = capa
-            capa.fill(c)
-            surface.blit(capa, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
 
     def aplicar_tinte(self, surface: pygame.Surface) -> None:
         """Atajo sin luces extra: solo el color de la hora."""
