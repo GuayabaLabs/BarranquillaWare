@@ -11,7 +11,7 @@ from microgames.punch_alert import PunchAlertMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
 
 # Progresión de los 5 Niveles Principales del Modo Historia
-STORY_CAMPAIGN_ORDER = ["uninorte", "buenavista", "metropolitano", "aeropuerto", "aleta"]
+STORY_CAMPAIGN_ORDER = ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
 STORY_SECRET_POIS = ["malecon"]
 STORY_PLAYABLE_POIS = STORY_CAMPAIGN_ORDER + STORY_SECRET_POIS
 
@@ -31,6 +31,14 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
             "difficulty": 2,
         }
     ],
+    "ventana": [
+        {
+            "id": "punch_alert",
+            "title": "EL POST DEL ARBOLITO",
+            "cls": PunchAlertMicrogame,
+            "difficulty": 4,
+        }
+    ],
     "buenavista": [
         {
             "id": "buenavista_trend",
@@ -47,14 +55,7 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
             "difficulty": 3,
         }
     ],
-    "aeropuerto": [
-        {
-            "id": "punch_alert",
-            "title": "¡DESPACHA EL SPAM ANTES DE DESPEGAR!",
-            "cls": PunchAlertMicrogame,
-            "difficulty": 4,
-        }
-    ],
+    "aeropuerto": [],
     "aleta": [
         {
             "id": "fritanga_84",
@@ -73,6 +74,13 @@ STORY_LEVEL_PREVIEW_META: Dict[str, Dict[str, Any]] = {
         "preview_asset": "fondo_minijuego_crossy.png",
         "crop_anchor": "top",
         "callout_title": "CAMPUS UNINORTE",
+    },
+    "ventana": {
+        "difficulty": 4,
+        "max_difficulty": 5,
+        "preview_asset": "Punch/fondo_punch.png",
+        "crop_anchor": "center",
+        "callout_title": "VENTANA AL MUNDO",
     },
     "buenavista": {
         "difficulty": 3,
@@ -122,7 +130,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
                 "Ven conmigo: vamos a recorrer juntos nuestros 5 rincones favoritos sin estrés ni pantallas."
             ],
             [
-                "Primero pasaremos por Uninorte, luego el C.C. Buenavista, el Metropolitano y el Cortissoz,",
+                "Primero pasaremos por Uninorte, luego la Ventana al Mundo, el C.C. Buenavista y el Metropolitano,",
                 "y cerramos con broche de oro en la Aleta del Tiburón.",
                 "Acércate a cada parada, respira hondo y charlamos antes de jugar. ¡Ponte las pilas!"
             ]
@@ -154,7 +162,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
             [
                 "¡Qué alivio se siente cuando uno suelta el teléfono y habita el presente!",
                 "En Uninorte aprendimos que caminar mirando el cielo y regalarle calma a la mente",
-                "vale más que mil mensajes urgentes. ¡Vamos volando hacia el Buenavista!"
+                "vale más que mil mensajes urgentes. ¡Vamos volando hacia la Ventana al Mundo!"
             ]
         ],
         "post_lose_pages": [
@@ -165,8 +173,37 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         ],
         "voice_clip_prefix": "paloma_uninorte"
     },
+    "ventana": {
+        "level_badge": "NIVEL 2 DE 5 • VENTANA AL MUNDO",
+        "speaker": "PALOMA DE CURRAMBA",
+        "pre_pages": [
+            [
+                "¡Llegamos a la Ventana al Mundo! Mira ese arbolito cambiando de colores, qué belleza.",
+                "Toda la familia vino a tomarse la foto, y el celular ya está sugiriendo qué más ponerle al post.",
+                "Ojo, mi llave: hay cosas que es mejor no contarle a medio mundo."
+            ],
+            [
+                "Cuando una idea caiga en tu zona, sácala con un puño: ESPACIO o cerrando la mano.",
+                "Lo que dejes pasar se va pa' tu publicación. ¡Deja pasar solo lo bonito!"
+            ]
+        ],
+        "post_win_pages": [
+            [
+                "¡Qué post tan lindo! Salió el arbolito, la familia y nada más.",
+                "Los recuerdos se comparten, pero dónde vives y lo que tienes se quedan contigo.",
+                "¡Sigamos volando hacia el C.C. Buenavista!"
+            ]
+        ],
+        "post_lose_pages": [
+            [
+                "¡Erda, se nos colaron datos de más en esa publicación!",
+                "Respira, bórrala y vuelve a armarla con calma: el recuerdo sí, tu vida entera no."
+            ]
+        ],
+        "voice_clip_prefix": "paloma_ventana"
+    },
     "buenavista": {
-        "level_badge": "NIVEL 2 DE 5 • C.C. BUENAVISTA",
+        "level_badge": "NIVEL 3 DE 5 • C.C. BUENAVISTA",
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
@@ -195,7 +232,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         "voice_clip_prefix": "paloma_buenavista"
     },
     "metropolitano": {
-        "level_badge": "NIVEL 3 DE 5 • ESTADIO METROPOLITANO",
+        "level_badge": "NIVEL 4 DE 5 • ESTADIO METROPOLITANO",
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
@@ -212,7 +249,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
             [
                 "¡Golazo por la convivencia, mi vale! La tribuna y el chat brillan cuando hay respeto.",
                 "Detrás de cada usuario y cada camiseta hay un ser humano sintiendo como tú.",
-                "¡Próxima escala: volemos con rumbo al Aeropuerto Ernesto Cortissoz!"
+                "¡Próxima escala: volemos a la Aleta del Tiburón a comernos una arepa de huevo!"
             ]
         ],
         "post_lose_pages": [
@@ -224,7 +261,7 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         "voice_clip_prefix": "paloma_metropolitano"
     },
     "aeropuerto": {
-        "level_badge": "NIVEL 4 DE 5 • AEROPUERTO CORTISSOZ",
+        "level_badge": "AEROPUERTO CORTISSOZ",
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [

@@ -65,8 +65,8 @@ class PalomaIntro:
                     frame.subsurface(crop), self.portrait.get_size()))
         except Exception:
             self.talk_frames = []
-        self.font_speaker = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 22, bold=True)
-        self.font_badge = assets.cargarFuenteCuento(22)
+        self.font_speaker = assets.cargarFuenteTitulo(24)
+        self.font_badge = assets.cargarFuenteTitulo(22)
         self.font_body = assets.cargarFuenteCuento(31)
         self.font_hint = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 16, bold=True)
         self._assets_listos = True

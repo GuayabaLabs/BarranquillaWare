@@ -12,6 +12,7 @@ from typing import Callable, Optional
 import pygame
 
 from core.state_machine import BaseState
+from core.asset_manager import AssetManager
 from core.audio_manager import AudioManager
 from core.camera_gestures import CameraGestureInput
 from core.settings import SettingsManager
@@ -88,7 +89,7 @@ class CoasterLauncherState(BaseState):
         self.legacy_surface: Optional[pygame.Surface] = None
         self.legacy_level_count = 0
         self.error = ""
-        self.font = pygame.font.SysFont("Arial Black, Impact, sans-serif", 34)
+        self.font = AssetManager.get_instance().cargarFuenteTitulo(34)
         self.font_sub = pygame.font.SysFont("Arial, sans-serif", 20)
 
     def enter(self, params: Optional[dict] = None) -> None:
@@ -206,7 +207,7 @@ class CoasterCalibrationState(BaseState):
         self.requested = False
         self.saved = False
         self.error = ""
-        self.font = pygame.font.SysFont("Arial Black, Impact, sans-serif", 38)
+        self.font = AssetManager.get_instance().cargarFuenteTitulo(38)
         self.small = pygame.font.SysFont("Arial, sans-serif", 20, bold=True)
 
     def enter(self, params: Optional[dict] = None) -> None:
@@ -320,6 +321,8 @@ class CoasterCalibrationState(BaseState):
             self.lienzoCoaster = pygame.Surface((m.ancho, m.alto))
             self.fondoCoaster = m.crearFondo()
             self.fuentesCoaster = {n: m.cargarFuente(n) for n in (20, 26, 36)}
+            cargarTitulo = getattr(m, "cargarFuenteTitulo", m.cargarFuente)
+            self.fuentesTituloCoaster = {n: cargarTitulo(n) for n in (20, 36)}
             self.rectVista = pygame.Rect(140, 175, 400, 300)
             self.vistaCamara = None
             self.botonVolver = m.Boton((m.ancho // 2 - 110, 520, 220, 70), "Volver", m.cVerde,
@@ -337,7 +340,8 @@ class CoasterCalibrationState(BaseState):
         s.blit(self.fondoCoaster, (0, 0))
         m.dibujarNubes(s, tiempo)
         m.tarjetaPintada(s, pygame.Rect(10, 20, 1080, 660))
-        texto("Calibra tu lápiz", 36, m.cOscuro, (self.rectVista.x, 100))
+        titulo = self.fuentesTituloCoaster[36].render("Calibra tu lápiz", True, m.cOscuro)
+        s.blit(titulo, titulo.get_rect(topleft=(self.rectVista.x, 100)))
 
         # La cámara va dentro del marco de elementos/marcoCamara; si no hay imagen, sobre un papelito
         hayMarco = m.cargarMarco() is not None
@@ -393,7 +397,7 @@ class CoasterCalibrationState(BaseState):
             self.botonVolver.sobre += delta
         else:
             self.botonVolver.sobre = max(0.0, self.botonVolver.sobre - delta * 3)
-        self.botonVolver.dibujar(s, self.fuentesCoaster[20])
+        self.botonVolver.dibujar(s, self.fuentesTituloCoaster[20])
         if self.botonVolver.sobre >= m.tBoton:
             self.botonVolver.sobre = 0.0
             self.botonVolver.accion()

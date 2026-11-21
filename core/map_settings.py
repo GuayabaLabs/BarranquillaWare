@@ -24,7 +24,8 @@ class MapSettingsState(BaseState):
                             "back": pygame.Rect(830, 916, 260, 60),
                             "next": pygame.Rect(1260, 916, 260, 60)}
         self.modes = ["off", "protanopia", "deuteranopia", "tritanopia"]
-        self.font = pygame.font.SysFont("Arial Black, Impact, sans-serif", 30)
+        from core.asset_manager import AssetManager
+        self.font = AssetManager.get_instance().cargarFuenteTitulo(30)
         self.small = pygame.font.SysFont("Arial, sans-serif", 20, bold=True)
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -154,8 +155,9 @@ class MapSettingsState(BaseState):
         panel = pygame.Rect(330, 90, 1260, 920)
         paper = assets.load_cropped_surface("tarjeta_slot_partida.png")
         surface.blit(pygame.transform.smoothscale(paper, panel.size), panel)
-        title = assets.cargarFuenteCuento(48)
+        title = assets.cargarFuenteTitulo(48)
         name_font = assets.cargarFuenteCuento(27)
+        fuenteBoton = assets.cargarFuenteTitulo(26)
         detail_font = assets.cargarFuenteCuento(23)
         ink = (78, 51, 35)
         label = title.render("Controles de cámara", True, ink)
@@ -185,7 +187,7 @@ class MapSettingsState(BaseState):
             rect = self._help_rects[key]
             pygame.draw.rect(surface, (250, 239, 214), rect, border_radius=20)
             pygame.draw.rect(surface, (126, 90, 62), rect, width=2, border_radius=20)
-            label = name_font.render(text, True, ink)
+            label = fuenteBoton.render(text, True, ink)
             surface.blit(label, label.get_rect(center=rect.center))
 
     def update(self, dt: float) -> None:
@@ -261,7 +263,7 @@ class MapSettingsState(BaseState):
         tarjeta = pygame.Rect(470, 90, 980, 900)
         coaster.tarjetaPintada(surface, tarjeta)
 
-        fuenteTitulo = assets.cargarFuenteCuento(64)
+        fuenteTitulo = assets.cargarFuenteTitulo(64)
         fuenteNombre = assets.cargarFuenteCuento(38)
         fuenteValor = assets.cargarFuenteCuento(30)
         fuenteAyuda = assets.cargarFuenteCuento(24)
