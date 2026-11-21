@@ -55,7 +55,7 @@ class MicrogamePauseState(BaseState):
             self.items.append({"id": "menu", "label": "SALIR AL MENÚ", "asset": "boton_salir_menu_pausa.png"})
 
         # Tipografías y geometría de la ventana
-        self.font_item = pygame.font.SysFont("Arial Black, Impact, sans-serif", 24)
+        self.font_item = self.assets.cargarFuenteTitulo(26)
         self.font_hint = pygame.font.SysFont("Arial, sans-serif", 16, bold=True)
 
         self.box_w = 640
@@ -270,8 +270,13 @@ class MicrogamePauseState(BaseState):
             rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 300)
             # El rojo crece un poquito para que se note cuál está elegido
             self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
-            self.fuenteTituloPausa = self.assets.cargarFuenteCuento(84)
-            self.fuenteBotonPausa = self.assets.cargarFuenteCuento(44)
+            self.fuenteTituloPausa = self.assets.cargarFuenteTitulo(84)
+            self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(40)
+            anchoUtil = int(self.botonMorado.get_width() * 0.8)
+            tam = 40
+            while tam > 24 and max(self.fuenteBotonPausa.size(it["label"].capitalize())[0] for it in self.items) > anchoUtil:
+                tam -= 2
+                self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(tam)
             self.fuenteEstadoPausa = self.assets.cargarFuenteCuento(22)
             self.fuenteAyudaPausa = self.assets.cargarFuenteCuento(28)
             self.pausaLista = True

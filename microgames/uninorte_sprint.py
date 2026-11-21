@@ -958,10 +958,10 @@ class UninorteSprintMicrogame(BaseMicrogame):
         except Exception as e:
             print(f"[UninorteSprint] Aviso: faltan imágenes de la notificación: {e}")
             return False
-        self.fuenteAvisoTitulo = self.assets.cargarFuenteCuento(50)
+        self.fuenteAvisoTitulo = self.assets.cargarFuenteTitulo(46)
         self.fuenteNotiApp = self.assets.cargarFuenteCuento(32)
         self.fuenteNotiTexto = self.assets.cargarFuenteCuento(36)
-        self.fuenteBotonAviso = self.assets.cargarFuenteCuento(32)
+        self.fuenteBotonAviso = self.assets.cargarFuenteTitulo(30)
         self.fuenteAyudaAviso = self.assets.cargarFuenteCuento(24)
         self.fuenteGlobo = self.assets.cargarFuenteCuento(22)
         self.fuenteMensaje = self.assets.cargarFuenteCuento(38)

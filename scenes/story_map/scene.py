@@ -95,6 +95,7 @@ class StoryMapScene(BaseState):
     # Nodo amarillo de entrada de cada nivel jugable (ids de config/map_poi_layout.json).
     POI_ENTRY_NODES: Dict[str, int] = {
         "uninorte": 71,
+        "ventana": 23,
         "buenavista": 76,
         "metropolitano": 55,
         "aeropuerto": 35,
@@ -250,6 +251,12 @@ class StoryMapScene(BaseState):
                 "completada": "uninorte" in unlocked_locations or "uninorte_concentrate" in completed_microgames,
             },
             {
+                "id": "ventana",
+                "titulo": "Ventana al Mundo",
+                "desc": "Arma tu post sin regalar tus datos.",
+                "completada": "ventana" in unlocked_locations or "punch_alert" in completed_microgames,
+            },
+            {
                 "id": "buenavista",
                 "titulo": "C.C. Buenavista",
                 "desc": "Sigue el compás del trend sin volverte viral adicto.",
@@ -260,12 +267,6 @@ class StoryMapScene(BaseState):
                 "titulo": "Estadio Metropolitano",
                 "desc": "Modera el chat en vivo y frena la toxicidad.",
                 "completada": "metropolitano" in unlocked_locations or "metropolitano_moderacion" in completed_microgames,
-            },
-            {
-                "id": "aeropuerto",
-                "titulo": "Aeropuerto Cortissoz",
-                "desc": "Batea el phishing y bloquea mensajes sospechosos.",
-                "completada": "aeropuerto" in unlocked_locations or "punch_alert" in completed_microgames,
             },
             {
                 "id": "malecon",
@@ -296,6 +297,12 @@ class StoryMapScene(BaseState):
                 "leido": "uninorte" in unlocked_locations,
             },
             {
+                "remitente": "Mirador Ventana al Mundo",
+                "asunto": "Comparte el momento",
+                "cuerpo": "Antes de publicar, piensa quién más puede ver dónde estás y qué tienes.",
+                "leido": "ventana" in unlocked_locations,
+            },
+            {
                 "remitente": "Radar Buenavista",
                 "asunto": "Tendencia en Consciencia",
                 "cuerpo": "Baila por alegría y arte, no para buscar validación en métricas vacías.",
@@ -306,12 +313,6 @@ class StoryMapScene(BaseState):
                 "asunto": "Pasión con Respeto",
                 "cuerpo": "El fútbol une a Barranquilla. Deja los insultos y la toxicidad fuera de la red.",
                 "leido": "metropolitano" in unlocked_locations,
-            },
-            {
-                "remitente": "Seguridad Cortissoz",
-                "asunto": "Alerta de Phishing y Estafas",
-                "cuerpo": "Nunca abras enlaces de premios milagrosos ni compartas contraseñas.",
-                "leido": "aeropuerto" in unlocked_locations,
             },
         ]
         self.side_drawer.ponerMensajes(mensajes)
@@ -708,12 +709,12 @@ class StoryMapScene(BaseState):
             },
             "ventana": {
                 "title": "VENTANA AL MUNDO",
-                "district": "DISTRITO MONUMENTAL",
-                "microgame_id": "ventana_colores",
-                "microgame_title": "VENTANA AL MUNDO",
+                "district": "NIVEL 2 • DISTRITO MONUMENTAL",
+                "microgame_id": "punch_alert",
+                "microgame_title": "EL POST DEL ARBOLITO",
                 "desc": [
-                    "Monumento icónico de colores frente a la brisa del norte.",
-                    "Un rincón colorido para admirar el horizonte currambero."
+                    "La familia se toma la foto con el arbolito de la Ventana al Mundo.",
+                    "Golpea lo que no debes publicar y deja pasar solo lo bonito."
                 ],
                 "rect": self.ventana_rect
             },
@@ -730,7 +731,7 @@ class StoryMapScene(BaseState):
             },
             "metropolitano": {
                 "title": "ESTADIO METROPOLITANO",
-                "district": "NIVEL 3 • DISTRITO DEPORTIVO",
+                "district": "NIVEL 4 • DISTRITO DEPORTIVO",
                 "microgame_id": "metropolitano_moderacion",
                 "microgame_title": "¡MODERA LA BARRA BRAVA!",
                 "desc": [
@@ -741,7 +742,7 @@ class StoryMapScene(BaseState):
             },
             "buenavista": {
                 "title": "C.C. BUENAVISTA & MALLPLAZA",
-                "district": "NIVEL 2 • DISTRITO COMERCIAL",
+                "district": "NIVEL 3 • DISTRITO COMERCIAL",
                 "microgame_id": "buenavista_trend",
                 "microgame_title": "EL TREND EN BUENAVISTA",
                 "desc": [
@@ -764,9 +765,9 @@ class StoryMapScene(BaseState):
             },
             "aeropuerto": {
                 "title": "AEROPUERTO CORTISSOZ",
-                "district": "NIVEL 4 • DISTRITO AÉREO",
-                "microgame_id": "punch_alert",
-                "microgame_title": "¡DESPACHA EL SPAM!",
+                "district": "DISTRITO AÉREO",
+                "microgame_id": "",
+                "microgame_title": "",
                 "desc": [
                     "Antes de despegar, limpia tu pantalla de ventanas emergentes y spam.",
                     "Viaja ligero de equipaje digital para cerrar tu aventura en calma."
@@ -986,10 +987,10 @@ class StoryMapScene(BaseState):
         self.save_feedback_timer: float = 0.0
 
         # Tipografías del Drawer
-        self.font_drawer_title = pygame.font.SysFont("Arial Black, Impact, sans-serif", 22)
-        self.font_drawer_btn = pygame.font.SysFont("Arial, sans-serif", 17, bold=True)
+        self.font_drawer_title = self.assets.cargarFuenteTitulo(26)
+        self.font_drawer_btn = self.assets.cargarFuenteTitulo(19)
         self.font_drawer_sub = pygame.font.SysFont("Arial, sans-serif", 14)
-        self.font_drawer_save = pygame.font.SysFont("Arial Black, Impact, sans-serif", 15)
+        self.font_drawer_save = self.assets.cargarFuenteTitulo(17)
 
         # 1. Botón circular flotante para abrir/cerrar el menú (esquina superior derecha)
         btn_toggle_surf = pygame.Surface((56, 56), pygame.SRCALPHA)
@@ -1110,7 +1111,8 @@ class StoryMapScene(BaseState):
         self.font_paloma_badge = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 16, bold=True)
         self.font_paloma_body = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 23, bold=True)
         self.font_paloma_hint = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 16, bold=True)
-        self.font_paloma_badge = self.assets.cargarFuenteCuento(22)
+        self.font_paloma_speaker = self.assets.cargarFuenteTitulo(24)
+        self.font_paloma_badge = self.assets.cargarFuenteTitulo(22)
         self.font_paloma_body = self.assets.cargarFuenteCuento(29)
         self.font_paloma_hint = self.assets.cargarFuenteCuento(21)
 
@@ -1120,7 +1122,7 @@ class StoryMapScene(BaseState):
             surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
             pygame.draw.rect(surf, bg_col, (0, 0, bw, bh), border_radius=14)
             pygame.draw.rect(surf, b_col, (0, 0, bw, bh), width=2, border_radius=14)
-            font_b = pygame.font.SysFont("Arial Black, Impact", 18)
+            font_b = self.assets.cargarFuenteTitulo(22)
             txt = font_b.render(text, True, (255, 255, 255))
             surf.blit(txt, txt.get_rect(center=(bw // 2, bh // 2)))
             return surf
@@ -1351,10 +1353,10 @@ class StoryMapScene(BaseState):
         self.tex_quest_card = self.assets.load_surface("recuadro_mision_nivel.png")
 
         # Tipografía manuscrita coherente con la UI de BarranquillaWare
-        self.font_quest_title = self.assets.cargarFuenteCuento(30)
+        self.font_quest_title = self.assets.cargarFuenteTitulo(30)
         self.font_quest_sub = self.assets.cargarFuenteCuento(17)
         self.font_quest_body = self.assets.cargarFuenteCuento(20)
-        self.font_quest_btn = self.assets.cargarFuenteCuento(23)
+        self.font_quest_btn = self.assets.cargarFuenteTitulo(23)
 
         # Texturas ilustradas de apoyo (cartucho de pergamino, separador y sellos de cera)
         self.tex_quest_cartridge = self.assets.load_surface("cinta_distrito_modal.png")
@@ -3373,25 +3375,53 @@ class StoryMapScene(BaseState):
         conContorno.blit(imagen, (grosor, grosor))
         return conContorno
 
+    def ensancharVentanaMenu(self, ventana: pygame.Surface, extra: int) -> pygame.Surface:
+        ancho, alto = ventana.get_size()
+        resultado = pygame.Surface((ancho + extra, alto), pygame.SRCALPHA)
+        pedazos = (
+            ((0.0, 0.36), (0.70, 0.76)),
+            ((0.36, 0.64), (0.45, 0.55)),
+            ((0.64, 1.0), (0.28, 0.35)),
+        )
+        for (arriba, abajo), (izquierda, derecha) in pedazos:
+            y0, y1 = int(alto * arriba), int(alto * abajo)
+            x0, x1 = int(ancho * izquierda), int(ancho * derecha)
+            if y1 <= y0:
+                continue
+            resultado.blit(ventana, (0, y0), (0, y0, x0, y1 - y0))
+            franja = ventana.subsurface((x0, y0, x1 - x0, y1 - y0))
+            resultado.blit(pygame.transform.smoothscale(franja, (x1 - x0 + extra, y1 - y0)), (x0, y0))
+            resultado.blit(ventana, (x1 + extra, y0), (x1, y0, ancho - x1, y1 - y0))
+        return resultado
+
     def prepararMenuMapa(self) -> None:
         """Carga la ventana y los botones nuevos del menú del mapa y el botón para abrirlo."""
         self.menuMapaListo = False
         try:
             # El panel se ensancha y llega de arriba a abajo para que los botones quepan con aire a los lados
-            self.drawer_w = 560
+            anchoBase = 560
+            extra = 80
+            self.drawer_w = anchoBase + extra
             alto = self.screen_h
             # El papel de la ventana va del 18% al 83% del ancho; su centro queda un poco a la derecha
-            self.centroPapelMenu = int(self.drawer_w * 0.508)
-            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), self.drawer_w)
-            self.ventanaMenuMapa = pygame.transform.smoothscale(ventana, (self.drawer_w, alto))
+            self.centroPapelMenu = int(anchoBase * 0.508) + extra // 2
+            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), anchoBase)
+            ventana = pygame.transform.smoothscale(ventana, (anchoBase, alto))
+            self.ventanaMenuMapa = self.ensancharVentanaMenu(ventana, extra)
             morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 250)
             rojo = pygame.transform.smoothscale(
                 self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 250), morado.get_size())
-            self.fuenteTituloMenu = self.assets.cargarFuenteCuento(50)
+            self.fuenteTituloMenu = self.assets.cargarFuenteTitulo(50)
+            anchoPapel = int(anchoBase * 0.59) + extra
+            tamTitulo = 50
+            while tamTitulo > 30 and self.fuenteTituloMenu.size("Modo historia")[0] + 40 > anchoPapel:
+                tamTitulo -= 2
+                self.fuenteTituloMenu = self.assets.cargarFuenteTitulo(tamTitulo)
+            self.centroTituloMenu = int(anchoBase * 0.5) + extra // 2
             self.fuenteTextoMenu = self.assets.cargarFuenteCuento(22)
             self.fuenteEstadoMenu = self.assets.cargarFuenteCuento(17)
             self.fuenteSubEstadoMenu = self.assets.cargarFuenteCuento(15)
-            fuenteBoton = self.assets.cargarFuenteCuento(36)
+            fuenteBoton = self.assets.cargarFuenteTitulo(34)
 
             cinta_raw = self.assets.load_surface("cinta_estado_modal.png", has_alpha=True)
             self.cintaEstadoMenu = pygame.transform.smoothscale(cinta_raw, (330, 56))
@@ -3405,6 +3435,11 @@ class StoryMapScene(BaseState):
                 (self.btn_exit_map, "Salir al menú", 816),
             ]
             self.botonesMenuMapa = []
+            anchoUtil = int(morado.get_width() * 0.8)
+            tam = 34
+            while tam > 20 and max(fuenteBoton.size(texto)[0] for _, texto, _ in botones) > anchoUtil:
+                tam -= 2
+                fuenteBoton = self.assets.cargarFuenteTitulo(tam)
             for boton, texto, y in botones:
                 versiones = []
                 for fondo, contorno in ((morado, (70, 30, 110)), (rojo, (120, 26, 34))):
@@ -3444,9 +3479,10 @@ class StoryMapScene(BaseState):
         cafe = (110, 68, 38)
         summary = self.settings.get_story_save_summary()
         titulo = self.textoConContorno(self.fuenteTituloMenu, "Modo historia", (110, 62, 150), (255, 250, 238))
-        panel.blit(titulo, titulo.get_rect(center=(int(self.drawer_w * 0.56), 192)))
+        centroTitulo = getattr(self, "centroTituloMenu", int(self.drawer_w * 0.56))
+        panel.blit(titulo, titulo.get_rect(center=(centroTitulo, 192)))
         explorando = self.fuenteTextoMenu.render(f"Explorando con {summary['character_name']}", True, cafe)
-        panel.blit(explorando, explorando.get_rect(center=(int(self.drawer_w * 0.56), 240)))
+        panel.blit(explorando, explorando.get_rect(center=(centroTitulo, 240)))
 
         # Cinta acuarela explicando auto-guardado, guardado manual y última marca horaria
         cinta_rect = self.cintaEstadoMenu.get_rect(center=(self.centroPapelMenu + 14, 306))
@@ -3614,9 +3650,9 @@ class StoryMapScene(BaseState):
         max_title_w = int(cw * 0.40)
         title_size = 28
         title_lines: List[str] = [title_text]
-        f_title = self.assets.cargarFuenteCuento(title_size)
+        f_title = self.assets.cargarFuenteTitulo(title_size)
         while title_size >= 25:
-            f_title = self.assets.cargarFuenteCuento(title_size)
+            f_title = self.assets.cargarFuenteTitulo(title_size)
             if f_title.size(title_text)[0] <= max_title_w:
                 title_lines = [title_text]
                 break
@@ -3690,11 +3726,11 @@ class StoryMapScene(BaseState):
 
         # Título del Microjuego / Rondas en terracota caribeño cálido
         m_size = 24
-        f_m = self.assets.cargarFuenteCuento(m_size)
+        f_m = self.assets.cargarFuenteTitulo(m_size)
         txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
         while txt_m_title.get_width() > int(cw * 0.68) and m_size > 21:
             m_size -= 1
-            f_m = self.assets.cargarFuenteCuento(m_size)
+            f_m = self.assets.cargarFuenteTitulo(m_size)
             txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
         card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.506) - 1)))
 

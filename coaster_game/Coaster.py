@@ -1504,6 +1504,17 @@ def cargarFuente(tam):
     return pygame.font.SysFont("trebuchetms,verdana,arial", tam, bold=True)
 
 
+def cargarFuenteTitulo(tam):
+    ruta = os.path.join(os.path.dirname(carpeta), "assets", "Titulos.ttf")
+    if os.path.exists(ruta):
+        try:
+            from core.asset_manager import FuenteTitulo
+            return FuenteTitulo(ruta, int(tam * 1.15))
+        except ImportError:
+            return pygame.font.Font(ruta, int(tam * 1.15))
+    return cargarFuente(tam)
+
+
 def crearBarra():
     # franja de madera de abajo: tablas con vetas pintadas
     h = alto - margenInf
@@ -2231,6 +2242,7 @@ class Juego:
         pygame.display.set_caption("Lápiz coaster")
         self.reloj = pygame.time.Clock()
         self.fuentes = {n: cargarFuente(n) for n in (14, 16, 20, 26, 36, 54)}
+        self.fuentesTitulo = {n: cargarFuenteTitulo(n) for n in (20, 36)}
         self.fondoBase = crearFondo()
         self.fondos = {}                 # cada fondo se carga la primera vez que se juega su nivel
         self.barra = crearBarra()
@@ -2744,6 +2756,12 @@ class Juego:
             self.pantalla.blit(self.fuentes[tam].render(s, True, cOscuro), r.move(2, 2))
         self.pantalla.blit(sup, r)
 
+    def titulo(self, s, tam, color, punto, alinear="topleft"):
+        sup = self.fuentesTitulo[tam].render(s, True, color)
+        r = sup.get_rect()
+        setattr(r, alinear, punto)
+        self.pantalla.blit(sup, r)
+
     def textoEscalado(self, s, tam, color, centro, escala=1.0, alfa=255):
         sup = self.fuentes[tam].render(s, True, color)
         if abs(escala - 1) > 0.01:
@@ -2994,7 +3012,7 @@ class Juego:
         s.blit(almacen[("barra", hora)], (0, margenInf))
         if self.estado in ("dibujar", "tutorial"):
             for b in (self.botProbar, self.botDeshacer, self.botBorrar):
-                b.dibujar(s, self.fuentes[20])
+                b.dibujar(s, self.fuentesTitulo[20])
         if self.camara is not None and self.estado in ("dibujar", "viajando", "resultado", "tutorial"):
             vista = self.superficieCamara()
             if vista:
@@ -3088,7 +3106,7 @@ class Juego:
             lineasReflexion = partirTexto(res["reflexion"], self.fuentes[20], tarjeta.w - 150)
         altoBloque = 50 + (40 if res["texto"] else 0) + (78 if res["gano"] else 0) + 28 * len(lineasReflexion)
         y = (arriba + abajo - altoBloque) / 2
-        self.texto(res["titulo"], 36, cOscuro, (tarjeta.centerx, y + 25), "center")
+        self.titulo(res["titulo"], 36, cOscuro, (tarjeta.centerx, y + 25), "center")
         y += 58
         if res["texto"]:
             self.texto(res["texto"], 16, cOscuro, (tarjeta.centerx, y), "midtop")
@@ -3128,7 +3146,7 @@ class Juego:
                     if tam > 0.5:
                         lavado(s, puntosEstrella((cx + 10, cy - 14), tam, 0.25, 4), cCrema, 240, 0.1)
         for b in self.botonesAhora():
-            b.dibujar(s, self.fuentes[20])
+            b.dibujar(s, self.fuentesTitulo[20])
 
     def lineasEscritas(self, frases):
         lineas = []
@@ -3264,14 +3282,14 @@ class Juego:
                 punto = puntoNitido(cMaderaOsc if i < self.paso else cCrema, 4)
             s.blit(punto, punto.get_rect(center=(round(x0 + i * 18), cy)))
         for b in self.botonesAhora():
-            b.dibujar(s, self.fuentes[20])
+            b.dibujar(s, self.fuentesTitulo[20])
 
     def dibujarCalibracion(self):
         s = self.pantalla
         s.blit(self.fondoBase, (0, 0))
         dibujarNubes(s, self.tiempo)
         tarjetaPintada(s, pygame.Rect(10, 20, 1080, 660))
-        self.texto("Calibra tu lápiz", 36, cOscuro, (self.rectVista.x, 100))
+        self.titulo("Calibra tu lápiz", 36, cOscuro, (self.rectVista.x, 100))
         # la cámara va dentro de elementos/marcoCamara; si no hay imagen, sobre un papelito con contorno de tinta
         hayMarco = cargarMarco() is not None
         if not hayMarco:
@@ -3306,7 +3324,7 @@ class Juego:
         frase = "Para jugar, deja el lápiz sobre el botón jugar o pulsa enter en el teclado."
         for i, linea in enumerate(partirTexto(frase, self.fuentes[20], 400)):
             self.texto(linea, 20, cMaderaOsc, (590, 410 + i * 30))
-        self.botJugar.dibujar(s, self.fuentes[20])
+        self.botJugar.dibujar(s, self.fuentesTitulo[20])
 
     def dibujar(self):
         if self.estado == "calibrar":
