@@ -130,3 +130,27 @@ def test_victory_condition_at_30_seconds():
     assert game_completed == [True]
 
     microgame.cleanup()
+
+
+def test_mic_hud_renders_without_broken_emoji(monkeypatch):
+    """El indicador del micrófono en Cine Buenavista dibuja icono vectorial sin glifos tofu."""
+    pygame.init()
+    pygame.display.set_mode((1920, 1080))
+    rendered = []
+    microgame = BuenavistaCineMicrogame(character_id="char")
+    real_font = microgame.font_mic_status
+
+    class SpyFont:
+        def render(self, txt, aa, col, background=None):
+            rendered.append(txt)
+            return real_font.render(txt, aa, col, background)
+
+        def __getattr__(self, name):
+            return getattr(real_font, name)
+
+    monkeypatch.setattr(microgame, "font_mic_status", SpyFont())
+    surf = pygame.Surface((1920, 1080))
+    microgame.render_game(surf)
+    microgame.cleanup()
+    assert rendered
+    assert all("\U0001f399" not in txt for txt in rendered)

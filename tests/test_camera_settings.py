@@ -84,7 +84,7 @@ def test_camera_help_covers_every_arcade_game(camera_settings):
     covered = {name for name, _, _ in CAMERA_CONTROL_GUIDE}
     scene = ArcadeModeScene()
     assert {cls.__name__ for cls in scene.microgame_pool} <= covered
-    assert {"CoasterLauncherState", "BatallaFloresBossMicrogame"} <= covered
+    assert {"CoasterLauncherState"} <= covered
 
 
 def test_curramgram_camera_can_move_hide_avisar_and_publish(camera_settings, monkeypatch):

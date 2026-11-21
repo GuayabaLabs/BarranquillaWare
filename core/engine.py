@@ -323,6 +323,8 @@ class Engine:
 
             # 2. Lógica
             self.state_machine.update(dt)
+            if hasattr(self, "audio") and hasattr(self.audio, "update"):
+                self.audio.update(dt)
 
             # 3. Renderizado
             self._render_current_frame()
@@ -353,6 +355,8 @@ class Engine:
 
         if self.enable_gl and self.gl_renderer is not None:
             self.state_machine.render(self.virtual_surface)
+            if not getattr(current_state, "_draws_voice_badge", False):
+                AudioManager.get_instance().render_voice_muted_badge(self.virtual_surface)
             # El lapicero va DESPUÉS de la escena para que no quede oculto debajo del fondo.
             self._render_camera_cursor(self.virtual_surface)
 
@@ -376,6 +380,8 @@ class Engine:
             )
         else:
             self.state_machine.render(self.virtual_surface)
+            if not getattr(current_state, "_draws_voice_badge", False):
+                AudioManager.get_instance().render_voice_muted_badge(self.virtual_surface)
             if has_sw_particles:
                 particles.render_software(self.virtual_surface)
             self._render_camera_cursor(self.virtual_surface)

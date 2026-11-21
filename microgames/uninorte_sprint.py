@@ -524,8 +524,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
-        pass
         self.callarTictac()
+        super().exit()
 
     def _jump_forward(self) -> None:
         if self.player_lane < self.max_lane:
@@ -1022,10 +1022,16 @@ class UninorteSprintMicrogame(BaseMicrogame):
     def update(self, dt: float) -> None:
         if self.phase == self.PHASE_PLAY and not self.is_finished and getattr(self, "imagenesNoti", False):
             if self.avisoAbierto:
+                if hasattr(self.audio, "update"):
+                    self.audio.update(dt)
                 self.tiempoAviso += dt
                 self.ultimoUpdate = pygame.time.get_ticks()
                 if self.canalTictac is not None:
-                    self.canalTictac.unpause()
+                    if getattr(self.audio, "sound_enabled", True):
+                        self.canalTictac.set_volume(max(0.0, min(1.0, getattr(self.audio, "sfx_volume", 0.8))))
+                        self.canalTictac.unpause()
+                    else:
+                        self.callarTictac()
                 self.revisarGestosAviso(dt)
                 return
             self.tiempoJugado += dt

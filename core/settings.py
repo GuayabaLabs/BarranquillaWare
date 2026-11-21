@@ -17,9 +17,11 @@ CHARACTER_DISPLAY_NAMES: Dict[str, str] = {
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "music_enabled": True,
     "sound_enabled": True,
+    "voice_enabled": True,
     "camera_enabled": True,
     "music_volume": 0.65,
     "sfx_volume": 0.8,
+    "voice_volume": 1.0,
     "brightness": 1.0,
     "colorblind_mode": "off",
     "colorblind_intensity": 0.0,
@@ -111,8 +113,13 @@ class SettingsManager:
     """
     _instance = None
 
-    def __init__(self, filepath: str = SETTINGS_FILE) -> None:
-        self.filepath = filepath
+    def __init__(self, filepath: str | None = None) -> None:
+        default_file = (
+            SETTINGS_FILE
+            if SETTINGS_FILE != "settings.json"
+            else (os.environ.get("BARRANQUILLAWARE_SETTINGS_FILE") or SETTINGS_FILE)
+        )
+        self.filepath = filepath or default_file
         self.data: Dict[str, Any] = copy.deepcopy(DEFAULT_SETTINGS)
         self.load()
 

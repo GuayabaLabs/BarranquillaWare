@@ -66,14 +66,14 @@ def test_arcade_mode_flow():
     assert scene.phase == scene.STATE_INTERSTITIAL
     print("[OK] Botón Reintentar resetea vidas a 4 y velocidad a 1.0x.")
 
-    # 4. Probar activación de Boss Stage en ronda 10
+    # 4. Probar lanzamiento de microjuego arcade
     from core.state_machine import StateMachine
-    from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
     scene.state_machine = StateMachine()
     scene.round_num = 10
     scene._launch_next_microgame()
-    assert isinstance(scene.state_machine.current_state, BatallaFloresBossMicrogame)
-    print("[OK] Ronda 10: Activación confirmada de Batalla de Flores (Boss Stage).")
+    assert scene.state_machine.current_state is not None
+    assert type(scene.state_machine.current_state) in scene.microgame_pool
+    print("[OK] Ronda 10: Lanzamiento confirmado de microjuego del catálogo arcade.")
 
     # 4. Renderizar frame de Game Over para evidencia
     scene._enter_game_over()

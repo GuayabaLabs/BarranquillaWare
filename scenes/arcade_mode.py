@@ -18,7 +18,6 @@ from microgames.ventana_colores import VentanaColoresMicrogame
 from microgames.malecon_rueda import MaleconRuedaMicrogame
 from microgames.metropolitano_penalty import MetropolitanoPenaltyMicrogame
 from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
-from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
 from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.uninorte_concentrate import UninorteConcentrateMicrogame
@@ -41,7 +40,6 @@ class ArcadeModeScene(BaseState):
     - Cadena ininterrumpida de microjuegos aleatorios (clásicos de 4s y nuevos con ventana justa).
     - 4 vidas (Máscaras de Marimonda).
     - Velocidad creciente (+15% cada 4 rondas superadas).
-    - Etapa Jefe (Batalla de Flores) cada 10 rondas.
     - Intersticio acuarela cálido con barra de mecha, confeti y transición fluida.
     - Pantalla de Game Over en pergamino acuarela con emblemas de estrella reales.
     """
@@ -157,7 +155,6 @@ class ArcadeModeScene(BaseState):
 
         raw_state = self.assets.load_cropped_surface("cinta_estado_modal.png")
         self.round_ribbon_surf = pygame.transform.smoothscale(raw_state, (680, 108))
-        self.boss_ribbon_surf = pygame.transform.smoothscale(raw_state, (820, 114))
         self.record_banner_surf = pygame.transform.smoothscale(raw_state, (540, 66))
 
         raw_emblem = self.assets.load_cropped_surface("emblema_estrella_modal.png")
@@ -297,8 +294,6 @@ class ArcadeModeScene(BaseState):
             return 120.0
         if chosen_cls is EmojiCatchMicrogame:
             return max(18.0, 30.0 / self.speed_multiplier)
-        if chosen_cls is BatallaFloresBossMicrogame:
-            return 15.0
         if chosen_cls is MetropolitanoModeracionMicrogame:
             return max(4.5, 6.5 / self.speed_multiplier)
         if chosen_cls in (BuenavistaTrendMicrogame, BuenavistaCineMicrogame, PunchAlertMicrogame):
@@ -310,9 +305,8 @@ class ArcadeModeScene(BaseState):
         return max(1.8, 4.0 / self.speed_multiplier)
 
     def _launch_next_microgame(self) -> None:
-        """Elige un microjuego al azar o etapa jefe cada 10 rondas y lo ejecuta."""
-        is_boss_stage = self.round_num > 1 and self.round_num % 10 == 0
-        chosen_cls = BatallaFloresBossMicrogame if is_boss_stage else random.choice(self.microgame_pool)
+        """Elige un microjuego al azar del catálogo arcade y lo ejecuta."""
+        chosen_cls = random.choice(self.microgame_pool)
         fair_time = self._compute_arcade_time_limit(chosen_cls)
 
         if chosen_cls is MetropolitanoModeracionMicrogame:
@@ -340,8 +334,8 @@ class ArcadeModeScene(BaseState):
                 # Estos juegos llevan su propio reloj, sincronizado con la barra común.
                 microgame.game.tiempo = fair_time
 
-        microgame.pause_return_callback = self._exit_arcade
-        microgame.pause_menu_callback = self._exit_arcade
+        microgame.pause_return_callback = self._exit_from_pause
+        microgame.pause_menu_callback = self._exit_from_pause
         self._active_microgame = microgame
 
         if hasattr(self, "state_machine") and self.state_machine:
@@ -361,17 +355,11 @@ class ArcadeModeScene(BaseState):
         self.phase_timer = 0.0
         self.speed_just_increased = False
 
-        is_boss_round = self.round_num > 1 and self.round_num % 10 == 0
-
         if won:
             self.score += 1
             self.round_num += 1
             if hasattr(self.audio, "play_click"):
                 self.audio.play_click()
-
-            if is_boss_round and self.lives < self.max_lives:
-                self.lives += 1
-                self._spawn_celebration_confetti()
 
             if self.score > 0 and self.score % 4 == 0:
                 self.speed_multiplier = min(2.1, self.speed_multiplier + 0.15)
@@ -449,6 +437,20 @@ class ArcadeModeScene(BaseState):
                 bg_surf.blit(c_surf, (int(cf["x"]), int(cf["y"])))
 
         surface.blit(bg_surf, (ox, oy))
+        self._draws_voice_badge = True
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface, right_top=(1880, 128))
+
+    def _exit_from_pause(self) -> None:
+        if self.state_machine:
+            from core.microgame import BaseMicrogame
+            from core.microgame_pause import MicrogamePauseState
+            while self.state_machine._states and isinstance(
+                self.state_machine._states[-1],
+                (MicrogamePauseState, BaseMicrogame),
+            ):
+                self.state_machine.pop_state()
+        self._exit_arcade()
 
     def _render_hud(self, surface: pygame.Surface) -> None:
         # A) Panel acuarela de Récord y Racha arriba a la izquierda
@@ -470,7 +472,6 @@ class ArcadeModeScene(BaseState):
 
     def _render_interstitial(self, surface: pygame.Surface) -> None:
         cx, cy = self.screen_w // 2, self.screen_h // 2
-        is_boss_next = self.round_num > 1 and self.round_num % 10 == 0
 
         # Halo cálido acuarela detrás del personaje
         halo = pygame.Surface((420, 420), pygame.SRCALPHA)
@@ -482,29 +483,16 @@ class ArcadeModeScene(BaseState):
         bob_y = math.sin(self.phase_timer * 11.0) * 12.0
         surface.blit(self.character_sprite, (cx - self.character_sprite.get_width() // 2, int(cy - 95 + bob_y)))
 
-        # Cinta de Ronda (o Alerta de Jefe)
-        if is_boss_next:
-            rib_rect = self.boss_ribbon_surf.get_rect(center=(cx, cy - 235))
-            surface.blit(self.boss_ribbon_surf, rib_rect)
-            surface.blit(self.star_emblem_surf, (rib_rect.left + 32, rib_rect.centery - 22))
-            surface.blit(self.star_emblem_surf, (rib_rect.right - 80, rib_rect.centery - 22))
-            txt_round = render_outlined_text(
-                self.font_title,
-                f"RONDA {self.round_num} · ¡ETAPA JEFE!",
-                CREAM_TEXT,
-                (142, 48, 22),
-                thickness=3,
-            )
-        else:
-            rib_rect = self.round_ribbon_surf.get_rect(center=(cx, cy - 235))
-            surface.blit(self.round_ribbon_surf, rib_rect)
-            txt_round = render_outlined_text(
-                self.font_huge,
-                f"¡RONDA {self.round_num}!",
-                CREAM_TEXT,
-                INK_DARK,
-                thickness=3,
-            )
+        # Cinta de Ronda
+        rib_rect = self.round_ribbon_surf.get_rect(center=(cx, cy - 235))
+        surface.blit(self.round_ribbon_surf, rib_rect)
+        txt_round = render_outlined_text(
+            self.font_huge,
+            f"¡RONDA {self.round_num}!",
+            CREAM_TEXT,
+            INK_DARK,
+            thickness=3,
+        )
         surface.blit(txt_round, txt_round.get_rect(center=rib_rect.center))
 
         # Cinta de velocidad

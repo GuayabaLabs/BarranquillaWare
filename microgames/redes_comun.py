@@ -303,15 +303,13 @@ class ManagedSound:
 
 
 def recortar_sonido(sonido: pygame.mixer.Sound, max_seg: Optional[float]) -> pygame.mixer.Sound:
-    """Quita el silencio inicial y, si se pide, corta a `max_seg` con un desvanecido de salida.
-
-    Los efectos de los juegos rápidos deben sonar al instante y no encimarse; el archivo original no cambia.
-    """
+    """Quita el silencio inicial, nivela efectos muy suaves y, si se pide, corta a `max_seg`."""
     try:
         datos = pygame.sndarray.array(sonido)
         frec = pygame.mixer.get_init()[0]
         nivel = np.abs(datos.astype(np.int32)).reshape(len(datos), -1).max(axis=1)
-        umbral = max(1, int(nivel.max() * 0.04))
+        pico = int(nivel.max())
+        umbral = max(1, int(pico * 0.04))
         inicio = int(np.argmax(nivel > umbral))
         datos = datos[inicio:]
         if max_seg is not None and len(datos) > int(max_seg * frec):
@@ -319,6 +317,10 @@ def recortar_sonido(sonido: pygame.mixer.Sound, max_seg: Optional[float]) -> pyg
             n = min(len(datos), int(0.15 * frec))
             rampa = np.linspace(1.0, 0.0, n)
             datos[-n:] = (datos[-n:] * (rampa[:, None] if datos.ndim > 1 else rampa)).astype(datos.dtype)
+        # Elevar suavemente efectos grabados muy bajos (ej. emoji_bloqueo/positivo a -11 dB) sin clipear
+        if 0 < pico < int(32767 * 0.55):
+            ganancia = min(2.8, (32767 * 0.78) / float(pico))
+            datos = np.clip(datos.astype(np.float32) * ganancia, -32767, 32767).astype(datos.dtype)
         return pygame.sndarray.make_sound(np.ascontiguousarray(datos))
     except Exception:
         return sonido

@@ -3,7 +3,6 @@ Lanzador de Demostración y Pruebas Rápidas (Dev Launcher) para BarranquillaWar
 Permite iniciar directamente en cualquier escena, modo o microjuego sin pasar por los menús.
 
 Uso:
-    python run_demo.py --game boss
     python run_demo.py --game penalty
     python run_demo.py --game flamenco
     python run_demo.py --game sprint
@@ -32,7 +31,6 @@ from microgames.ventana_colores import VentanaColoresMicrogame
 from microgames.malecon_rueda import MaleconRuedaMicrogame
 from microgames.metropolitano_penalty import MetropolitanoPenaltyMicrogame
 from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
-from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
 from microgames.troja_baile import TrojaBaileMicrogame
 
@@ -40,7 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description="BarranquillaWare Fast Play / Dev Launcher")
     parser.add_argument("--scene", choices=["main", "mode", "character", "story", "arcade", "freeplay"], default=None,
                         help="Escena inicial a cargar")
-    parser.add_argument("--game", choices=["flamenco", "sprint", "ventana", "rueda", "penalty", "aeropuerto", "boss", "fritanga", "troja"], default=None,
+    parser.add_argument("--game", choices=["flamenco", "sprint", "ventana", "rueda", "penalty", "aeropuerto", "fritanga", "troja"], default=None,
                         help="Microjuego específico a probar directamente")
     parser.add_argument("--char", default="westcol", choices=["westcol", "char", "katherine", "valdiri"],
                         help="Personaje activo a utilizar")
@@ -60,7 +58,6 @@ def main():
             "rueda": MaleconRuedaMicrogame,
             "penalty": MetropolitanoPenaltyMicrogame,
             "aeropuerto": AeropuertoAterrizajeMicrogame,
-            "boss": BatallaFloresBossMicrogame,
             "fritanga": Fritanga84Microgame,
             "troja": TrojaBaileMicrogame
         }

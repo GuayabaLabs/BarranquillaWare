@@ -72,11 +72,5 @@ python microgames/emoji_catch.py
 
 ## 5. Interfaz
 
-- [ ] Modo Libre ahora tiene 10 tarjetas (5x2): textos más pequeños. La corona de la tarjeta del jefe se ve como un
-      cuadro (era así antes).
+- [ ] Modo Libre muestra tarjetas con paginación limpia.
 - [ ] La navegación con teclado/mando por menús muestra un halo dorado en el botón enfocado.
-
-## Problema preexistente
-
-- `tests/test_boss_stage.py` guarda una imagen en una ruta de otro computador (`C:/Users/danie/...`). No falla, pero
-  debería usar `artifacts/`.

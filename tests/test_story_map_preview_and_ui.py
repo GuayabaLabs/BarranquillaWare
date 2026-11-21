@@ -504,7 +504,7 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
                         f"{poi_key} [{source_mode}]: callout {callout_rect} tapó avatar {player_screen}",
                     )
                 for other_key, other_info in self.scene.poi_registry.items():
-                    if other_key in (poi_key, "batalla_flores"):
+                    if other_key == poi_key:
                         continue
                     other_screen = other_info["rect"].move(-cam_x, -cam_y)
                     self.assertFalse(
@@ -578,7 +578,7 @@ class TestStoryMapPreviewAndQuestCard(unittest.TestCase):
                         f"{poi_key} [{source_mode}] ({cx},{cy}) t={t_val:.2f}: tapó avatar {player_screen} con {callout_rect}",
                     )
                 for other_key, other_info in self.scene.poi_registry.items():
-                    if other_key in (poi_key, "batalla_flores"):
+                    if other_key == poi_key:
                         continue
                     other_screen = other_info["rect"].move(-cam_x, -cam_y)
                     self.assertFalse(

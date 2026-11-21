@@ -191,3 +191,126 @@ def test_profile_and_missions_include_fritanga():
     scene = StoryMapScene(character_id="westcol")
     assert scene.side_drawer.perfil_data["niveles"].endswith(f"/{len(STORY_CAMPAIGN_ORDER)}")
     assert "aleta" in {mission["id"] for mission in scene.side_drawer.misiones}
+
+
+def test_drawer_missions_messages_state_and_main_menu_logros():
+    """Verifica rectificación de misiones, badge de mensajes sin leer y logros reales en MainMenu."""
+    from core.settings import SettingsManager
+    from core.audio_manager import AudioManager
+    from scenes.main_menu import MainMenuScene
+
+    settings = SettingsManager.get_instance()
+    settings.reset_story_progress()
+    audio = AudioManager.get_instance()
+    try:
+        scene = StoryMapScene(character_id="westcol")
+        missions = {m["id"]: m["completada"] for m in scene.side_drawer.misiones}
+        assert len(missions) == 6
+        assert all(not done for done in missions.values()), f"En partida nueva ninguna misión debe iniciar completada: {missions}"
+        assert scene.side_drawer.show_notification_badge is True
+
+        # Renderizar pestañas con 6 ítems sin errores de superficie
+        scene.side_drawer.is_open = True
+        scene.side_drawer.anim_t = 1.0
+        surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+        scene._on_side_nav_selected("misiones")
+        scene.side_drawer.render(surf)
+        scene._on_side_nav_selected("mensajes")
+        scene.side_drawer.render(surf)
+
+        # Despejar Uninorte (2 rondas) actualiza misión, mensaje y trofeo real en MainMenu
+        scene.active_poi = "uninorte"
+        scene.current_level_stage_idx = 0
+        scene._on_microgame_complete(True)
+        scene._on_microgame_complete(True)
+        audio.stop_voice(fade_ms=0)
+
+        missions_after = {m["id"]: m["completada"] for m in scene.side_drawer.misiones}
+        assert missions_after["uninorte"] is True
+        assert missions_after["buenavista"] is False
+        msg_map = {m["remitente"]: m["leido"] for m in scene.side_drawer.mensajes}
+        assert msg_map["Alerta Digital Uninorte"] is True
+        assert "Aleta del Tiburón" in msg_map
+
+        menu = MainMenuScene(1920, 1080)
+        lines = menu._build_logros_lines()
+        assert any("1 / 4" in line for line in lines), f"MainMenu logros debe mostrar trofeos del mapa: {lines}"
+    finally:
+        audio.stop_voice(fade_ms=0)
+        settings.reset_story_progress()
+
+
+def test_mensajes_section_no_text_overlap_and_fits_panel():
+    """Valida que título, subtítulo, remitente, asunto, cuerpo y pie en Mensajes no se solapen ni recorten."""
+    scene = StoryMapScene(character_id="westcol")
+    drawer = scene.side_drawer
+    drawer.is_open = True
+    drawer.anim_t = 1.0
+    drawer.mostrarMensajes()
+    surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+
+    base_msgs = list(drawer.mensajes)
+    assert len(base_msgs) == 6
+
+    for count in (6, 5, 3, 0):
+        drawer.ponerMensajes(base_msgs[:count] if count else [])
+        surf.fill((0, 0, 0, 0))
+        drawer.render(surf)
+        m = drawer.last_mensajes_layout_metrics
+        assert len(m["cards"]) == (count if count else 6)
+
+        assert m["titulo_ink"].bottom < m["sub_ink"].top, (
+            f"count={count}: título solapa subtítulo ({m['titulo_ink']} vs {m['sub_ink']})"
+        )
+        assert m["sub_ink"].bottom < m["cards"][0]["card_rect"].top, (
+            f"count={count}: subtítulo solapa primera tarjeta"
+        )
+        for idx, card in enumerate(m["cards"]):
+            c_rect = card["card_rect"]
+            assert card["rem_ink"].bottom < card["as_ink"].top, (
+                f"count={count} card={idx}: remitente solapa asunto ({card['rem_ink']} vs {card['as_ink']})"
+            )
+            assert card["as_ink"].bottom < card["body_inks"][0].top, (
+                f"count={count} card={idx}: asunto solapa cuerpo ({card['as_ink']} vs {card['body_inks'][0]})"
+            )
+            if len(card["body_inks"]) > 1:
+                assert card["body_inks"][0].bottom < card["body_inks"][1].top, (
+                    f"count={count} card={idx}: líneas de cuerpo se solapan ({card['body_inks']})"
+                )
+            assert card["rem_ink"].top >= 2
+            assert card["rem_ink"].right <= c_rect.width - 8, (
+                f"count={count} card={idx}: remitente desborda a la derecha ({card['rem_ink']} en w={c_rect.width})"
+            )
+            assert card["as_ink"].right <= c_rect.width - 8, (
+                f"count={count} card={idx}: asunto desborda a la derecha ({card['as_ink']} en w={c_rect.width})"
+            )
+            assert card["body_inks"][-1].bottom <= c_rect.height - 2, (
+                f"count={count} card={idx}: cuerpo toca borde inferior ({card['body_inks'][-1]} en h={c_rect.height})"
+            )
+
+        assert m["cards"][-1]["card_rect"].bottom < m["pie_ink"].top, (
+            f"count={count}: última tarjeta solapa pie ({m['cards'][-1]['card_rect']} vs {m['pie_ink']})"
+        )
+        assert m["pie_ink"].bottom < m["panel_rect"].bottom - 20, (
+            f"count={count}: pie demasiado cerca del borde inferior ({m['pie_ink']} vs {m['panel_rect']})"
+        )
+
+    # Caso extremo: remitentes y asuntos largos en 6 tarjetas compactas tampoco deben recortarse
+    drawer.ponerMensajes([
+        {
+            "remitente": "Departamento de Bienestar Digital Uninorte",
+            "asunto": "Alerta urgente sobre desinformación viral en redes locales",
+            "cuerpo": "Texto largo de prueba para verificar ajuste de ancho sin desbordes ni solapamientos.",
+            "leido": (i % 2 == 0),
+        }
+        for i in range(6)
+    ])
+    surf.fill((0, 0, 0, 0))
+    drawer.render(surf)
+    m_long = drawer.last_mensajes_layout_metrics
+    for idx, card in enumerate(m_long["cards"]):
+        c_rect = card["card_rect"]
+        assert card["rem_ink"].right <= c_rect.width - 8, f"long card={idx} remitente desbordado: {card['rem_ink']}"
+        assert card["as_ink"].right <= c_rect.width - 8, f"long card={idx} asunto desbordado: {card['as_ink']}"
+        assert card["rem_ink"].bottom < card["as_ink"].top
+        assert card["as_ink"].bottom < card["body_inks"][0].top
