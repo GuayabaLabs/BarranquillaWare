@@ -11,6 +11,9 @@ from core.audio_manager import AudioManager
 from core.settings import SettingsManager, CHARACTER_DISPLAY_NAMES
 from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
+from scenes.story_map.ciclo_dia import CicloDia, HORA_DE_CLIMA, HORAS_POR_NIVEL, NOMBRE_FASE
+from scenes.story_map.rio import RioAnimado
+from scenes.story_map.faroles import Faroles, _halo as halo_aditivo
 from core.camera import Camera2D
 from ui.button import UIButton
 from ui.focus_nav import FocusNavigator
@@ -57,7 +60,7 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "metropolitano": MetropolitanoModeracionMicrogame,
     "metropolitano_moderacion": MetropolitanoModeracionMicrogame,
     "metropolitano_penalty": MetropolitanoPenaltyMicrogame,
-    "aeropuerto": PunchAlertMicrogame,
+    "aeropuerto": __import__("microgames.curramgram_go", fromlist=["CurramGramGoMicrogame"]).CurramGramGoMicrogame,
     "punch_alert": PunchAlertMicrogame,
     "aeropuerto_aterrizaje": AeropuertoAterrizajeMicrogame,
     "fritanga_84": Fritanga84Microgame,
@@ -131,11 +134,26 @@ class StoryMapScene(BaseState):
         # 1. Ensamblar mapa mundial base y estampar POIs
         self._build_world_map()
 
-        # 2. Inicializar sistema de Clima y Atmósfera (Día, Atardecer, Noche, Lluvia)
+        # 2. Paso del tiempo (reloj del mapa) y clima. El clima día/atardecer/noche sale de la hora;
+        #    la lluvia es aparte. Ver scenes/story_map/ciclo_dia.py.
         self.weather_modes = ["day", "sunset", "night", "rain"]
-        saved_weather = str(self.settings.get_story_progress().get("weather", "day")).lower()
-        self.current_weather = saved_weather if saved_weather in self.weather_modes else "day"
+        progreso = self.settings.get_story_progress()
+        saved_weather = str(progreso.get("weather", "day")).lower()
+        if saved_weather not in self.weather_modes:
+            saved_weather = "day"
+        hora_guardada = progreso.get("hora_mapa")
+        if isinstance(hora_guardada, (int, float)):
+            self.ciclo = CicloDia(float(hora_guardada), lluvia=saved_weather == "rain")
+        else:
+            self.ciclo = CicloDia(HORA_DE_CLIMA.get(saved_weather, 11.0) if saved_weather != "day" else 9.0,
+                                  lluvia=saved_weather == "rain")
         self._init_weather_shaders()
+        # Río y ciénaga animados (se preparan en segundo plano) y faroles que alumbran de noche.
+        self.rio = RioAnimado(self.world_map, en_segundo_plano=True)
+        self.faroles = Faroles()
+        # Halos de luz precalculados en 12 intensidades (teñir cada frame es caro)
+        self.halos_cami = [halo_aditivo(300, 210, (190, 160, 110), 0.85 * (i + 1) / 12, 1.6) for i in range(12)]
+        self.halos_nivel = [halo_aditivo(380, 300, (200, 165, 90), 0.75 * (i + 1) / 12, 1.7) for i in range(12)]
 
         # 3. Inicializar sistema de Nubes Algodonosas Caribeñas Chiquitas (Cozy Clouds)
         self._init_cozy_clouds()
@@ -275,6 +293,11 @@ class StoryMapScene(BaseState):
                 "completada": "malecon" in unlocked_locations or "coaster" in completed_microgames,
             },
         ]
+        misiones.append({
+            "id": "aeropuerto", "titulo": "Aeropuerto Cortissoz",
+            "desc": "Llega a la puerta 7 sin publicar chismes ni fotos privadas.",
+            "completada": "aeropuerto" in unlocked_locations or "curramgram_go" in completed_microgames,
+        })
         misiones.append({
             "id": "aleta", "titulo": "Aleta del Tiburón",
             "desc": "Atiende los fritos sin engancharte con el trol.",
@@ -766,11 +789,11 @@ class StoryMapScene(BaseState):
             "aeropuerto": {
                 "title": "AEROPUERTO CORTISSOZ",
                 "district": "DISTRITO AÉREO",
-                "microgame_id": "",
-                "microgame_title": "",
+                "microgame_id": "curramgram_go",
+                "microgame_title": "CURRAMGRAM GO!",
                 "desc": [
-                    "Antes de despegar, limpia tu pantalla de ventanas emergentes y spam.",
-                    "Viaja ligero de equipaje digital para cerrar tu aventura en calma."
+                    "Llega a la puerta 7 junto a Cami sin exponer a nadie en redes.",
+                    "Confirma antes de publicar y respeta la privacidad de los demás."
                 ],
                 "rect": self.aeropuerto_rect
             },
@@ -911,7 +934,7 @@ class StoryMapScene(BaseState):
         ]
 
         # Píldora discreta para consultar y cambiar clima (sin solapar SocialHUD ni menú)
-        self.weather_pill_rect = pygame.Rect(1608, 42, 184, 46)
+        self.weather_pill_rect = pygame.Rect(1568, 42, 224, 46)
         self.weather_font = self.assets.cargarFuenteCuento(19)
         self.weather_meta = {
             "day": ("SOL CARIBE", (252, 240, 198), (165, 110, 28), (245, 190, 60)),
@@ -1583,6 +1606,8 @@ class StoryMapScene(BaseState):
             kwargs["character_id"] = self.character_id
 
         microgame = microgame_cls(**kwargs)
+        if getattr(microgame, "paloma_intro", None) is not None:
+            microgame.paloma_intro = None
         if stages and idx + 1 < len(stages):
             # Ronda intermedia del nivel: mostrar resultado breve ("¡Ganaste!" / "¡Perdiste!") y pasar rápido a la siguiente ronda
             microgame.show_outro_banner = True
@@ -1659,6 +1684,8 @@ class StoryMapScene(BaseState):
                 unlocked.append(self.active_poi)
 
             self.current_level_stage_idx = 0
+            # Cada nivel completado hace avanzar el tiempo del mapa (con animación corta).
+            self.ciclo.adelantar(HORAS_POR_NIVEL)
             new_score = int(progress.get("high_score", 0)) + 100
             self.settings.update_story_progress(
                 has_active_save=True,
@@ -1667,6 +1694,7 @@ class StoryMapScene(BaseState):
                 unlocked_locations=unlocked,
                 high_score=new_score,
                 weather=self.current_weather,
+                hora_mapa=round(self.ciclo.hora_destino(), 3),
                 save_source="auto",
             )
             metrics = self._sync_social_hud()
@@ -1804,8 +1832,22 @@ class StoryMapScene(BaseState):
         if hasattr(self, "audio") and hasattr(self.audio, "play_hover"):
             self.audio.play_hover()
 
+    @property
+    def current_weather(self) -> str:
+        """'day', 'sunset' o 'night' según la hora del mapa, o 'rain' si llueve."""
+        ciclo = self.__dict__.get("ciclo")
+        return ciclo.clima() if ciclo is not None else self.__dict__.get("_clima_fijo", "day")
+
+    @current_weather.setter
+    def current_weather(self, valor: str) -> None:
+        ciclo = self.__dict__.get("ciclo")
+        if ciclo is not None:
+            ciclo.poner_clima(valor)
+        else:
+            self.__dict__["_clima_fijo"] = valor
+
     def set_weather(self, weather_name: str) -> None:
-        """Cambia el clima actual del mapa ('day', 'sunset', 'night', 'rain')."""
+        """Cambia el clima ('day', 'sunset', 'night' llevan el reloj a esa hora; 'rain' activa lluvia)."""
         if weather_name in self.weather_modes:
             self.current_weather = weather_name
             self._apply_weather_feedback()
@@ -1827,6 +1869,7 @@ class StoryMapScene(BaseState):
             "last_camera_x": float(self.camera.x),
             "last_camera_y": float(self.camera.y),
             "weather": self.current_weather,
+            "hora_mapa": round(self.ciclo.hora_destino(), 3),
             "save_source": source,
         }
         if metrics:
@@ -2826,6 +2869,10 @@ class StoryMapScene(BaseState):
 
     def update(self, dt: float) -> None:
         self.timer += dt
+        # Reloj del mapa y río: siempre corren, también detrás de diálogos y modales
+        # (así se ve anochecer mientras la Paloma felicita al pasar un nivel).
+        self.ciclo.update(dt)
+        self.rio.update(dt)
         if self.toast_timer > 0.0:
             self.toast_timer = max(0.0, self.toast_timer - dt)
             if self.toast_timer == 0.0:
@@ -3064,7 +3111,7 @@ class StoryMapScene(BaseState):
                 cloud["x"] = -350.0
 
         # Partículas ambientales según el clima activo
-        if self.current_weather == "rain":
+        if self.ciclo.lluvia:
             for drop in self.rain_drops:
                 drop["y"] += drop["speed"] * dt
                 drop["x"] -= 160.0 * dt
@@ -3077,7 +3124,7 @@ class StoryMapScene(BaseState):
                     rip["life"] = 0.0
                     rip["x"] = (rip["x"] + 317.0) % (self.screen_w - 80) + 40
                     rip["y"] = (rip["y"] + 193.0) % (self.screen_h - 160) + 120
-        elif self.current_weather in ("day", "sunset"):
+        elif self.ciclo.oscuridad() < 0.45:
             for mote in getattr(self, "breeze_motes", []):
                 mote["x"] = (mote["x"] + mote["vx"] * dt) % self.screen_w
                 mote["y"] = (mote["y"] + (mote["vy"] + math.sin(self.timer * 1.4 + mote["phase"]) * 8.0) * dt) % self.screen_h
@@ -3105,6 +3152,9 @@ class StoryMapScene(BaseState):
         cam_x = int(self.camera.x)
         cam_y = int(self.camera.y)
         surface.blit(self.world_map, (-cam_x, -cam_y))
+
+        # 1B. Río y ciénaga en movimiento (solo dentro del agua; el resto del mapa no cambia)
+        self.rio.render(surface, cam_x, cam_y, self.timer, self.ciclo.luz())
 
         # 2. Hitos de parada en las calles (is_stop)
         self._render_level_stops(surface, cam_x, cam_y)
@@ -3172,47 +3222,43 @@ class StoryMapScene(BaseState):
             if -cw < cloud_screen_x < self.screen_w + cw and -ch < cloud_screen_y < self.screen_h + ch:
                 surface.blit(cloud["surf"], (cloud_screen_x, cloud_screen_y))
 
-        # 4. Shader de atmósfera para Clima y Ciclo Día / Atardecer / Noche / Lluvia
-        overlay = self.weather_overlays.get(self.current_weather)
-        if overlay is not None:
-            surface.blit(overlay, (0, 0))
-
-        # 5. Efectos atmosféricos útiles y reactivos según el clima activo
-        if self.current_weather == "night":
-            # Halos de farol cálido sobre los POIs jugables (guía visual nocturna) y el avatar
-            if hasattr(self, "night_lamp_halo"):
+        # 4. Luz de la hora del día: mapa de luz (color de la hora + luz de faroles, de Cami y de los niveles)
+        #    que multiplica lo dibujado. Ver scenes/story_map/ciclo_dia.py y faroles.py.
+        oscuridad = self.ciclo.oscuridad()
+        lm = self.ciclo.mapa_luz(surface.get_size())
+        hubo_luces = False
+        if oscuridad > 0.28:
+            aditivo = pygame.BLEND_RGB_ADD
+            hubo_luces = self.faroles.iluminar(lm, cam_x, cam_y, oscuridad, self.timer)
+            fuerza = min(1.0, (oscuridad - 0.28) / 0.4)
+            if fuerza > 0.05:
+                # Cami lleva un poco de luz y los niveles por jugar brillan como guía nocturna
+                px = int(self.player_pos[0] - cam_x)
+                py = int(self.player_pos[1] - cam_y)
+                halo = self.halos_cami[min(11, int(fuerza * 12))]
+                lm.blit(halo, halo.get_rect(center=(px, py + 10)), special_flags=aditivo)
                 for p_key in STORY_PLAYABLE_POIS:
                     p_info = self.poi_registry.get(p_key)
                     if not p_info:
                         continue
                     pr = p_info["rect"]
-                    hx = pr.centerx - cam_x
-                    hy = pr.centery - cam_y
-                    if -200 < hx < self.screen_w + 200 and -200 < hy < self.screen_h + 200:
-                        is_done = p_info["microgame_id"] in completed_games
-                        halo = self.night_lamp_halo.copy()
-                        pulse = 0.82 + 0.18 * math.sin(self.timer * 2.2 + pr.x * 0.01)
-                        halo.set_alpha(int((135 if is_done else 215) * pulse))
-                        surface.blit(halo, halo.get_rect(center=(hx, hy)))
+                    hx, hy = pr.centerx - cam_x, pr.bottom - 30 - cam_y
+                    if -250 < hx < self.screen_w + 250 and -250 < hy < self.screen_h + 250:
+                        hecho = p_info["microgame_id"] in completed_games
+                        pulso = 0.82 + 0.18 * math.sin(self.timer * 2.2 + pr.x * 0.01)
+                        k = fuerza * pulso * (0.55 if hecho else 1.0)
+                        halo = self.halos_nivel[max(0, min(11, int(k * 12)))]
+                        lm.blit(halo, halo.get_rect(center=(hx, hy)), special_flags=aditivo)
+                hubo_luces = True
+        self.ciclo._hubo_luces = hubo_luces
+        self.ciclo.aplicar(surface, lm)
+        self.faroles.render(surface, cam_x, cam_y, oscuridad, self.timer)
 
-                px = int(self.player_pos[0] - cam_x)
-                py = int(self.player_pos[1] - cam_y)
-                if -180 < px < self.screen_w + 180 and -180 < py < self.screen_h + 180:
-                    p_halo = self.night_lamp_halo.copy()
-                    p_halo.set_alpha(150)
-                    surface.blit(p_halo, p_halo.get_rect(center=(px, py)))
-
-            # Luciérnagas suaves sobre el mapa nocturno
-            for ff in getattr(self, "fireflies", []):
-                fx = int(ff["x"] + math.sin(self.timer * ff["speed"] + ff["phase"]) * ff["radius"] - cam_x)
-                fy = int(ff["y"] + math.cos(self.timer * ff["speed"] * 0.8 + ff["phase"]) * (ff["radius"] * 0.65) - cam_y)
-                if -20 < fx < self.screen_w + 20 and -20 < fy < self.screen_h + 20:
-                    glow_a = int(120 + 115 * (0.5 + 0.5 * math.sin(self.timer * 3.2 + ff["phase"])))
-                    self._sp_surf.fill((0, 0, 0, 0))
-                    pygame.draw.circle(self._sp_surf, (255, 240, 140, glow_a // 2), (8, 8), 6)
-                    pygame.draw.circle(self._sp_surf, (255, 250, 190, glow_a), (8, 8), 2)
-                    surface.blit(self._sp_surf, (fx - 8, fy - 8))
-        elif self.current_weather == "rain":
+        # Lluvia: velo fresco, gotas y salpicaduras (a cualquier hora)
+        if self.ciclo.lluvia:
+            overlay = self.weather_overlays.get("rain")
+            if overlay is not None:
+                surface.blit(overlay, (0, 0))
             for drop in self.rain_drops:
                 dx1, dy1 = int(drop["x"]), int(drop["y"])
                 dx2 = dx1 - int(drop["length"] * 0.45)
@@ -3227,7 +3273,18 @@ class StoryMapScene(BaseState):
                     rip_surf = pygame.Surface((rad * 2 + 4, rad + 4), pygame.SRCALPHA)
                     pygame.draw.ellipse(rip_surf, (215, 238, 255, alpha_r), (2, 2, rad * 2, rad), 1)
                     surface.blit(rip_surf, (int(rip["x"]) - rad - 2, int(rip["y"]) - rad // 2 - 2))
-        elif self.current_weather in ("day", "sunset"):
+        elif oscuridad > 0.6:
+            # Luciérnagas suaves sobre el mapa nocturno
+            for ff in getattr(self, "fireflies", []):
+                fx = int(ff["x"] + math.sin(self.timer * ff["speed"] + ff["phase"]) * ff["radius"] - cam_x)
+                fy = int(ff["y"] + math.cos(self.timer * ff["speed"] * 0.8 + ff["phase"]) * (ff["radius"] * 0.65) - cam_y)
+                if -20 < fx < self.screen_w + 20 and -20 < fy < self.screen_h + 20:
+                    glow_a = int(120 + 115 * (0.5 + 0.5 * math.sin(self.timer * 3.2 + ff["phase"])))
+                    self._sp_surf.fill((0, 0, 0, 0))
+                    pygame.draw.circle(self._sp_surf, (255, 240, 140, glow_a // 2), (8, 8), 6)
+                    pygame.draw.circle(self._sp_surf, (255, 250, 190, glow_a), (8, 8), 2)
+                    surface.blit(self._sp_surf, (fx - 8, fy - 8))
+        elif oscuridad < 0.45:
             mote_col = (255, 224, 145) if self.current_weather == "sunset" else (255, 246, 195)
             for mote in getattr(self, "breeze_motes", []):
                 alpha_m = int(75 + 55 * (0.5 + 0.5 * math.sin(self.timer * 2.0 + mote["phase"])))
@@ -3896,7 +3953,11 @@ class StoryMapScene(BaseState):
             pygame.draw.circle(pill, accent_col, (ix, iy + 2), 6)
             pygame.draw.polygon(pill, accent_col, [(ix - 6, iy + 1), (ix, iy - 9), (ix + 6, iy + 1)])
 
-        txt_surf = self.weather_font.render(label, True, txt_col)
+        # Reloj del mapa + fase (el tiempo pasa solo y avanza al completar niveles)
+        etiqueta = f"{self.ciclo.reloj()}  {NOMBRE_FASE.get(self.current_weather, label).upper()}"
+        txt_surf = self.weather_font.render(etiqueta, True, txt_col)
+        if txt_surf.get_width() > rect.width - 50:
+            txt_surf = pygame.transform.smoothscale_by(txt_surf, (rect.width - 50) / txt_surf.get_width())
         pill.blit(txt_surf, txt_surf.get_rect(midleft=(40, rect.height // 2 + 1)))
         if hover_t > 0.01:
             scale = 1.0 + 0.045 * hover_t
