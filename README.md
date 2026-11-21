@@ -70,3 +70,10 @@ python -m pytest -q
 ## Desarrollo de microjuegos
 
 Los microjuegos nuevos deben heredar de `core.microgame.BaseMicrogame`, reutilizar el flujo de resultados existente y cargar recursos mediante las convenciones de `AssetManager` y `AudioManager`.
+
+## Equipo (GuayabaLabs)
+
+- **César Antonio Berrío Remolina** — [@Remolinac](https://github.com/Remolinac)
+- **Samuel Elías Ortega Rodríguez** — [@Seor1601](https://github.com/Seor1601)
+- **Daniel Alejandro Rincón Navarro** — [@WosDan](https://github.com/WosDan)
+- **Salma Valeria Romero Robles** — [@Salma-rro](https://github.com/Salma-rro)
