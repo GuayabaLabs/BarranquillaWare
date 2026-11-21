@@ -26,6 +26,7 @@ from scenes.story_map_data import (
     PALOMA_STORY_DIALOGS,
 )
 from scenes.story_map.level_preview import LevelPreviewBuilder
+from scenes.story_map.path_glow import WatercolorRouteRenderer, compute_campaign_dijkstra_path
 from scenes.story_map.ui_dialogs import StoryMapUI
 from scenes.story_map.ui_dialogs import AvisoTrofeo
 from scenes.story_map_data import trofeosMapa, radioGlorieta
@@ -100,6 +101,12 @@ class StoryMapScene(BaseState):
         "malecon": 63,
         "aleta": 59,
     }
+    # Centro exacto del disco crema interno del sello festoneado en recuadro_mision_nivel.png (649.5/725, 103.5/965)
+    QUEST_CLOSE_NORM_X: float = 0.8959
+    QUEST_CLOSE_NORM_Y: float = 0.1073
+    QUEST_PLAY_NORM_Y: float = 0.746
+    QUEST_BODY_FONT_SIZE: int = 20
+    QUEST_PLAY_FONT_SIZE: int = 30
     def __init__(
         self,
         character_id: str = "westcol",
@@ -507,6 +514,9 @@ class StoryMapScene(BaseState):
                 if hasattr(self, attr):
                     self.poi_registry[p_key]["rect"] = getattr(self, attr)
         self._playable_node_map_cache = None
+        self._poi_occluders_cache = None
+        if hasattr(self, "path_glow_renderer"):
+            self.path_glow_renderer.invalidate_cache()
         # Sincronizar posición del jugador con el nodo en DevTool si no está en movimiento
         if hasattr(self, "player_node_id") and not getattr(self, "player_is_moving", False):
             nodes, _, node_map, _, _ = self._get_street_graph()
@@ -815,35 +825,39 @@ class StoryMapScene(BaseState):
 
         self.active_poi: str = "uninorte"
 
-        # 1. Halo / Resplandor elíptico en el suelo
-        w, h = 480, 280
-        self.poi_ground_glow = self.crearResplandorSuave(w, h)
+        # 1. Faro acuarela en el suelo del siguiente destino (mapa_faro_destino.png)
+        try:
+            raw_faro = self.assets.load_cropped_surface("mapa_faro_destino.png", alpha_threshold=6)
+            self.poi_ground_glow = pygame.transform.smoothscale(raw_faro, (330, 200))
+            self.poi_target_beacon = pygame.transform.smoothscale(raw_faro, (390, 236))
+        except Exception:
+            self.poi_ground_glow = self.crearResplandorSuave(480, 280)
+            self.poi_target_beacon = self.poi_ground_glow
 
-        # 2. Pin / Diamante dorado estilizado de ubicación clave
-        pin_w, pin_h = 36, 44
-        k = 4
-        pin_grande = pygame.Surface((pin_w * k, pin_h * k), pygame.SRCALPHA)
-        pts = [(pin_w // 2 * k, 4 * k), ((pin_w - 6) * k, (pin_h // 2 - 2) * k), (pin_w // 2 * k, (pin_h - 6) * k), (6 * k, (pin_h // 2 - 2) * k)]
-        pygame.draw.polygon(pin_grande, (255, 215, 75), pts)
-        pygame.draw.polygon(pin_grande, (255, 248, 175), [(pin_w // 2 * k, 8 * k), ((pin_w - 10) * k, (pin_h // 2 - 2) * k), (pin_w // 2 * k, (pin_h // 2 - 2) * k), (pin_w // 2 * k, 8 * k)])
-        pygame.draw.polygon(pin_grande, (175, 120, 25), pts, width=2 * k)
-        pygame.draw.circle(pin_grande, (255, 255, 255, 230), ((pin_w // 2 - 3) * k, (pin_h // 2 - 6) * k), 3 * k)
-        self.poi_pin_surf = pygame.transform.smoothscale(pin_grande, (pin_w, pin_h))
+        # 2. Pin acuarela de ubicación clave (assets/pin_nivel_mapa.png)
+        try:
+            raw_pin = self.assets.load_cropped_surface("pin_nivel_mapa.png", alpha_threshold=12)
+            pin_h = 50
+            pin_w = max(28, int(round(raw_pin.get_width() * (pin_h / float(max(1, raw_pin.get_height()))))))
+            self.poi_pin_surf = pygame.transform.smoothscale(raw_pin, (pin_w, pin_h))
+        except Exception:
+            self.poi_pin_surf = pygame.Surface((38, 50), pygame.SRCALPHA)
 
-        # 2B. Estrella Dorada de Nivel Despejado / Completado
-        star_w, star_h = 44, 44
-        self.poi_star_surf = pygame.Surface((star_w, star_h), pygame.SRCALPHA)
-        cx, cy = star_w // 2, star_h // 2
-        pts_star = []
-        for i in range(10):
-            r = 20 if i % 2 == 0 else 9
-            angle = -math.pi / 2 + i * (math.pi / 5)
-            pts_star.append((cx + int(math.cos(angle) * r), cy + int(math.sin(angle) * r)))
-        pygame.draw.polygon(self.poi_star_surf, (255, 215, 60), pts_star)
-        pygame.draw.polygon(self.poi_star_surf, (255, 250, 180), pts_star, width=2)
-        pygame.draw.polygon(self.poi_star_surf, (180, 120, 20), pts_star, width=1)
-        pygame.draw.circle(self.poi_star_surf, (255, 255, 255), (cx, cy), 4)
+        # 2B. Estrella Dorada de Nivel Despejado / Completado (assets/emblema_estrella_modal.png)
+        try:
+            raw_star = self.assets.load_cropped_surface("emblema_estrella_modal.png", alpha_threshold=12)
+            self.poi_star_surf = pygame.transform.smoothscale(raw_star, (44, 44))
+        except Exception:
+            self.poi_star_surf = pygame.Surface((44, 44), pygame.SRCALPHA)
         self.cargarEstrellaPintada()
+
+        # 2C. Sistema de camino iluminado en acuarela (Dijkstra + pincelada IA + destello)
+        self.path_glow_renderer = WatercolorRouteRenderer(self.world_w, self.world_h, brush_h=44)
+        self._poi_occluders_cache: Optional[List[Tuple[pygame.Surface, pygame.Rect]]] = None
+        self._unlocked_path_pairs: List[Tuple[str, str]] = []
+        self._pending_path_reveal: Optional[Tuple[str, str]] = None
+        self.active_path_reveal: Optional[Dict[str, Any]] = None
+        self._sync_unlocked_paths_from_progress()
 
         # 3. Chispitas doradas flotantes para cada locación
         self._sp_surf = pygame.Surface((16, 16), pygame.SRCALPHA)
@@ -933,15 +947,32 @@ class StoryMapScene(BaseState):
             for _ in range(18)
         ]
 
-        # Píldora discreta para consultar y cambiar clima (sin solapar SocialHUD ni menú)
-        self.weather_pill_rect = pygame.Rect(1608, 42, 184, 46)
+        # Píldora discreta acuarela para consultar y cambiar clima (sin solapar SocialHUD ni menú)
+        self.weather_pill_rect = pygame.Rect(1600, 40, 198, 50)
         self.weather_font = self.assets.cargarFuenteCuento(19)
         self.weather_meta = {
-            "day": ("SOL CARIBE", (252, 240, 198), (165, 110, 28), (245, 190, 60)),
-            "sunset": ("ATARDECER", (255, 224, 196), (175, 78, 36), (245, 130, 65)),
+            "day": ("SOL CARIBE", (252, 240, 198), (132, 82, 24), (245, 190, 60)),
+            "sunset": ("ATARDECER", (255, 224, 196), (146, 60, 28), (245, 130, 65)),
             "night": ("NOCHE", (215, 226, 255), (42, 58, 128), (110, 145, 235)),
-            "rain": ("LLUVIA", (216, 236, 252), (48, 92, 138), (95, 165, 220)),
+            "rain": ("LLUVIA", (216, 236, 252), (44, 82, 124), (95, 165, 220)),
         }
+        try:
+            raw_pill = self.assets.load_cropped_surface(os.path.join("Interfaz", "pildora_clima_acuarela.png"))
+            self.weather_pill_bg = pygame.transform.smoothscale(raw_pill, self.weather_pill_rect.size)
+        except Exception:
+            self.weather_pill_bg = None
+        self.weather_icons: Dict[str, Optional[pygame.Surface]] = {}
+        for w_mode in self.weather_modes:
+            try:
+                raw_ic = self.assets.load_cropped_surface(os.path.join("Interfaz", f"icono_clima_{w_mode}.png"))
+                ih = 28
+                iw = max(18, int(round(raw_ic.get_width() * (ih / float(max(1, raw_ic.get_height()))))))
+                if iw > 34:
+                    iw = 34
+                    ih = max(16, int(round(raw_ic.get_height() * (iw / float(max(1, raw_ic.get_width()))))))
+                self.weather_icons[w_mode] = pygame.transform.smoothscale(raw_ic, (iw, ih))
+            except Exception:
+                self.weather_icons[w_mode] = None
 
     def _init_rain_particles(self) -> None:
         """Inicializa partículas livianas de lluvia tropical caribeña en pantalla."""
@@ -1148,26 +1179,22 @@ class StoryMapScene(BaseState):
         self.font_paloma_body = self.assets.cargarFuenteCuento(29)
         self.font_paloma_hint = self.assets.cargarFuenteCuento(21)
 
-        # Botones de la pantalla de Victoria
-        def make_vic_btn(text: str, bg_col, b_col) -> pygame.Surface:
-            bw, bh = 290, 52
-            surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
-            pygame.draw.rect(surf, bg_col, (0, 0, bw, bh), border_radius=14)
-            pygame.draw.rect(surf, b_col, (0, 0, bw, bh), width=2, border_radius=14)
-            font_b = pygame.font.SysFont("Arial Black, Impact", 18)
-            txt = font_b.render(text, True, (255, 255, 255))
-            surf.blit(txt, txt.get_rect(center=(bw // 2, bh // 2)))
-            return surf
-
+        # Botones acuarela oficiales de la pantalla de Victoria
+        from scenes.load_game import make_watercolor_button_surface
+        vic_btn_size = (300, 68)
         self.btn_vic_explore = UIButton(
-            center_pos=(self.screen_w // 2 - 170, self.screen_h // 2 + 180),
-            normal_sprite=make_vic_btn("SEGUIR EXPLORANDO", (35, 120, 60), (100, 245, 140)),
-            on_click=self._close_victory_modal
+            center_pos=(self.screen_w // 2 - 175, self.screen_h // 2 + 195),
+            normal_sprite=make_watercolor_button_surface(
+                self.assets, "green", "Seguir explorando", vic_btn_size, font_size=26
+            ),
+            on_click=self._close_victory_modal,
         )
         self.btn_vic_menu = UIButton(
-            center_pos=(self.screen_w // 2 + 170, self.screen_h // 2 + 180),
-            normal_sprite=make_vic_btn("SALIR AL MENÚ", (160, 45, 45), (245, 110, 110)),
-            on_click=self.request_exit
+            center_pos=(self.screen_w // 2 + 175, self.screen_h // 2 + 195),
+            normal_sprite=make_watercolor_button_surface(
+                self.assets, "red", "Salir al menú", vic_btn_size, font_size=26
+            ),
+            on_click=self.request_exit,
         )
 
     def _load_paloma_dialog_assets(self) -> None:
@@ -1394,45 +1421,54 @@ class StoryMapScene(BaseState):
         self.tex_quest_card = self.assets.load_surface("recuadro_mision_nivel.png")
 
         # Tipografía manuscrita coherente con la UI de BarranquillaWare
-        self.font_quest_title = self.assets.cargarFuenteCuento(30)
-        self.font_quest_sub = self.assets.cargarFuenteCuento(17)
-        self.font_quest_body = self.assets.cargarFuenteCuento(20)
-        self.font_quest_btn = self.assets.cargarFuenteCuento(23)
+        self.font_quest_title = self.assets.cargarFuenteCuento(29)
+        self.font_quest_sub = self.assets.cargarFuenteCuento(self.QUEST_BODY_FONT_SIZE)
+        self.font_quest_body = self.assets.cargarFuenteCuento(self.QUEST_BODY_FONT_SIZE)
+        self.font_quest_btn = self.assets.cargarFuenteCuento(self.QUEST_PLAY_FONT_SIZE)
 
-        # Texturas ilustradas de apoyo (cartucho de pergamino, separador y sellos de cera)
-        self.tex_quest_cartridge = self.assets.load_surface("cinta_distrito_modal.png")
-        self.tex_quest_status_ribbon = self.assets.load_surface("cinta_estado_modal.png")
-        self.tex_quest_sep = self.assets.load_surface("separador_floral_modal.png")
+        # Texturas ilustradas de apoyo (sellos de estado)
         self.tex_sello_despejado = self.assets.load_surface("sello_estado_despejado.png")
         self.tex_sello_pendiente = self.assets.load_surface("sello_estado_pendiente.png")
 
-        # Botón '¡A JUGAR!' ilustrado en acuarela caribeña pura (cero florecitas en las esquinas)
-        raw_play_surf = self.assets.load_surface("boton_jugar_modal.png")
-        btn_play_w = 300
-        if raw_play_surf:
+        # Botón 'Jugar' ilustrado en acuarela dorada limpia con texto manuscrito por código
+        raw_play_surf = self.assets.load_cropped_surface("boton_jugar_modal.png", alpha_threshold=12)
+        btn_play_w = 268
+        if raw_play_surf and raw_play_surf.get_width() > 0:
             aspect = raw_play_surf.get_height() / max(1, raw_play_surf.get_width())
-            btn_play_h = int(btn_play_w * aspect)
+            btn_play_h = max(1, round(btn_play_w * aspect))
             play_surf = pygame.transform.smoothscale(raw_play_surf, (btn_play_w, btn_play_h))
         else:
-            play_surf = pygame.Surface((btn_play_w, 86), pygame.SRCALPHA)
+            play_surf = pygame.Surface((btn_play_w, 93), pygame.SRCALPHA)
 
-        play_cy = self.quest_card_center_y - self.quest_card_h // 2 + int(self.quest_card_h * 0.788)
+        self.quest_play_font_size = self.QUEST_PLAY_FONT_SIZE
+        f_play = self.assets.cargarFuenteCuento(self.quest_play_font_size)
+        play_label = f_play.render("Jugar", True, (74, 41, 109))
+        pill_bbox = play_surf.get_bounding_rect()
+        pill_center = pill_bbox.center if pill_bbox.width > 0 and pill_bbox.height > 0 else (play_surf.get_width() // 2, play_surf.get_height() // 2)
+        self.quest_play_text_local_rect = play_label.get_rect(center=(pill_center[0], pill_center[1] - 1))
+        play_surf.blit(play_label, self.quest_play_text_local_rect)
+
+        play_cy = self.quest_card_center_y - self.quest_card_h // 2 + int(self.quest_card_h * self.QUEST_PLAY_NORM_Y)
         self.btn_quest_play = UIButton(
             center_pos=(self.screen_w // 2, play_cy),
             normal_sprite=play_surf,
             on_click=self._launch_microgame
         )
 
-        # Botón de cierre 'X' ilustrado: <= resolución nativa (68x68) para máxima nitidez en el sello de cera
+        # Botón de cierre 'X' acuarela sin borde propio, centrado en el sello del marco
         raw_close_surf = self.assets.load_surface("boton_cerrar_modal.png")
         close_size = 64
         if raw_close_surf:
-            close_surf = pygame.transform.smoothscale(raw_close_surf, (close_size, close_size))
+            if raw_close_surf.get_size() == (close_size, close_size):
+                close_surf = raw_close_surf.copy()
+            else:
+                close_surf = pygame.transform.smoothscale(raw_close_surf, (close_size, close_size))
         else:
             close_surf = pygame.Surface((close_size, close_size), pygame.SRCALPHA)
+        self.quest_close_local_rect = close_surf.get_bounding_rect()
 
-        close_cx = self.screen_w // 2 - self.quest_card_w // 2 + int(self.quest_card_w * 0.893)
-        close_cy = self.quest_card_center_y - self.quest_card_h // 2 + int(self.quest_card_h * 0.112)
+        close_cx = self.screen_w // 2 - self.quest_card_w // 2 + int(self.quest_card_w * self.QUEST_CLOSE_NORM_X)
+        close_cy = self.quest_card_center_y - self.quest_card_h // 2 + int(self.quest_card_h * self.QUEST_CLOSE_NORM_Y)
 
         self.btn_quest_close = UIButton(
             center_pos=(close_cx, close_cy),
@@ -1742,6 +1778,11 @@ class StoryMapScene(BaseState):
 
             # Verificar si se completaron todos los niveles principales de la Historia
             all_campaign_cleared = self._count_completed_campaign_levels(completed) >= len(STORY_CAMPAIGN_ORDER)
+            completed_poi = self.active_poi
+            if completed_poi in STORY_CAMPAIGN_ORDER and not all_campaign_cleared:
+                next_poi = self.get_current_campaign_poi()
+                if next_poi and next_poi != completed_poi:
+                    self._pending_path_reveal = (completed_poi, next_poi)
 
             def _after_post_win_dialog() -> None:
                 if all_campaign_cleared and not self.victory_modal_shown:
@@ -2621,18 +2662,18 @@ class StoryMapScene(BaseState):
             # Click fuera de la tarjeta para cerrar, o clic en sello superior derecho como respaldo
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 card_center_y = getattr(self, "quest_card_center_y", self.screen_h // 2 + 48)
-                card_rect = pygame.Rect(
-                    self.screen_w // 2 - self.quest_card_w // 2,
-                    card_center_y - self.quest_card_h // 2,
-                    self.quest_card_w,
-                    self.quest_card_h
-                )
+                anim_t = max(0.0, min(1.0, float(getattr(self, "quest_card_anim_t", 1.0))))
+                scale_t = 0.85 + 0.15 * anim_t
+                cw = max(1, int(self.quest_card_w * scale_t))
+                ch = max(1, int(self.quest_card_h * scale_t))
+                card_rect = pygame.Rect(0, 0, cw, ch)
+                card_rect.center = (self.screen_w // 2, card_center_y)
                 if not card_rect.collidepoint(event.pos):
                     self._close_quest_card()
                 else:
-                    tr_x = card_rect.left + int(self.quest_card_w * 0.893)
-                    tr_y = card_rect.top + int(self.quest_card_h * 0.112)
-                    if (event.pos[0] - tr_x) ** 2 + (event.pos[1] - tr_y) ** 2 < 48 ** 2:
+                    tr_x = card_rect.left + int(cw * self.QUEST_CLOSE_NORM_X)
+                    tr_y = card_rect.top + int(ch * self.QUEST_CLOSE_NORM_Y)
+                    if (event.pos[0] - tr_x) ** 2 + (event.pos[1] - tr_y) ** 2 < (48 * scale_t) ** 2:
                         self._close_quest_card()
             return
 
@@ -3107,6 +3148,24 @@ class StoryMapScene(BaseState):
                 mote["x"] = (mote["x"] + mote["vx"] * dt) % self.screen_w
                 mote["y"] = (mote["y"] + (mote["vy"] + math.sin(self.timer * 1.4 + mote["phase"]) * 8.0) * dt) % self.screen_h
 
+        # Disparar revelación del camino iluminado apenas cierren trofeos, diálogo Paloma (incluso con ESC) y modal victoria
+        pending_reveal = getattr(self, "_pending_path_reveal", None)
+        if pending_reveal is not None:
+            blocked_by_ui = (
+                getattr(self, "paloma_dialog_open", False)
+                or getattr(self, "palomaPendiente", None) is not None
+                or (hasattr(self, "avisoTrofeo") and self.avisoTrofeo.estaOcupado())
+                or self.show_victory_modal
+                or self.quest_card_open
+                or self.show_intro_dialog
+            )
+            if not blocked_by_ui:
+                self._pending_path_reveal = None
+                self._start_path_reveal(pending_reveal[0], pending_reveal[1])
+
+        if getattr(self, "active_path_reveal", None) is not None:
+            self._update_path_reveal(dt)
+
         # Animación cinemática suave al ingresar
         if self.cinematic_timer < self.cinematic_duration:
             self.cinematic_timer += dt
@@ -3119,17 +3178,167 @@ class StoryMapScene(BaseState):
             self.camera.target_x = cur_x
             self.camera.target_y = cur_y
         else:
-            # Mantener la cámara siempre enfocada en el personaje (salvo cuando el usuario arrastra con el mouse)
-            if not self.camera.is_dragging:
+            # Ceder temporalmente el seguimiento automático de cámara durante el paneo del camino iluminado
+            reveal = getattr(self, "active_path_reveal", None)
+            if not self.camera.is_dragging and not (reveal is not None and reveal.get("controls_camera", False)):
                 self.camera.target_x = self.player_pos[0] - self.screen_w / 2.0
                 self.camera.target_y = self.player_pos[1] - self.screen_h / 2.0
             self.camera.update(dt)
+
+    def _get_poi_occluders(self) -> List[Tuple[pygame.Surface, pygame.Rect]]:
+        """Cachea superficies rotadas y rectángulos de POI_SPECS para recortar rutas bajo edificios."""
+        if getattr(self, "_poi_occluders_cache", None) is not None:
+            return self._poi_occluders_cache
+        occluders: List[Tuple[pygame.Surface, pygame.Rect]] = []
+        for key, asset, dx, dy, dw, _dh, _scol, _soff in self.POI_SPECS:
+            try:
+                rot_surf, final_rect = self._prepare_poi_transform(asset, key, dx, dy, dw)
+                occluders.append((rot_surf, final_rect))
+            except Exception:
+                continue
+        self._poi_occluders_cache = occluders
+        return occluders
+
+    def _build_campaign_route(self, from_poi: str, to_poi: str) -> Optional[Dict[str, Any]]:
+        """Calcula el camino Dijkstra real en píxeles (sin aristas ocultas) y lo pre-renderiza en acuarela."""
+        if not hasattr(self, "path_glow_renderer"):
+            return None
+        start_nid = self._get_poi_target_node(from_poi)
+        goal_nid = self._get_poi_target_node(to_poi)
+        if start_nid is None or goal_nid is None or start_nid == goal_nid:
+            return None
+        nodes, edges, node_map, _adj, edge_map = self._get_street_graph()
+        node_path = compute_campaign_dijkstra_path(nodes, edges, start_nid, goal_nid)
+        if not node_path or len(node_path) < 2:
+            return None
+        return self.path_glow_renderer.get_or_build_route(
+            from_poi=from_poi,
+            to_poi=to_poi,
+            node_path=node_path,
+            node_map=node_map,
+            edge_map=edge_map,
+            poi_occluders=self._get_poi_occluders(),
+        )
+
+    def _sync_unlocked_paths_from_progress(self) -> None:
+        """Restaura tramos ya desbloqueados de la campaña con brillo tenue persistente."""
+        progress = self.settings.get_story_progress()
+        completed = progress.get("completed_microgames", [])
+        pairs: List[Tuple[str, str]] = []
+        for idx in range(len(STORY_CAMPAIGN_ORDER) - 1):
+            src = STORY_CAMPAIGN_ORDER[idx]
+            dst = STORY_CAMPAIGN_ORDER[idx + 1]
+            if self._is_poi_cleared(src, completed):
+                pairs.append((src, dst))
+        self._unlocked_path_pairs = pairs
+
+    def _start_path_reveal(self, from_poi: str, to_poi: str) -> None:
+        """Inicia la animación progresiva (~2.2s) del camino iluminado y el paneo suave de cámara."""
+        route_data = self._build_campaign_route(from_poi, to_poi)
+        if route_data is None:
+            pair = (from_poi, to_poi)
+            if pair not in self._unlocked_path_pairs:
+                self._unlocked_path_pairs.append(pair)
+            return
+        route_data["last_progress"] = -1.0
+        self.active_path_reveal = {
+            "from_poi": from_poi,
+            "to_poi": to_poi,
+            "pair": (from_poi, to_poi),
+            "route": route_data,
+            "phase": "revealing",
+            "elapsed": 0.0,
+            "duration": 2.2,
+            "progress": 0.0,
+            "hold_timer": 0.0,
+            "hold_duration": 0.65,
+            "return_timer": 0.0,
+            "return_duration": 0.70,
+            "controls_camera": not self.camera.is_dragging and not self.player_is_moving,
+        }
+        if hasattr(self.audio, "play_hover"):
+            self.audio.play_hover()
+
+    def _update_path_reveal(self, dt: float) -> None:
+        """Actualiza la revelación del camino iluminado y el paneo de cámara hasta retornar al jugador."""
+        reveal = self.active_path_reveal
+        if not reveal:
+            return
+        if self.camera.is_dragging or self.player_is_moving:
+            reveal["controls_camera"] = False
+
+        phase = reveal["phase"]
+        route_data = reveal["route"]
+        if phase == "revealing":
+            reveal["elapsed"] += dt
+            raw_t = min(1.0, reveal["elapsed"] / max(0.1, reveal["duration"]))
+            eased_t = raw_t * raw_t * (3.0 - 2.0 * raw_t)
+            reveal["progress"] = eased_t
+            if reveal["controls_camera"]:
+                wx, wy = self.path_glow_renderer.sample_point_at_progress(route_data, eased_t)
+                self.camera.target_x = wx - self.screen_w / 2.0
+                self.camera.target_y = wy - self.screen_h / 2.0
+            if raw_t >= 1.0:
+                reveal["progress"] = 1.0
+                reveal["phase"] = "hold"
+                reveal["hold_timer"] = 0.0
+        elif phase == "hold":
+            reveal["hold_timer"] += dt
+            if reveal["controls_camera"]:
+                wx, wy = self.path_glow_renderer.sample_point_at_progress(route_data, 1.0)
+                self.camera.target_x = wx - self.screen_w / 2.0
+                self.camera.target_y = wy - self.screen_h / 2.0
+            if reveal["hold_timer"] >= reveal["hold_duration"] or not reveal["controls_camera"]:
+                reveal["phase"] = "returning"
+                reveal["return_timer"] = 0.0
+        elif phase == "returning":
+            reveal["return_timer"] += dt
+            if reveal["controls_camera"]:
+                self.camera.target_x = self.player_pos[0] - self.screen_w / 2.0
+                self.camera.target_y = self.player_pos[1] - self.screen_h / 2.0
+            tx = max(0.0, min(float(self.camera.max_x), self.player_pos[0] - self.screen_w / 2.0))
+            ty = max(0.0, min(float(self.camera.max_y), self.player_pos[1] - self.screen_h / 2.0))
+            cam_close = math.hypot(self.camera.x - tx, self.camera.y - ty) < 28.0
+            if (
+                reveal["return_timer"] >= reveal["return_duration"]
+                or cam_close
+                or not reveal["controls_camera"]
+            ):
+                pair = reveal["pair"]
+                if pair not in self._unlocked_path_pairs:
+                    self._unlocked_path_pairs.append(pair)
+                self.active_path_reveal = None
+
+    def _render_unlocked_paths(self, surface: pygame.Surface, cam_x: int, cam_y: int) -> None:
+        """Renderiza los caminos previos persistentes y la animación activa del camino iluminado."""
+        if not hasattr(self, "path_glow_renderer"):
+            return
+        reveal = getattr(self, "active_path_reveal", None)
+        active_pair = reveal["pair"] if reveal is not None else None
+        for src, dst in getattr(self, "_unlocked_path_pairs", []):
+            if (src, dst) == active_pair:
+                continue
+            route_data = self._build_campaign_route(src, dst)
+            if route_data is not None:
+                self.path_glow_renderer.render_persistent_route(surface, route_data, cam_x, cam_y, self.timer)
+        if reveal is not None:
+            self.path_glow_renderer.render_animated_route(
+                surface,
+                reveal["route"],
+                reveal["progress"],
+                cam_x,
+                cam_y,
+                self.timer,
+            )
 
     def render(self, surface: pygame.Surface) -> None:
         # 1. Renderizar el mapa mundial continuo con offset de cámara cinética
         cam_x = int(self.camera.x)
         cam_y = int(self.camera.y)
         surface.blit(self.world_map, (-cam_x, -cam_y))
+
+        # 1B. Caminos iluminados en acuarela (sobre calles, bajo POIs/nubes/avatares)
+        self._render_unlocked_paths(surface, cam_x, cam_y)
 
         # 2. Hitos de parada en las calles (is_stop)
         self._render_level_stops(surface, cam_x, cam_y)
@@ -3140,6 +3349,8 @@ class StoryMapScene(BaseState):
         # 4. Renderizar efectos dinámicos de niveles principales y secretos.
         raw_progress = self.settings.data.get("story_progress")
         completed_games = raw_progress.get("completed_microgames", []) if isinstance(raw_progress, dict) else []
+        all_campaign_cleared = self._count_completed_campaign_levels(completed_games) >= len(STORY_CAMPAIGN_ORDER)
+        next_target_poi = None if all_campaign_cleared else self.get_current_campaign_poi()
         if not hasattr(self, "_glow_alpha_cache"):
             self._glow_alpha_cache = {}
         if not hasattr(self, "_night_halo_cache"):
@@ -3155,14 +3366,22 @@ class StoryMapScene(BaseState):
 
             if -500 < p_screen_x < self.screen_w + 500 and -500 < p_screen_y < self.screen_h + 500:
                 is_hovered = getattr(self, f"{p_key}_hover", False)
-                pulse = math.sin(self.timer * 2.5 + (0.8 if p_key == 'metropolitano' else 0.0)) * 0.5 + 0.5
-                glow_alpha = int(140 + 75 * pulse) if not is_hovered else 240
+                is_cleared = self._is_poi_cleared(p_key, completed_games)
+                is_next_target = (p_key == next_target_poi) and not is_cleared
+                pulse = math.sin(self.timer * (3.4 if is_next_target else 2.5) + (0.8 if p_key == 'metropolitano' else 0.0)) * 0.5 + 0.5
+                if is_next_target:
+                    glow_alpha = int(185 + 65 * pulse) if not is_hovered else 252
+                    base_glow = getattr(self, "poi_target_beacon", self.poi_ground_glow)
+                else:
+                    glow_alpha = int(95 + 45 * pulse) if not is_hovered else 200
+                    base_glow = self.poi_ground_glow
                 alpha_bucket = (glow_alpha // 12) * 12
-                glow_copy = self._glow_alpha_cache.get(alpha_bucket)
+                cache_key = (is_next_target, alpha_bucket)
+                glow_copy = self._glow_alpha_cache.get(cache_key)
                 if glow_copy is None:
-                    glow_copy = self.poi_ground_glow.copy()
+                    glow_copy = base_glow.copy()
                     glow_copy.set_alpha(alpha_bucket)
-                    self._glow_alpha_cache[alpha_bucket] = glow_copy
+                    self._glow_alpha_cache[cache_key] = glow_copy
                 surface.blit(glow_copy, glow_copy.get_rect(center=(p_screen_x + p_rect.width // 2, p_screen_y + p_rect.height - 10)))
 
                 sparkle_list = self.poi_sparkles.get(p_key, [])
@@ -3176,12 +3395,12 @@ class StoryMapScene(BaseState):
                     chispa.set_alpha(sp_alpha)
                     surface.blit(chispa, chispa.get_rect(center=(int(sp_x), int(sp_y))))
 
-                bob_y = math.sin(self.timer * 2.8) * 5.0 - (6.0 if is_hovered else 0.0)
+                bob_amp = 7.0 if is_next_target else 5.0
+                bob_y = math.sin(self.timer * (3.6 if is_next_target else 2.8)) * bob_amp - (6.0 if is_hovered else 0.0)
                 pin_center_x = p_screen_x + p_rect.width // 2
                 pin_center_y = p_screen_y - 18 + int(bob_y)
 
                 # Si el microjuego de la locación fue completado, mostrar Estrella Dorada
-                is_cleared = self._is_poi_cleared(p_key, completed_games)
                 pin_to_draw = self.poi_star_surf if is_cleared else self.poi_pin_surf
                 if is_cleared and getattr(self, "estrellaPintada", None) is not None:
                     vuelta = (self.timer * 0.45 + (sum(map(ord, p_key)) % 100) / 100.0) % 1.0
@@ -3463,25 +3682,25 @@ class StoryMapScene(BaseState):
             self.centroPapelMenu = int(self.drawer_w * 0.508)
             ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), self.drawer_w)
             self.ventanaMenuMapa = pygame.transform.smoothscale(ventana, (self.drawer_w, alto))
-            morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 250)
+            morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 268)
             rojo = pygame.transform.smoothscale(
-                self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 250), morado.get_size())
-            self.fuenteTituloMenu = self.assets.cargarFuenteCuento(50)
+                self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 268), morado.get_size())
+            self.fuenteTituloMenu = self.assets.cargarFuenteCuento(44)
             self.fuenteTextoMenu = self.assets.cargarFuenteCuento(22)
             self.fuenteEstadoMenu = self.assets.cargarFuenteCuento(17)
             self.fuenteSubEstadoMenu = self.assets.cargarFuenteCuento(15)
-            fuenteBoton = self.assets.cargarFuenteCuento(36)
+            fuenteBoton = self.assets.cargarFuenteCuento(31)
 
             cinta_raw = self.assets.load_surface("cinta_estado_modal.png", has_alpha=True)
             self.cintaEstadoMenu = pygame.transform.smoothscale(cinta_raw, (330, 56))
 
-            # Cada botón guarda su versión morada y la roja que se ve al pasar el mouse
+            # Cada botón guarda su versión morada y la roja que se ve al pasar el mouse (despejados de flores)
             botones = [
-                (self.btn_resume, "Reanudar", 392),
-                (self.btn_save_game, "Guardar partida", 476),
-                (self.btn_calibrate_pointer, "Calibrar lápiz", 648),
-                (self.btn_settings, "Ajustes", 732),
-                (self.btn_exit_map, "Salir al menú", 816),
+                (self.btn_resume, "Reanudar", 374),
+                (self.btn_save_game, "Guardar partida", 454),
+                (self.btn_calibrate_pointer, "Calibrar lápiz", 614),
+                (self.btn_settings, "Ajustes", 694),
+                (self.btn_exit_map, "Salir al menú", 774),
             ]
             self.botonesMenuMapa = []
             for boton, texto, y in botones:
@@ -3495,13 +3714,13 @@ class StoryMapScene(BaseState):
                 self.botonesMenuMapa.append((boton, versiones[0], versiones[1]))
 
             # Los botones de música, sonido y voces quedan entre guardar y calibrar
-            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 96, 562)
-            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 96, 562)
-            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu, 562)
-            self.btn_drawer_sound.rect.center = (self.centroPapelMenu, 562)
+            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 96, 534)
+            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 96, 534)
+            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu, 534)
+            self.btn_drawer_sound.rect.center = (self.centroPapelMenu, 534)
             if hasattr(self, "btn_drawer_voice"):
-                self.btn_drawer_voice.center_x, self.btn_drawer_voice.center_y = (self.centroPapelMenu + 96, 562)
-                self.btn_drawer_voice.rect.center = (self.centroPapelMenu + 96, 562)
+                self.btn_drawer_voice.center_x, self.btn_drawer_voice.center_y = (self.centroPapelMenu + 96, 534)
+                self.btn_drawer_voice.rect.center = (self.centroPapelMenu + 96, 534)
 
             # Botón nuevo para abrir el menú
             botonMenu = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMenu.jpg"), 76)
@@ -3526,22 +3745,15 @@ class StoryMapScene(BaseState):
         cafe = (110, 68, 38)
         summary = self.settings.get_story_save_summary()
         titulo = self.textoConContorno(self.fuenteTituloMenu, "Modo historia", (110, 62, 150), (255, 250, 238))
-        panel.blit(titulo, titulo.get_rect(center=(int(self.drawer_w * 0.56), 192)))
-        explorando = self.fuenteTextoMenu.render(f"Explorando con {summary['character_name']}", True, cafe)
-        panel.blit(explorando, explorando.get_rect(center=(int(self.drawer_w * 0.56), 240)))
+        panel.blit(titulo, titulo.get_rect(center=(int(self.drawer_w * 0.56), 248)))
+        explorando = self.fuenteTextoMenu.render(f"Con {summary['character_name']}", True, cafe)
+        panel.blit(explorando, explorando.get_rect(center=(int(self.drawer_w * 0.56), 290)))
 
-        # Cinta acuarela explicando auto-guardado, guardado manual y última marca horaria
-        cinta_rect = self.cintaEstadoMenu.get_rect(center=(self.centroPapelMenu + 14, 306))
-        panel.blit(self.cintaEstadoMenu, cinta_rect.topleft)
         if self.save_feedback_timer > 0.0:
+            cinta_rect = self.cintaEstadoMenu.get_rect(center=(self.centroPapelMenu + 14, 322))
+            panel.blit(self.cintaEstadoMenu, cinta_rect.topleft)
             linea1 = self.fuenteEstadoMenu.render("¡Partida guardada!", True, (42, 134, 68))
-            linea2 = self.fuenteSubEstadoMenu.render("Retoma luego en Cargar Partida", True, (62, 108, 72))
-        else:
-            saved_at = summary["saved_at"] or "Sin guardar aún"
-            linea1 = self.fuenteEstadoMenu.render("Auto-guardado tras cada reto", True, (108, 66, 40))
-            linea2 = self.fuenteSubEstadoMenu.render(f"Último: {saved_at}", True, (132, 92, 64))
-        panel.blit(linea1, linea1.get_rect(center=(cinta_rect.centerx, cinta_rect.centery - 11)))
-        panel.blit(linea2, linea2.get_rect(center=(cinta_rect.centerx, cinta_rect.centery + 11)))
+            panel.blit(linea1, linea1.get_rect(center=cinta_rect.center))
 
         self.btn_drawer_music.toggle_state = self.audio.music_enabled
         self.btn_drawer_sound.toggle_state = self.audio.sound_enabled
@@ -3680,25 +3892,29 @@ class StoryMapScene(BaseState):
         dim_surf.fill((10, 16, 28, int(160 * self.quest_card_anim_t)))
         surface.blit(dim_surf, (0, 0))
 
-        # B) Tarjeta emergente
-        cw = int(self.quest_card_w * (0.85 + 0.15 * self.quest_card_anim_t))
-        ch = int(self.quest_card_h * (0.85 + 0.15 * self.quest_card_anim_t))
-        card_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
+        # B) Tarjeta emergente compuesta a resolución base (660x878) y escalada suavemente
+        base_w = self.quest_card_w
+        base_h = self.quest_card_h
+        anim_t = max(0.0, min(1.0, float(self.quest_card_anim_t)))
+        scale_t = 0.85 + 0.15 * anim_t
+        cw = max(1, int(base_w * scale_t))
+        ch = max(1, int(base_h * scale_t))
+        base_card_surf = pygame.Surface((base_w, base_h), pygame.SRCALPHA)
 
         # Fondo ilustrado de acuarela caribeña con flores y textura pergamino (sin halo blanco)
         if hasattr(self, "tex_quest_card") and self.tex_quest_card:
-            card_scaled = pygame.transform.smoothscale(self.tex_quest_card, (cw, ch))
-            card_surf.blit(card_scaled, (0, 0))
+            card_scaled = pygame.transform.smoothscale(self.tex_quest_card, (base_w, base_h))
+            base_card_surf.blit(card_scaled, (0, 0))
         else:
-            pygame.draw.rect(card_surf, (255, 252, 244, 250), (0, 0, cw, ch), border_radius=28)
-            pygame.draw.rect(card_surf, (245, 195, 80), (0, 0, cw, ch), width=4, border_radius=28)
-            pygame.draw.rect(card_surf, (45, 30, 20), (0, 0, cw, ch), width=1, border_radius=28)
+            pygame.draw.rect(base_card_surf, (255, 252, 244, 250), (0, 0, base_w, base_h), border_radius=28)
+            pygame.draw.rect(base_card_surf, (245, 195, 80), (0, 0, base_w, base_h), width=4, border_radius=28)
+            pygame.draw.rect(base_card_surf, (45, 30, 20), (0, 0, base_w, base_h), width=1, border_radius=28)
 
-        # Encabezado: Título con envoltura limpia de hasta 2 líneas evitando flores izquierda y sello derecho
+        # Encabezado: Título centrado despejado de flores izquierdas y sello derecho
         title_text = poi_info["title"]
-        title_cx = int(cw * 0.580)
-        max_title_w = int(cw * 0.40)
-        title_size = 28
+        title_cx = int(base_w * 0.520)
+        max_title_w = int(base_w * 0.48)
+        title_size = 29
         title_lines: List[str] = [title_text]
         f_title = self.assets.cargarFuenteCuento(title_size)
         while title_size >= 25:
@@ -3726,140 +3942,153 @@ class StoryMapScene(BaseState):
 
         if len(title_lines) == 1:
             txt_title = f_title.render(title_lines[0], True, (42, 26, 16))
-            title_rect_local = txt_title.get_rect(center=(title_cx, int(ch * 0.172) - 1))
-            card_surf.blit(txt_title, title_rect_local)
+            title_rect_local = txt_title.get_rect(center=(title_cx, int(base_h * 0.195)))
+            base_card_surf.blit(txt_title, title_rect_local)
         else:
-            line_gap = title_size + 1
-            top_ty = int(ch * 0.172) - line_gap // 2 - 1
+            line_gap = title_size + 2
+            top_ty = int(base_h * 0.195) - line_gap // 2
             title_rect_local = pygame.Rect(title_cx, top_ty, 0, 0)
             for idx_t, ln in enumerate(title_lines[:2]):
                 t_surf = f_title.render(ln, True, (42, 26, 16))
                 t_r = t_surf.get_rect(center=(title_cx, top_ty + idx_t * line_gap))
-                card_surf.blit(t_surf, t_r)
+                base_card_surf.blit(t_surf, t_r)
                 title_rect_local = t_r if idx_t == 0 else title_rect_local.union(t_r)
 
-        # Subtítulo de Distrito sobre cinta de pergamino limpia
-        cart_w = int(cw * 0.58)
-        dist_size = 16
-        if hasattr(self, "tex_quest_cartridge") and self.tex_quest_cartridge:
-            cart_h = int(cart_w * (self.tex_quest_cartridge.get_height() / max(1, self.tex_quest_cartridge.get_width())))
-            cart_scaled = pygame.transform.smoothscale(self.tex_quest_cartridge, (cart_w, cart_h))
-            cart_rect = cart_scaled.get_rect(center=(cw // 2, int(ch * 0.242)))
-            card_surf.blit(cart_scaled, cart_rect)
-            f_dist = self.assets.cargarFuenteCuento(dist_size)
-            txt_dist = f_dist.render(poi_info["district"], True, (135, 80, 25))
-            while txt_dist.get_width() > int(cart_w * 0.78) and dist_size > 13:
-                dist_size -= 1
-                f_dist = self.assets.cargarFuenteCuento(dist_size)
-                txt_dist = f_dist.render(poi_info["district"], True, (135, 80, 25))
-            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cart_rect.centerx, cart_rect.centery - 1)))
-        else:
-            f_dist = self.assets.cargarFuenteCuento(dist_size)
-            txt_dist = f_dist.render(poi_info["district"], True, (80, 55, 35))
-            card_surf.blit(txt_dist, txt_dist.get_rect(center=(cw // 2, int(ch * 0.242) - 1)))
+        # Toda la tipografía de cuerpo de la tarjeta comparte exactamente el mismo tamaño uniforme
+        body_size = self.QUEST_BODY_FONT_SIZE
+        f_body = self.assets.cargarFuenteCuento(body_size)
+        max_body_w = int(base_w * 0.68)
 
-        # Separador decorativo ilustrado de pincelada floral
-        if hasattr(self, "tex_quest_sep") and self.tex_quest_sep:
-            sep_w = int(cw * 0.56)
-            sep_h = int(sep_w * (self.tex_quest_sep.get_height() / max(1, self.tex_quest_sep.get_width())))
-            sep_scaled = pygame.transform.smoothscale(self.tex_quest_sep, (sep_w, max(12, sep_h)))
-            card_surf.blit(sep_scaled, sep_scaled.get_rect(center=(cw // 2, int(ch * 0.290))))
+        # Subtítulo conciso de distrito (sin doble cinta ni separador redundante)
+        dist_size = body_size
+        txt_dist = f_body.render(poi_info["district"], True, (135, 80, 25))
+        dist_rect_local = txt_dist.get_rect(center=(base_w // 2, int(base_h * 0.258)))
+        base_card_surf.blit(txt_dist, dist_rect_local)
 
-        # Miniatura compacta enmarcada en acuarela con captura real del nivel
-        thumb_w = max(120, int(cw * 0.44))
-        thumb_h = max(68, int(ch * 0.162))
+        # Miniatura enmarcada en acuarela con sello de esquina (sin doble cinta inferior)
+        thumb_w = max(160, int(base_w * 0.54))
+        thumb_h = max(90, int(base_h * 0.20))
         thumb_rect_local = pygame.Rect(0, 0, thumb_w, thumb_h)
-        thumb_rect_local.center = (cw // 2, int(ch * 0.398))
+        thumb_rect_local.center = (base_w // 2, int(base_h * 0.402))
         if hasattr(self, "level_preview") and self.active_poi in STORY_PLAYABLE_POIS:
             framed_thumb = self.level_preview.get_framed_thumbnail(self.active_poi, thumb_w, thumb_h, inset=6)
-            card_surf.blit(framed_thumb, thumb_rect_local.topleft)
+            base_card_surf.blit(framed_thumb, thumb_rect_local.topleft)
 
-        # Título del Microjuego / Rondas en terracota caribeño cálido
-        m_size = 24
-        f_m = self.assets.cargarFuenteCuento(m_size)
-        txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
-        while txt_m_title.get_width() > int(cw * 0.68) and m_size > 21:
-            m_size -= 1
-            f_m = self.assets.cargarFuenteCuento(m_size)
-            txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
-        card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.506) - 1)))
-
-        # Descripción de la misión con word-wrap y jerarquía tipográfica clara (20px < 21-24px micro < 26-29px title)
-        desc_size = 20
-        f_desc = self.assets.cargarFuenteCuento(desc_size)
-        max_desc_w = int(cw * 0.68)
-        wrapped_lines: List[str] = []
-        for paragraph in poi_info["desc"]:
-            words = paragraph.split()
-            current_line = ""
-            for word in words:
-                candidate = f"{current_line} {word}".strip()
-                if f_desc.size(candidate)[0] <= max_desc_w:
-                    current_line = candidate
-                else:
-                    if current_line:
-                        wrapped_lines.append(current_line)
-                    current_line = word
-            if current_line:
-                wrapped_lines.append(current_line)
-
-        curr_y = int(ch * (0.556 if len(wrapped_lines) <= 2 else 0.542))
-        line_step = 24
-        for line in wrapped_lines:
-            txt_line = f_desc.render(line, True, (55, 38, 26))
-            card_surf.blit(txt_line, txt_line.get_rect(center=(cw // 2, curr_y)))
-            curr_y += line_step
-
-        # Tarjeta de estado con sello de cera ilustrado sin colisión ni huecos vacíos
         progress = self.settings.get_story_progress()
         active_key = self.active_poi if self.active_poi in self.poi_registry else "uninorte"
         is_done = self._is_poi_cleared(active_key, progress.get("completed_microgames", []))
-        status_text = "ESTADO: DESPEJADO (+100 PTS)" if is_done else "ESTADO: PENDIENTE POR DESPEJAR"
-        status_col = (30, 125, 55) if is_done else (190, 95, 25)
         sello_tex = self.tex_sello_despejado if is_done else self.tex_sello_pendiente
+        if sello_tex:
+            sello_sz = 58
+            sello_scaled = pygame.transform.smoothscale(sello_tex, (sello_sz, sello_sz))
+            base_card_surf.blit(
+                sello_scaled,
+                sello_scaled.get_rect(center=(thumb_rect_local.right - 14, thumb_rect_local.top + 14)),
+            )
 
-        stat_cy = max(int(ch * 0.676), curr_y + 28)
-        stat_w = int(cw * 0.68)
-        st_size = 16
-        ribbon_tex = getattr(self, "tex_quest_status_ribbon", None) or getattr(self, "tex_quest_cartridge", None)
-        if ribbon_tex:
-            stat_h = int(stat_w * (ribbon_tex.get_height() / max(1, ribbon_tex.get_width())))
-            stat_scaled = pygame.transform.smoothscale(ribbon_tex, (stat_w, max(42, stat_h)))
-            stat_rect = stat_scaled.get_rect(center=(cw // 2, stat_cy))
-            card_surf.blit(stat_scaled, stat_rect)
+        # Título del Microjuego / Rondas en terracota caribeño cálido (mismo tamaño uniforme de cuerpo)
+        m_size = body_size
+        txt_m_title = f_body.render(poi_info["microgame_title"], True, (215, 75, 35))
+        micro_rect_local = txt_m_title.get_rect(center=(base_w // 2, int(base_h * 0.556)))
+        base_card_surf.blit(txt_m_title, micro_rect_local)
 
-            # Sello de cera en el lado izquierdo del cartucho
-            sello_size = int(stat_h * 0.80)
-            if sello_tex:
-                sello_scaled = pygame.transform.smoothscale(sello_tex, (sello_size, sello_size))
-                sello_x = stat_rect.left + 14
-                card_surf.blit(sello_scaled, (sello_x, stat_rect.centery - sello_size // 2))
-
-            text_area_left = stat_rect.left + 14 + sello_size + 8
-            text_area_right = stat_rect.right - 16
-            avail_st_w = max(80, text_area_right - text_area_left)
-            f_st = self.assets.cargarFuenteCuento(st_size)
-            txt_st = f_st.render(status_text, True, status_col)
-            while txt_st.get_width() > avail_st_w and st_size > 12:
-                st_size -= 1
-                f_st = self.assets.cargarFuenteCuento(st_size)
-                txt_st = f_st.render(status_text, True, status_col)
-            card_surf.blit(txt_st, txt_st.get_rect(center=((text_area_left + text_area_right) // 2, stat_rect.centery - 1)))
+        # Objetivo esencial con ajuste de línea limpio sin alterar el tamaño uniforme
+        concise_goals = {
+            "uninorte": "Cruza el pasillo sin celular y estudia en calma.",
+            "buenavista": "Sigue el ritmo del trend sin buscar likes.",
+            "metropolitano": "Modera el chat en vivo con respeto y empatía.",
+            "aeropuerto": "Limpia el spam y las fake news antes de despegar.",
+            "aleta": "Sirve los fritos en calma sin responder al trol.",
+            "malecon": "Traza la vía a mano y disfruta la brisa del río.",
+        }
+        goal_text = concise_goals.get(active_key, poi_info["desc"][0] if poi_info.get("desc") else "")
+        desc_size = body_size
+        if f_body.size(goal_text)[0] <= max_body_w:
+            desc_lines = [goal_text]
         else:
-            f_st = self.assets.cargarFuenteCuento(st_size)
-            txt_st = f_st.render(status_text, True, status_col)
-            card_surf.blit(txt_st, txt_st.get_rect(center=(cw // 2, stat_cy - 1)))
+            desc_lines = []
+            cur_d = ""
+            for word in goal_text.split():
+                cand = f"{cur_d} {word}".strip()
+                if f_body.size(cand)[0] <= max_body_w:
+                    cur_d = cand
+                else:
+                    if cur_d:
+                        desc_lines.append(cur_d)
+                    cur_d = word
+            if cur_d:
+                desc_lines.append(cur_d)
+            if len(desc_lines) > 2:
+                desc_lines = [desc_lines[0], " ".join(desc_lines[1:])]
+
+        if len(desc_lines) == 1:
+            txt_goal = f_body.render(desc_lines[0], True, (55, 38, 26))
+            desc_rect_local = txt_goal.get_rect(center=(base_w // 2, int(base_h * 0.614)))
+            base_card_surf.blit(txt_goal, desc_rect_local)
+        else:
+            desc_gap = body_size + 4
+            top_dy = int(base_h * 0.614) - desc_gap // 2
+            desc_rect_local = pygame.Rect(base_w // 2, top_dy, 0, 0)
+            for idx_d, d_ln in enumerate(desc_lines[:2]):
+                d_surf = f_body.render(d_ln, True, (55, 38, 26))
+                d_r = d_surf.get_rect(center=(base_w // 2, top_dy + idx_d * desc_gap))
+                base_card_surf.blit(d_surf, d_r)
+                desc_rect_local = d_r if idx_d == 0 else desc_rect_local.union(d_r)
+        st_size = body_size
+
+        if (cw, ch) != (base_w, base_h):
+            card_surf = pygame.transform.smoothscale(base_card_surf, (cw, ch))
+        else:
+            card_surf = base_card_surf
 
         # Renderizar en la pantalla bajo el SocialHUD superior (sin cubrir Seguidores)
         card_center_y = getattr(self, "quest_card_center_y", self.screen_h // 2 + 48)
         card_rect = card_surf.get_rect(center=(self.screen_w // 2, card_center_y))
         surface.blit(card_surf, card_rect)
 
+        sx = cw / float(base_w)
+        sy = ch / float(base_h)
+
+        def _to_screen_rect(local_r: pygame.Rect) -> pygame.Rect:
+            if cw == base_w and ch == base_h:
+                return local_r.move(card_rect.left, card_rect.top)
+            left = card_rect.left + int(round(local_r.left * sx))
+            top = card_rect.top + int(round(local_r.top * sy))
+            right = card_rect.left + int(round(local_r.right * sx))
+            bottom = card_rect.top + int(round(local_r.bottom * sy))
+            return pygame.Rect(left, top, max(1, right - left), max(1, bottom - top))
+
         # Sincronizar posición de botones con la tarjeta animada
-        play_center = (self.screen_w // 2, card_rect.top + int(ch * 0.788))
-        close_center = (card_rect.left + int(cw * 0.893), card_rect.top + int(ch * 0.112))
+        play_center = (self.screen_w // 2, card_rect.top + int(ch * self.QUEST_PLAY_NORM_Y))
+        close_center = (
+            card_rect.left + int(cw * self.QUEST_CLOSE_NORM_X),
+            card_rect.top + int(ch * self.QUEST_CLOSE_NORM_Y),
+        )
         self.btn_quest_play.set_center(play_center)
         self.btn_quest_close.set_center(close_center)
+
+        text_local = getattr(self, "quest_play_text_local_rect", pygame.Rect(0, 0, 0, 0))
+        if (cw, ch) == (base_w, base_h):
+            play_rect_screen = pygame.Rect(self.btn_quest_play.rect)
+            play_text_rect_screen = text_local.move(play_rect_screen.left, play_rect_screen.top)
+            close_rect_screen = pygame.Rect(self.btn_quest_close.rect)
+        else:
+            play_w = max(1, int(self.btn_quest_play.width * scale_t))
+            play_h = max(1, int(self.btn_quest_play.height * scale_t))
+            play_rect_screen = pygame.Rect(0, 0, play_w, play_h)
+            play_rect_screen.center = play_center
+            psx = play_w / float(max(1, self.btn_quest_play.width))
+            psy = play_h / float(max(1, self.btn_quest_play.height))
+            play_text_rect_screen = pygame.Rect(
+                play_rect_screen.left + int(round(text_local.left * psx)),
+                play_rect_screen.top + int(round(text_local.top * psy)),
+                max(1, int(round(text_local.width * psx))),
+                max(1, int(round(text_local.height * psy))),
+            )
+            close_w = max(1, int(self.btn_quest_close.width * scale_t))
+            close_h = max(1, int(self.btn_quest_close.height * scale_t))
+            close_rect_screen = pygame.Rect(0, 0, close_w, close_h)
+            close_rect_screen.center = close_center
 
         self.last_quest_layout_metrics = {
             "poi": self.active_poi,
@@ -3869,49 +4098,58 @@ class StoryMapScene(BaseState):
             "desc_size": desc_size,
             "status_size": st_size,
             "title_lines": list(title_lines),
-            "title_rect_screen": title_rect_local.move(card_rect.left, card_rect.top),
-            "thumb_rect_screen": thumb_rect_local.move(card_rect.left, card_rect.top),
+            "title_rect_screen": _to_screen_rect(title_rect_local),
+            "district_rect_screen": _to_screen_rect(dist_rect_local),
+            "thumb_rect_screen": _to_screen_rect(thumb_rect_local),
+            "micro_rect_screen": _to_screen_rect(micro_rect_local),
+            "desc_rect_screen": _to_screen_rect(desc_rect_local),
+            "play_rect_screen": play_rect_screen,
+            "play_text_rect_screen": play_text_rect_screen,
+            "play_font_size": getattr(self, "quest_play_font_size", self.QUEST_PLAY_FONT_SIZE),
+            "close_rect_screen": close_rect_screen,
             "card_rect": card_rect,
             "play_center": play_center,
             "close_center": close_center,
         }
 
-        # Botones de la tarjeta
-        self.btn_quest_play.render(surface)
-        self.btn_quest_close.render(surface)
+        # Botones de la tarjeta (escalados con la tarjeta durante la animación sin mutar normal_sprite)
+        if (cw, ch) == (base_w, base_h):
+            self.btn_quest_play.render(surface)
+            self.btn_quest_close.render(surface)
+        else:
+            for btn in (self.btn_quest_play, self.btn_quest_close):
+                orig_scale = btn.current_scale
+                btn.current_scale = orig_scale * scale_t
+                try:
+                    btn.render(surface)
+                finally:
+                    btn.current_scale = orig_scale
 
     def _render_weather_pill(self, surface: pygame.Surface) -> None:
-        """Dibuja la píldora discreta e interactiva de clima entre Logros y el menú."""
+        """Dibuja la píldora acuarela interactiva de clima con íconos IA entre Logros y el menú."""
         rect = self.weather_pill_rect
         hover_t = getattr(self, "_weather_pill_hover_t", 0.0)
-        label, bg_col, txt_col, accent_col = self.weather_meta.get(
+        label, _bg_col, txt_col, _accent_col = self.weather_meta.get(
             self.current_weather,
-            ("SOL CARIBE", (252, 240, 198), (165, 110, 28), (245, 190, 60)),
+            ("SOL CARIBE", (252, 240, 198), (132, 82, 24), (245, 190, 60)),
         )
         pill = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-        bg_alpha = 250 if hover_t > 0.2 else 235
-        pygame.draw.rect(pill, (*bg_col, bg_alpha), (0, 0, rect.width, rect.height), border_radius=23)
-        pygame.draw.rect(pill, (*accent_col, 250 if hover_t > 0.2 else 235), (0, 0, rect.width, rect.height), width=3, border_radius=23)
-        if hover_t > 0.05:
-            glow_a = int(55 * hover_t)
-            pygame.draw.rect(pill, (255, 255, 240, glow_a), (3, 3, rect.width - 6, rect.height - 6), width=2, border_radius=20)
-
-        # Icono minimalista acorde al clima
-        ix, iy = 24, rect.height // 2
-        if self.current_weather == "day":
-            pygame.draw.circle(pill, accent_col, (ix, iy), 8)
-        elif self.current_weather == "sunset":
-            pygame.draw.circle(pill, accent_col, (ix, iy + 2), 8)
-            pygame.draw.line(pill, txt_col, (ix - 10, iy + 5), (ix + 10, iy + 5), 2)
-        elif self.current_weather == "night":
-            pygame.draw.circle(pill, accent_col, (ix, iy), 8)
-            pygame.draw.circle(pill, bg_col, (ix + 4, iy - 2), 6)
-        else:
-            pygame.draw.circle(pill, accent_col, (ix, iy + 2), 6)
-            pygame.draw.polygon(pill, accent_col, [(ix - 6, iy + 1), (ix, iy - 9), (ix + 6, iy + 1)])
+        bg = getattr(self, "weather_pill_bg", None)
+        if bg is not None:
+            pill.blit(bg, (0, 0))
+        icon = getattr(self, "weather_icons", {}).get(self.current_weather)
+        text_left = 48 if icon is not None else 22
+        if icon is not None:
+            pill.blit(icon, icon.get_rect(center=(28, rect.height // 2)))
 
         txt_surf = self.weather_font.render(label, True, txt_col)
-        pill.blit(txt_surf, txt_surf.get_rect(midleft=(40, rect.height // 2 + 1)))
+        avail_w = rect.width - text_left - 14
+        if txt_surf.get_width() > avail_w:
+            sc = avail_w / float(max(1, txt_surf.get_width()))
+            txt_surf = pygame.transform.smoothscale(
+                txt_surf, (avail_w, max(12, int(round(txt_surf.get_height() * sc))))
+            )
+        pill.blit(txt_surf, txt_surf.get_rect(center=(text_left + avail_w // 2, rect.height // 2 + 1)))
         if hover_t > 0.01:
             scale = 1.0 + 0.045 * hover_t
             sw = int(round(rect.width * scale))

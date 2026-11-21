@@ -1,4 +1,5 @@
 import math
+import os
 import random
 from typing import Optional, Callable, List, Type, Tuple
 import pygame
@@ -165,30 +166,44 @@ class ArcadeModeScene(BaseState):
         sep_h = max(18, int(sep_w * raw_sep.get_height() / max(1, raw_sep.get_width())))
         self.sep_surf = pygame.transform.smoothscale(raw_sep, (sep_w, sep_h))
 
+        # Barra de tiempo acuarela y faro/destello para el intersticio
+        try:
+            self.fuse_rail_surf = self.assets.cargarSinFondo(
+                os.path.join("Interfaz", "barraTiempoRiel.jpg"), 480
+            )
+            rw, rh = self.fuse_rail_surf.get_size()
+            raw_fill = self.assets.cargarSinFondo(
+                os.path.join("Interfaz", "barraTiempoRelleno.jpg"), max(120, rw - 22)
+            )
+            self.fuse_fill_surf = pygame.transform.smoothscale(
+                raw_fill, (max(120, rw - 22), max(14, rh - 18))
+            )
+        except Exception:
+            self.fuse_rail_surf = None
+            self.fuse_fill_surf = None
+
+        try:
+            raw_halo = self.assets.load_cropped_surface("mapa_faro_destino.png", alpha_threshold=6)
+            self.interstitial_halo_surf = pygame.transform.smoothscale(raw_halo, (420, 420))
+            self.interstitial_halo_surf.set_alpha(185)
+        except Exception:
+            self.interstitial_halo_surf = None
+
+        try:
+            raw_spark = self.assets.load_cropped_surface("mapa_destello_ruta.png", alpha_threshold=6)
+            self.fuse_spark_surf = pygame.transform.smoothscale(raw_spark, (44, 44))
+        except Exception:
+            self.fuse_spark_surf = None
+
     def _create_marimonda_mask_surf(self, is_broken: bool = False) -> pygame.Surface:
-        mw, mh = 64, 76
-        surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
-        col_face = (242, 146, 58) if not is_broken else (164, 152, 144)
-        col_nose = (232, 72, 86) if not is_broken else (130, 120, 116)
-        col_ear = (66, 178, 218) if not is_broken else (142, 140, 138)
-
-        pygame.draw.circle(surf, col_ear, (12, 30), 12)
-        pygame.draw.circle(surf, col_ear, (mw - 12, 30), 12)
-        pygame.draw.ellipse(surf, col_face, (10, 12, mw - 20, mh - 24))
-        pygame.draw.ellipse(surf, INK_DARK, (10, 12, mw - 20, mh - 24), width=3)
-        pygame.draw.circle(surf, (255, 252, 245), (22, 28), 9)
-        pygame.draw.circle(surf, (255, 252, 245), (mw - 22, 28), 9)
-        pygame.draw.circle(surf, INK_DARK, (22, 28), 4)
-        pygame.draw.circle(surf, INK_DARK, (mw - 22, 28), 4)
-        pts_nose = [(mw // 2 - 6, 36), (mw // 2 + 6, 36), (mw // 2 + 10, mh - 6), (mw // 2 - 10, mh - 6)]
-        pygame.draw.polygon(surf, col_nose, pts_nose)
-        pygame.draw.polygon(surf, INK_DARK, pts_nose, width=2)
-
-        if is_broken:
-            pygame.draw.line(surf, (186, 48, 52), (14, 18), (mw - 14, mh - 18), 3)
-            pygame.draw.line(surf, (186, 48, 52), (mw - 14, 18), (14, mh - 18), 3)
-
-        return surf
+        fname = "mascara_marimonda_rota.png" if is_broken else "mascara_marimonda_vida.png"
+        try:
+            raw = self.assets.load_cropped_surface(os.path.join("Interfaz", fname), alpha_threshold=12)
+            mh = 56
+            mw = max(44, int(round(raw.get_width() * (mh / float(max(1, raw.get_height()))))))
+            return pygame.transform.smoothscale(raw, (mw, mh))
+        except Exception:
+            return pygame.Surface((64, 56), pygame.SRCALPHA)
 
     def _load_character_sprite(self) -> None:
         sprite_filename = f"{self.character_id}_seleccion_personaje.png"
@@ -212,12 +227,12 @@ class ArcadeModeScene(BaseState):
             self.assets, "red", "SALIR AL MENÚ", (320, 74), font_size=28
         )
         self.btn_retry = UIButton(
-            center_pos=(self.screen_w // 2 - 185, 768),
+            center_pos=(self.screen_w // 2 - 185, 736),
             normal_sprite=retry_surf,
             on_click=self._restart_arcade,
         )
         self.btn_exit = UIButton(
-            center_pos=(self.screen_w // 2 + 185, 768),
+            center_pos=(self.screen_w // 2 + 185, 736),
             normal_sprite=exit_surf,
             on_click=self._exit_arcade,
         )
@@ -463,21 +478,18 @@ class ArcadeModeScene(BaseState):
         # B) Vidas en píldora acuarela arriba a la derecha
         pill_rect = self.hud_lives_pill.get_rect(topright=(self.screen_w - 40, 22))
         surface.blit(self.hud_lives_pill, pill_rect)
-        start_x = pill_rect.x + 28
+        slot_step = (pill_rect.width - 44) // max(1, self.max_lives)
+        start_cx = pill_rect.x + 22 + slot_step // 2
         for i in range(self.max_lives):
-            lx = start_x + i * 76
-            ly = pill_rect.y + 11
             surf_to_draw = self.mask_life_surf if i < self.lives else self.mask_dead_surf
-            surface.blit(surf_to_draw, (lx, ly))
+            surface.blit(surf_to_draw, surf_to_draw.get_rect(center=(start_cx + i * slot_step, pill_rect.centery)))
 
     def _render_interstitial(self, surface: pygame.Surface) -> None:
         cx, cy = self.screen_w // 2, self.screen_h // 2
 
-        # Halo cálido acuarela detrás del personaje
-        halo = pygame.Surface((420, 420), pygame.SRCALPHA)
-        pygame.draw.circle(halo, (255, 244, 214, 155), (210, 210), 185)
-        pygame.draw.circle(halo, (245, 198, 118, 95), (210, 210), 205, width=6)
-        surface.blit(halo, halo.get_rect(center=(cx, cy + 50)))
+        # Halo cálido acuarela detrás del personaje (mapa_faro_destino.png)
+        if getattr(self, "interstitial_halo_surf", None) is not None:
+            surface.blit(self.interstitial_halo_surf, self.interstitial_halo_surf.get_rect(center=(cx, cy + 52)))
 
         # Personaje centrado con rebote alegre
         bob_y = math.sin(self.phase_timer * 11.0) * 12.0
@@ -496,27 +508,25 @@ class ArcadeModeScene(BaseState):
         surface.blit(txt_round, txt_round.get_rect(center=rib_rect.center))
 
         # Cinta de velocidad
-        spd_rect = self.speed_ribbon_surf.get_rect(center=(cx, cy + 258))
+        spd_rect = self.speed_ribbon_surf.get_rect(center=(cx, cy + 244))
         surface.blit(self.speed_ribbon_surf, spd_rect)
         col_spd = (28, 118, 66) if self.speed_multiplier <= 1.15 else (186, 54, 48)
         txt_spd = self.font_sub.render(f"VELOCIDAD: {self.speed_multiplier:.2f}x", True, col_spd)
         surface.blit(txt_spd, txt_spd.get_rect(center=(spd_rect.centerx, spd_rect.centery - 1)))
 
-        # Barra de mecha estilo acuarela
-        bar_w, bar_h = 480, 22
-        bx = cx - bar_w // 2
-        by = cy + 308
-        progress = min(1.0, self.phase_timer / self.interstitial_duration)
-        pygame.draw.rect(surface, (246, 232, 206), (bx - 4, by - 4, bar_w + 8, bar_h + 8), border_radius=12)
-        pygame.draw.rect(surface, INK_DARK, (bx - 4, by - 4, bar_w + 8, bar_h + 8), width=2, border_radius=12)
-        pygame.draw.rect(surface, (118, 86, 66), (bx, by, bar_w, bar_h), border_radius=10)
-        fill_w = max(0, int(bar_w * (1.0 - progress)))
-        if fill_w > 0:
-            bar_col = (74, 178, 128) if progress < 0.5 else ((238, 168, 56) if progress < 0.8 else (222, 74, 72))
-            pygame.draw.rect(surface, bar_col, (bx, by, fill_w, bar_h), border_radius=10)
-        spark_x = int(bx + fill_w)
-        pygame.draw.circle(surface, (255, 245, 160), (spark_x, by + bar_h // 2), 11)
-        pygame.draw.circle(surface, (232, 126, 48), (spark_x, by + bar_h // 2), 13, width=2)
+        # Barra de tiempo acuarela oficial (barraTiempoRiel.jpg + barraTiempoRelleno.jpg + mapa_destello_ruta.png)
+        progress = min(1.0, self.phase_timer / max(0.01, self.interstitial_duration))
+        bar_cy = cy + 328
+        if getattr(self, "fuse_rail_surf", None) is not None and getattr(self, "fuse_fill_surf", None) is not None:
+            rail_rect = self.fuse_rail_surf.get_rect(center=(cx, bar_cy))
+            surface.blit(self.fuse_rail_surf, rail_rect)
+            fill_rect = self.fuse_fill_surf.get_rect(center=rail_rect.center)
+            fill_w = max(0, int(round(self.fuse_fill_surf.get_width() * (1.0 - progress))))
+            if fill_w > 0:
+                surface.blit(self.fuse_fill_surf, fill_rect.topleft, area=pygame.Rect(0, 0, fill_w, fill_rect.height))
+            if getattr(self, "fuse_spark_surf", None) is not None:
+                spark_x = fill_rect.left + fill_w
+                surface.blit(self.fuse_spark_surf, self.fuse_spark_surf.get_rect(center=(spark_x, bar_cy)))
 
     def _render_result(self, surface: pygame.Surface) -> None:
         cx, cy = self.screen_w // 2, self.screen_h // 2
@@ -558,26 +568,26 @@ class ArcadeModeScene(BaseState):
         frame_rect = self.gameover_frame_surf.get_rect(center=(cx, cy))
         surface.blit(self.gameover_frame_surf, frame_rect)
 
-        # Título Game Over en tinta café / coral
+        # Título Game Over despejado del borde superior del pergamino
         txt_go = render_outlined_text(
-            self.font_huge, "FIN DEL JUEGO", (196, 56, 54), (255, 248, 232), thickness=3
+            self.assets.cargarFuenteCuento(58), "FIN DEL JUEGO", (196, 56, 54), (255, 248, 232), thickness=3
         )
-        surface.blit(txt_go, txt_go.get_rect(center=(cx, frame_rect.top + 118)))
+        surface.blit(txt_go, txt_go.get_rect(center=(cx, frame_rect.top + 160)))
 
-        surface.blit(self.sep_surf, self.sep_surf.get_rect(center=(cx, frame_rect.top + 186)))
+        surface.blit(self.sep_surf, self.sep_surf.get_rect(center=(cx, frame_rect.top + 224)))
 
         # Puntaje Final
         txt_sc = self.font_title.render(f"PUNTAJE FINAL: {self.score}", True, INK_DARK)
-        surface.blit(txt_sc, txt_sc.get_rect(center=(cx, frame_rect.top + 260)))
+        surface.blit(txt_sc, txt_sc.get_rect(center=(cx, frame_rect.top + 286)))
 
         # Récord
         best = self.settings.get_arcade_high_score()
         txt_rc = self.font_sub.render(f"MEJOR RÉCORD: {best}", True, INK_MUTED)
-        surface.blit(txt_rc, txt_rc.get_rect(center=(cx, frame_rect.top + 324)))
+        surface.blit(txt_rc, txt_rc.get_rect(center=(cx, frame_rect.top + 340)))
 
         # Cinta acuarela + emblemas reales si superó el récord (cero glifo roto)
         if self.is_new_record:
-            rec_rect = self.record_banner_surf.get_rect(center=(cx, frame_rect.top + 408))
+            rec_rect = self.record_banner_surf.get_rect(center=(cx, frame_rect.top + 412))
             surface.blit(self.record_banner_surf, rec_rect)
             surface.blit(self.star_emblem_surf, (rec_rect.left + 16, rec_rect.centery - 22))
             surface.blit(self.star_emblem_surf, (rec_rect.right - 64, rec_rect.centery - 22))

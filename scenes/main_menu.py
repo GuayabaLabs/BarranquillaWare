@@ -95,11 +95,20 @@ class MainMenuScene(BaseState):
         # 6. Modales acuarela y Tipografía 1080p
         self.active_modal: Optional[str] = None
         self.modal_alpha: float = 0.0
-        self.font_title = self.assets.cargarFuenteCuento(36)
+        self.font_title = self.assets.cargarFuenteCuento(38)
         self.font_body = self.assets.cargarFuenteCuento(27)
-        self._modal_frame = self.assets.get_scaled("recuadro_partida_guardada.png", target_width=1020)
-        self._modal_inner = self.assets.get_scaled("tarjeta_slot_partida.png", target_width=760)
-        self._modal_close_surf = self.assets.get_scaled("boton_cerrar_modal.png", target_width=56)
+        self.font_sub = self.assets.cargarFuenteCuento(22)
+        self._modal_frame = self.assets.get_scaled("recuadro_partida_guardada.png", target_width=1060)
+        import os
+        close_base = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonX.jpg"), 78)
+        from scenes.load_game import _poner_borde_calcomania
+        self._modal_close_surf = _poner_borde_calcomania(close_base, grosor_blanco=4, grosor_tinta=2)
+        self._modal_close_hovered: bool = False
+        self._modal_close_rect = self._modal_close_surf.get_rect(
+            center=(self.screen_w // 2 + self._modal_frame.get_width() // 2 - 96, self.screen_h // 2 - self._modal_frame.get_height() // 2 + 88)
+        )
+        self._modal_trofeo_on = self.assets.cargarTrofeo(48)
+        self._modal_trofeo_off = self.assets.cargarTrofeo(48, enGris=True)
 
         # 7. Precarga Cálida de Selección de Modo y Cargar Partida
         self.mode_select_scene = ModeSelectScene(
@@ -226,13 +235,12 @@ class MainMenuScene(BaseState):
             header = f"{summary['character_name']} · Niveles {summary['levels_cleared']}/{len(STORY_CAMPAIGN_ORDER)}"
         obtenidos = set(settings.get("trofeosObtenidos", []) or [])
         unlocked = len([t for t in trofeosMapa if t["id"] in obtenidos])
-        lines = [header, f"Trofeos desbloqueados: {unlocked} / {len(trofeosMapa)}", ""]
+        lines = [f"{header} · Trofeos: {unlocked} / {len(trofeosMapa)}"]
         for trofeo in trofeosMapa:
             if trofeo["id"] in obtenidos:
-                lines.append(f"{LOGRO_ON}{trofeo['nombre']} - ¡Desbloqueado!")
+                lines.append(f"{LOGRO_ON}{trofeo['nombre']} — ¡Desbloqueado!")
             else:
-                lines.append(f"{LOGRO_OFF}Trofeo escondido - Sigue explorando el mapa")
-        lines += ["", "(Haz click o pulsa ESC para volver)"]
+                lines.append(f"{LOGRO_OFF}Trofeo escondido — Sigue explorando")
         return lines
 
     def _open_modal(self, modal_name: str) -> None:
@@ -358,12 +366,21 @@ class MainMenuScene(BaseState):
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.active_modal:
-            if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
+            if event.type == pygame.MOUSEMOTION:
+                was_hov = self._modal_close_hovered
+                self._modal_close_hovered = self._modal_close_rect.collidepoint(event.pos)
+                if self._modal_close_hovered and not was_hov:
+                    self.audio.play_hover()
+            elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
                 self.active_modal = None
+                self._modal_close_hovered = False
                 self.audio.play_click()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                self.active_modal = None
-                self.audio.play_click()
+                frame_rect = self._modal_frame.get_rect(center=(self.screen_w // 2, self.screen_h // 2))
+                if self._modal_close_rect.collidepoint(event.pos) or not frame_rect.collidepoint(event.pos):
+                    self.active_modal = None
+                    self._modal_close_hovered = False
+                    self.audio.play_click()
             return
 
         if self.focus_nav.handle_event(event):
@@ -492,11 +509,15 @@ class MainMenuScene(BaseState):
         frame_rect = self._modal_frame.get_rect(center=(self.screen_w // 2, self.screen_h // 2))
         surface.blit(self._modal_frame, frame_rect.topleft)
 
-        inner_rect = self._modal_inner.get_rect(center=(frame_rect.centerx, frame_rect.centery + 54))
-        surface.blit(self._modal_inner, inner_rect.topleft)
-
-        close_rect = self._modal_close_surf.get_rect(center=(frame_rect.right - 92, frame_rect.top + 88))
-        surface.blit(self._modal_close_surf, close_rect.topleft)
+        self._modal_close_rect = self._modal_close_surf.get_rect(
+            center=(frame_rect.right - 92, frame_rect.top + 90)
+        )
+        close_draw = (
+            pygame.transform.smoothscale_by(self._modal_close_surf, 1.08)
+            if self._modal_close_hovered
+            else self._modal_close_surf
+        )
+        surface.blit(close_draw, close_draw.get_rect(center=self._modal_close_rect.center))
 
         t_render = render_outlined_text(
             self.font_title,
@@ -505,13 +526,54 @@ class MainMenuScene(BaseState):
             (255, 250, 240),
             thickness=2,
         )
-        t_pos = t_render.get_rect(center=(frame_rect.centerx + 36, frame_rect.top + 132))
+        t_pos = t_render.get_rect(center=(frame_rect.centerx + 16, frame_rect.top + 148))
         surface.blit(t_render, t_pos)
+
+        settings = SettingsManager.get_instance()
+        if self.active_modal == "logros":
+            summary = settings.get_story_save_summary()
+            obtenidos = set(settings.get("trofeosObtenidos", []) or [])
+            unlocked = len([t for t in trofeosMapa if t["id"] in obtenidos])
+            if summary["has_save"]:
+                sub_text = f"{summary['character_name']} · {summary['levels_cleared']}/{len(STORY_CAMPAIGN_ORDER)} distritos · {unlocked}/{len(trofeosMapa)} trofeos"
+            else:
+                sub_text = f"Sin partida guardada · {unlocked}/{len(trofeosMapa)} trofeos"
+            sub_surf = self.font_sub.render(sub_text, True, (112, 82, 134))
+            surface.blit(sub_surf, sub_surf.get_rect(center=(frame_rect.centerx + 16, frame_rect.top + 194)))
+
+            row_y = frame_rect.top + 252
+            row_step = 74
+            icon_x = frame_rect.left + 178
+            text_x = icon_x + 68
+            max_desc_w = 510
+            for trofeo in trofeosMapa:
+                got = trofeo["id"] in obtenidos
+                icon = self._modal_trofeo_on if got else self._modal_trofeo_off
+                surface.blit(icon, icon.get_rect(center=(icon_x, row_y)))
+                if got:
+                    title_str = trofeo["nombre"]
+                    desc_str = trofeo["descripcion"]
+                    col_t = (38, 126, 62)
+                    col_d = (92, 58, 38)
+                else:
+                    title_str = "Trofeo escondido"
+                    desc_str = "Sigue explorando el mapa"
+                    col_t = (116, 92, 74)
+                    col_d = (148, 124, 106)
+                t_row = self.font_body.render(title_str, True, col_t)
+                d_row = self.font_sub.render(desc_str, True, col_d)
+                if d_row.get_width() > max_desc_w:
+                    sc = max_desc_w / float(d_row.get_width())
+                    d_row = pygame.transform.smoothscale(
+                        d_row, (max_desc_w, max(12, int(round(d_row.get_height() * sc))))
+                    )
+                surface.blit(t_row, (text_x, row_y - 24))
+                surface.blit(d_row, (text_x, row_y + 4))
+                row_y += row_step
+            return
 
         music_status = "ACTIVADA" if self.audio.music_enabled else "MUTED"
         sfx_status = "ACTIVADO" if self.audio.sound_enabled else "MUTED"
-
-        settings = SettingsManager.get_instance()
         summary = settings.get_story_save_summary()
         arcade_best = settings.get_arcade_high_score()
         story_score = summary["high_score"]
@@ -519,13 +581,11 @@ class MainMenuScene(BaseState):
         active_char = summary["character_name"] if summary["has_save"] else "Ninguno"
         completion_pct = int((completed_count / float(len(STORY_CAMPAIGN_ORDER))) * 100)
 
-        lines = self._build_logros_lines() if self.active_modal == "logros" else modal_info["lines"]
-        cur_y = inner_rect.top + 64
-        for line in lines:
+        cur_y = frame_rect.top + 216
+        for line in modal_info["lines"]:
             if not line:
                 cur_y += 12
                 continue
-
             formatted_line = line.format(
                 music_status=music_status,
                 sfx_status=sfx_status,
@@ -536,10 +596,6 @@ class MainMenuScene(BaseState):
                 completion_pct=completion_pct,
             )
             color = (74, 48, 34) if not formatted_line.startswith("(") else (130, 96, 72)
-            if formatted_line.startswith(LOGRO_ON):
-                formatted_line, color = formatted_line[1:], (40, 135, 60)
-            elif formatted_line.startswith(LOGRO_OFF):
-                formatted_line, color = formatted_line[1:], (150, 135, 125)
             line_surf = self.font_body.render(formatted_line, True, color)
             surface.blit(line_surf, line_surf.get_rect(center=(frame_rect.centerx, cur_y)))
             cur_y += 42
