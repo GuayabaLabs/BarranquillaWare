@@ -1,20 +1,50 @@
 # BarranquillaWare
 
-Videojuego arcade tipo WarioWare ambientado en Barranquilla. Su tema es el uso consciente de las redes sociales.
+Videojuego arcade estilo *WarioWare* ambientado en Barranquilla, enfocado en el uso responsable y consciente de las redes sociales.
 
-## Ejecutar
+---
+
+## Requisitos
+
+- **Python 3.10+**
+- **Pygame** (y dependencias del proyecto)
+- *(Opcional)* **Cámara web + MediaPipe** para microjuegos con detección de movimiento/gestos
+
+## Instalación rápida
+
+```powershell
+# 1. Clonar el repositorio
+git clone https://github.com/GuayabaLabs/BarranquillaWare.git
+cd BarranquillaWare
+
+# 2. (Opcional) Crear y activar entorno virtual
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# 3. Instalar dependencias base
+pip install pygame
+
+# 4. (Opcional) Habilitar controles por cámara con MediaPipe
+python -m pip install -r requirements-camera.txt
+```
+
+## Cómo ejecutar el juego
+
+En Windows puedes iniciarlo directamente con el lanzador:
+
+```powershell
+.\JUGAR.bat
+```
+
+O desde la terminal con Python:
 
 ```powershell
 python main.py
 ```
 
-Para habilitar los controles por cámara con MediaPipe, instala la versión compatible de Protocol Buffers:
+## Pruebas automatizadas
 
-```powershell
-python -m pip install -r requirements-camera.txt
-```
-
-Pruebas sin ventana:
+Para ejecutar la suite de pruebas en modo *headless* (sin abrir ventana ni audio):
 
 ```powershell
 $env:SDL_VIDEODRIVER = "dummy"
@@ -22,27 +52,21 @@ $env:SDL_AUDIODRIVER = "dummy"
 python -m pytest -q
 ```
 
-## Estructura
+## Estructura del proyecto
 
-- `main.py`: punto de entrada.
-- `core/`: motor, estados, cámara, audio, assets, configuración y microjuego base.
-- `scenes/`: menú, selección de personaje, mapa, arcade y modo libre.
-- `microgames/`: microjuegos individuales.
-- `ui/`: componentes de interfaz.
-- `effects/`: partículas y efectos visuales.
-- `assets/`: imágenes, fuentes y audio.
-- `tests/`: pruebas automatizadas.
-- `tools/`: ejecutores y herramientas de desarrollo.
-- `Project-TBD/`: versión anterior y material histórico.
+| Carpeta / Archivo | Descripción |
+| :--- | :--- |
+| `main.py` | Punto de entrada principal del juego. |
+| `JUGAR.bat` | Lanzador rápido para Windows. |
+| `core/` | Motor (`Engine`), máquina de estados, cámara, audio, assets y `BaseMicrogame`. |
+| `scenes/` | Escenas principales: menú, selección de personaje, mapa historia, arcade y modo libre. |
+| `microgames/` | Microjuegos independientes. |
+| `ui/` | Componentes de interfaz reutilizables. |
+| `effects/` | Partículas y efectos visuales. |
+| `assets/` | Imágenes, fuentes y audio. |
+| `tests/` | Pruebas automatizadas. |
+| `tools/` | Utilidades de desarrollo y revisión. |
 
-## Reglas rápidas
+## Desarrollo de microjuegos
 
-Los microjuegos nuevos deben heredar de `core.microgame.BaseMicrogame`, reutilizar el flujo de resultados existente y cargar recursos mediante las convenciones del proyecto.
-
-## Auditoría rápida
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools/review_project.ps1
-```
-
-La auditoría muestra el estado, módulos, imports, rutas externas sospechosas, assets y una prueba de importación.
+Los microjuegos nuevos deben heredar de `core.microgame.BaseMicrogame`, reutilizar el flujo de resultados existente y cargar recursos mediante las convenciones de `AssetManager` y `AudioManager`.
