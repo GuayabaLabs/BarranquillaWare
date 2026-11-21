@@ -1,16 +1,33 @@
-# BarranquillaWare
+<div align="center">
 
-Videojuego arcade estilo *WarioWare* ambientado en Barranquilla, enfocado en el uso responsable y consciente de las redes sociales.
+# 🌴 BarranquillaWare
+
+**Videojuego arcade estilo *WarioWare* ambientado en Barranquilla, enfocado en el uso responsable y consciente de las redes sociales.**
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Pygame](https://img.shields.io/badge/Pygame-2.x-00C853?style=for-the-badge&logo=python&logoColor=white)
+![Status](https://img.shields.io/badge/Estado-En%20Desarrollo-FF9800?style=for-the-badge)
+
+</div>
 
 ---
 
-## Requisitos
+## 🎮 Descripción
+
+**BarranquillaWare** combina el ritmo frenético de los microjuegos clásicos tipo *WarioWare* con escenarios, humor y situaciones cotidianas de Barranquilla para reflexionar sobre privacidad, desinformación, algoritmos y convivencia digital.
+
+### Modos de juego
+- **Modo Historia:** Recorre el mapa interactivo de la ciudad y supera desafíos temáticos.
+- **Modo Arcade:** Ráfagas continuas de microjuegos con dificultad creciente.
+- **Modo Libre:** Selecciona y practica cualquier microjuego desbloqueado.
+
+---
+
+## ⚙️ Requisitos e Instalación
 
 - **Python 3.10+**
-- **Pygame** (y dependencias del proyecto)
+- **Pygame**
 - *(Opcional)* **Cámara web + MediaPipe** para microjuegos con detección de movimiento/gestos
-
-## Instalación rápida
 
 ```powershell
 # 1. Clonar el repositorio
@@ -28,7 +45,9 @@ pip install pygame
 python -m pip install -r requirements-camera.txt
 ```
 
-## Cómo ejecutar el juego
+---
+
+## 🚀 Cómo ejecutar el juego
 
 En Windows puedes iniciarlo directamente con el lanzador:
 
@@ -42,7 +61,9 @@ O desde la terminal con Python:
 python main.py
 ```
 
-## Pruebas automatizadas
+---
+
+## 🧪 Pruebas automatizadas
 
 Para ejecutar la suite de pruebas en modo *headless* (sin abrir ventana ni audio):
 
@@ -52,7 +73,9 @@ $env:SDL_AUDIODRIVER = "dummy"
 python -m pytest -q
 ```
 
-## Estructura del proyecto
+---
+
+## 📁 Estructura del proyecto
 
 | Carpeta / Archivo | Descripción |
 | :--- | :--- |
@@ -67,13 +90,13 @@ python -m pytest -q
 | `tests/` | Pruebas automatizadas. |
 | `tools/` | Utilidades de desarrollo y revisión. |
 
-## Desarrollo de microjuegos
+---
 
-Los microjuegos nuevos deben heredar de `core.microgame.BaseMicrogame`, reutilizar el flujo de resultados existente y cargar recursos mediante las convenciones de `AssetManager` y `AudioManager`.
+## 👥 Equipo — GuayabaLabs
 
-## Equipo (GuayabaLabs)
-
-- **César Antonio Berrío Remolina** — [@Remolinac](https://github.com/Remolinac)
-- **Samuel Elías Ortega Rodríguez** — [@Seor1601](https://github.com/Seor1601)
-- **Daniel Alejandro Rincón Navarro** — [@WosDan](https://github.com/WosDan)
-- **Salma Valeria Romero Robles** — [@Salma-rro](https://github.com/Salma-rro)
+| Integrante | GitHub |
+| :--- | :--- |
+| **César Antonio Berrío Remolina** | [@Remolinac](https://github.com/Remolinac) |
+| **Samuel Elías Ortega Rodríguez** | [@Seor1601](https://github.com/Seor1601) |
+| **Daniel Alejandro Rincón Navarro** | [@WosDan](https://github.com/WosDan) |
+| **Salma Valeria Romero Robles** | [@Salma-rro](https://github.com/Salma-rro) |
