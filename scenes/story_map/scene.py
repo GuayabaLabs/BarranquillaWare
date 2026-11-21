@@ -277,12 +277,6 @@ class StoryMapScene(BaseState):
                 "completada": uninorte_done,
             },
             {
-                "id": "ventana",
-                "titulo": "Ventana al Mundo",
-                "desc": "Arma tu post sin regalar tus datos.",
-                "completada": "ventana" in unlocked_locations or "punch_alert" in completed_microgames,
-            },
-            {
                 "id": "buenavista",
                 "titulo": "C.C. Buenavista",
                 "desc": "Sigue el compás del trend sin volverte viral adicto.",
@@ -328,12 +322,6 @@ class StoryMapScene(BaseState):
                 "asunto": "Zona Libre de Doomscrolling",
                 "cuerpo": "El estudio rinde más cuando silencias las notificaciones innecesarias.",
                 "leido": uninorte_done,
-            },
-            {
-                "remitente": "Mirador Ventana al Mundo",
-                "asunto": "Comparte el momento",
-                "cuerpo": "Antes de publicar, piensa quién más puede ver dónde estás y qué tienes.",
-                "leido": "ventana" in unlocked_locations,
             },
             {
                 "remitente": "Radar Buenavista",
