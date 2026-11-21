@@ -94,6 +94,7 @@ class StoryMapScene(BaseState):
     # Nodo amarillo de entrada de cada nivel jugable (ids de config/map_poi_layout.json).
     POI_ENTRY_NODES: Dict[str, int] = {
         "uninorte": 71,
+        "ventana": 23,
         "buenavista": 76,
         "metropolitano": 55,
         "aeropuerto": 35,
@@ -276,6 +277,12 @@ class StoryMapScene(BaseState):
                 "completada": uninorte_done,
             },
             {
+                "id": "ventana",
+                "titulo": "Ventana al Mundo",
+                "desc": "Arma tu post sin regalar tus datos.",
+                "completada": "ventana" in unlocked_locations or "punch_alert" in completed_microgames,
+            },
+            {
                 "id": "buenavista",
                 "titulo": "C.C. Buenavista",
                 "desc": "Sigue el compás del trend sin volverte viral adicto.",
@@ -321,6 +328,12 @@ class StoryMapScene(BaseState):
                 "asunto": "Zona Libre de Doomscrolling",
                 "cuerpo": "El estudio rinde más cuando silencias las notificaciones innecesarias.",
                 "leido": uninorte_done,
+            },
+            {
+                "remitente": "Mirador Ventana al Mundo",
+                "asunto": "Comparte el momento",
+                "cuerpo": "Antes de publicar, piensa quién más puede ver dónde estás y qué tienes.",
+                "leido": "ventana" in unlocked_locations,
             },
             {
                 "remitente": "Radar Buenavista",
@@ -742,12 +755,12 @@ class StoryMapScene(BaseState):
             },
             "ventana": {
                 "title": "VENTANA AL MUNDO",
-                "district": "DISTRITO MONUMENTAL",
-                "microgame_id": "ventana_colores",
-                "microgame_title": "VENTANA AL MUNDO",
+                "district": "NIVEL 2 • DISTRITO MONUMENTAL",
+                "microgame_id": "punch_alert",
+                "microgame_title": "EL POST DEL ARBOLITO",
                 "desc": [
-                    "Monumento icónico de colores frente a la brisa del norte.",
-                    "Un rincón colorido para admirar el horizonte currambero."
+                    "La familia se toma la foto con el arbolito de la Ventana al Mundo.",
+                    "Golpea lo que no debes publicar y deja pasar solo lo bonito."
                 ],
                 "rect": self.ventana_rect
             },
@@ -764,7 +777,7 @@ class StoryMapScene(BaseState):
             },
             "metropolitano": {
                 "title": "ESTADIO METROPOLITANO",
-                "district": "NIVEL 3 • DISTRITO DEPORTIVO",
+                "district": "NIVEL 4 • DISTRITO DEPORTIVO",
                 "microgame_id": "metropolitano_moderacion",
                 "microgame_title": "¡MODERA LA BARRA BRAVA!",
                 "desc": [
@@ -775,7 +788,7 @@ class StoryMapScene(BaseState):
             },
             "buenavista": {
                 "title": "C.C. BUENAVISTA & MALLPLAZA",
-                "district": "NIVEL 2 • DISTRITO COMERCIAL",
+                "district": "NIVEL 3 • DISTRITO COMERCIAL",
                 "microgame_id": "buenavista_trend",
                 "microgame_title": "EL TREND EN BUENAVISTA",
                 "desc": [
@@ -798,9 +811,9 @@ class StoryMapScene(BaseState):
             },
             "aeropuerto": {
                 "title": "AEROPUERTO CORTISSOZ",
-                "district": "NIVEL 4 • DISTRITO AÉREO",
-                "microgame_id": "punch_alert",
-                "microgame_title": "¡DESPACHA EL SPAM!",
+                "district": "DISTRITO AÉREO",
+                "microgame_id": "",
+                "microgame_title": "",
                 "desc": [
                     "Antes de despegar, limpia tu pantalla de ventanas emergentes y spam.",
                     "Viaja ligero de equipaje digital para cerrar tu aventura en calma."
@@ -1010,10 +1023,10 @@ class StoryMapScene(BaseState):
         self.save_feedback_timer: float = 0.0
 
         # Tipografías del Drawer
-        self.font_drawer_title = pygame.font.SysFont("Arial Black, Impact, sans-serif", 22)
-        self.font_drawer_btn = pygame.font.SysFont("Arial, sans-serif", 17, bold=True)
+        self.font_drawer_title = self.assets.cargarFuenteTitulo(26)
+        self.font_drawer_btn = self.assets.cargarFuenteTitulo(19)
         self.font_drawer_sub = pygame.font.SysFont("Arial, sans-serif", 14)
-        self.font_drawer_save = pygame.font.SysFont("Arial Black, Impact, sans-serif", 15)
+        self.font_drawer_save = self.assets.cargarFuenteTitulo(17)
 
         # 1. Botón circular flotante para abrir/cerrar el menú (esquina superior derecha)
         btn_toggle_surf = pygame.Surface((56, 56), pygame.SRCALPHA)
@@ -1144,7 +1157,8 @@ class StoryMapScene(BaseState):
         self.font_paloma_badge = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 16, bold=True)
         self.font_paloma_body = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 23, bold=True)
         self.font_paloma_hint = pygame.font.SysFont("Trebuchet MS, Arial, sans-serif", 16, bold=True)
-        self.font_paloma_badge = self.assets.cargarFuenteCuento(22)
+        self.font_paloma_speaker = self.assets.cargarFuenteTitulo(24)
+        self.font_paloma_badge = self.assets.cargarFuenteTitulo(22)
         self.font_paloma_body = self.assets.cargarFuenteCuento(29)
         self.font_paloma_hint = self.assets.cargarFuenteCuento(21)
 
@@ -1154,7 +1168,7 @@ class StoryMapScene(BaseState):
             surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
             pygame.draw.rect(surf, bg_col, (0, 0, bw, bh), border_radius=14)
             pygame.draw.rect(surf, b_col, (0, 0, bw, bh), width=2, border_radius=14)
-            font_b = pygame.font.SysFont("Arial Black, Impact", 18)
+            font_b = self.assets.cargarFuenteTitulo(22)
             txt = font_b.render(text, True, (255, 255, 255))
             surf.blit(txt, txt.get_rect(center=(bw // 2, bh // 2)))
             return surf
@@ -1394,10 +1408,10 @@ class StoryMapScene(BaseState):
         self.tex_quest_card = self.assets.load_surface("recuadro_mision_nivel.png")
 
         # Tipografía manuscrita coherente con la UI de BarranquillaWare
-        self.font_quest_title = self.assets.cargarFuenteCuento(30)
+        self.font_quest_title = self.assets.cargarFuenteTitulo(30)
         self.font_quest_sub = self.assets.cargarFuenteCuento(17)
         self.font_quest_body = self.assets.cargarFuenteCuento(20)
-        self.font_quest_btn = self.assets.cargarFuenteCuento(23)
+        self.font_quest_btn = self.assets.cargarFuenteTitulo(23)
 
         # Texturas ilustradas de apoyo (cartucho de pergamino, separador y sellos de cera)
         self.tex_quest_cartridge = self.assets.load_surface("cinta_distrito_modal.png")
@@ -2126,52 +2140,80 @@ class StoryMapScene(BaseState):
             if hasattr(self.audio, "play_click"):
                 self.audio.play_click()
 
+    # Dirección de flechas en el mapa isométrico: ángulo máximo aceptado entre la flecha y la calle.
+    # Las calles "horizontales" salen a ~27° y las "verticales" a ~63°; nunca se toma una calle que
+    # vaya hacia otro lado (p. ej. → nunca baja por una calle vertical).
+    DPAD_MAX_ANGLE_HORIZONTAL: float = 45.0
+    DPAD_MAX_ANGLE_VERTICAL: float = 68.0
+    DPAD_MAX_ANGLE_DIAGONAL: float = 45.0
+
+    def _edge_screen_direction(self, from_id: int, to_id: int, sample_px: float = 70.0) -> Optional[Tuple[float, float]]:
+        """Dirección real con la que arranca la calle (sobre la curva Bézier dibujada), normalizada."""
+        nodes, edges, node_map, adj, edge_map = self._get_street_graph()
+        e = edge_map.get((from_id, to_id))
+        if not e or from_id not in node_map or to_id not in node_map:
+            return None
+        nu, nv = node_map[from_id], node_map[to_id]
+        p0 = (nu["x"], nu["y"])
+        p1 = (nv["x"], nv["y"])
+        ctrl = (e.get("ctrl_x", (p0[0] + p1[0]) // 2), e.get("ctrl_y", (p0[1] + p1[1]) // 2))
+        pts = get_bezier_points(p0, ctrl, p1, step_px=5)
+        if len(pts) < 2:
+            pts = [p0, p1]
+        target = pts[-1]
+        recorrido = 0.0
+        for a, b in zip(pts, pts[1:]):
+            recorrido += math.hypot(b[0] - a[0], b[1] - a[1])
+            if recorrido >= sample_px:
+                target = b
+                break
+        dx, dy = float(target[0] - p0[0]), float(target[1] - p0[1])
+        mag = math.hypot(dx, dy)
+        if mag < 0.001:
+            return None
+        return dx / mag, dy / mag
+
+    def _pick_dpad_neighbor(self, dir_vec: Tuple[float, float]) -> Optional[int]:
+        """Vecino cuya calle arranca más alineada con la flecha, dentro del ángulo permitido."""
+        _, _, node_map, adj, _ = self._get_street_graph()
+        curr_id = self.player_node_id
+        if curr_id not in node_map or not adj.get(curr_id):
+            return None
+        mag = math.hypot(dir_vec[0], dir_vec[1])
+        if mag < 0.001:
+            return None
+        ux, uy = dir_vec[0] / mag, dir_vec[1] / mag
+        if abs(ux) > 0.01 and abs(uy) > 0.01:
+            max_angle = self.DPAD_MAX_ANGLE_DIAGONAL
+        elif abs(ux) > abs(uy):
+            max_angle = self.DPAD_MAX_ANGLE_HORIZONTAL
+        else:
+            max_angle = self.DPAD_MAX_ANGLE_VERTICAL
+        min_dot = math.cos(math.radians(max_angle))
+
+        best_nbr, best_dot = None, min_dot
+        for nbr_id in adj[curr_id]:
+            d = self._edge_screen_direction(curr_id, nbr_id)
+            if d is None:
+                continue
+            dot = d[0] * ux + d[1] * uy
+            if dot >= best_dot:
+                best_dot, best_nbr = dot, nbr_id
+        return best_nbr
+
     def _handle_dpad_move(self, dir_vec: Tuple[float, float]) -> bool:
         """
-        Navegación tipo D-Pad / WASD / Flechas en intersecciones (Opción 1.C):
-        Selecciona la arista cuya tangente de salida tenga mayor coincidencia direccional (dot product),
-        y viaja únicamente hasta el siguiente nodo de la red. Así cada nodo
-        vuelve a ser una parada navegable, como en la versión anterior.
+        Navegación con flechas / WASD / D-pad: avanza un solo nodo por la calle cuya dirección real
+        (como se ve en pantalla) coincide con la flecha. Si ninguna calle va hacia ese lado, no se mueve.
         """
         if self.player_is_moving:
             return False
-
-        nodes, edges, node_map, adj, edge_map = self._get_street_graph()
-        curr_id = self.player_node_id
-        if curr_id not in node_map or not adj.get(curr_id):
-            return False
-
-        curr_n = node_map[curr_id]
-        best_nbr = None
-        best_dot = 0.20
-
-        for nbr_id in adj[curr_id]:
-            e = edge_map.get((curr_id, nbr_id))
-            if not e:
-                continue
-            nbr_n = node_map[nbr_id]
-            cx = e.get("ctrl_x", (curr_n["x"] + nbr_n["x"]) // 2)
-            cy = e.get("ctrl_y", (curr_n["y"] + nbr_n["y"]) // 2)
-            dx = float(cx - curr_n["x"])
-            dy = float(cy - curr_n["y"])
-            mag = math.hypot(dx, dy)
-            if mag < 1.0:
-                dx = float(nbr_n["x"] - curr_n["x"])
-                dy = float(nbr_n["y"] - curr_n["y"])
-                mag = math.hypot(dx, dy)
-            if mag > 0.001:
-                dot = (dx / mag) * dir_vec[0] + (dy / mag) * dir_vec[1]
-                if dot > best_dot:
-                    best_dot = dot
-                    best_nbr = nbr_id
-
+        best_nbr = self._pick_dpad_neighbor(dir_vec)
         if best_nbr is None:
             return False
-
         # Cada nodo es una parada: no saltar nodos intermedios ni limitarse a
         # los POI que tienen minijuego.
-        path = [curr_id, best_nbr]
-        self._start_path_travel(path)
+        self._start_path_travel([self.player_node_id, best_nbr])
         return True
 
     def _find_node_near_world_pos(self, world_pos: Tuple[float, float], max_dist: float = 28.0) -> Optional[dict]:
@@ -2729,7 +2771,16 @@ class StoryMapScene(BaseState):
             if event.key in dpad_dirs:
                 if self.camera.is_dragging:
                     self.camera.stop_drag()
-                if self._handle_dpad_move(dpad_dirs[event.key]):
+                # Dos flechas a la vez (p. ej. → y ↓) toman las calles diagonales del mapa isométrico.
+                from core import input_state
+                held = input_state.get_pressed()
+                dx, dy = dpad_dirs[event.key]
+                for key, (hx, hy) in dpad_dirs.items():
+                    if key != event.key and held[key] and (hx == 0.0) != (dx == 0.0):
+                        dx, dy = dx + hx, dy + hy
+                if self._handle_dpad_move((dx, dy)):
+                    return
+                if (dx, dy) != dpad_dirs[event.key] and self._handle_dpad_move(dpad_dirs[event.key]):
                     return
 
         # Arrastre de cámara con mouse en toda la superficie y click en POIs
@@ -3452,25 +3503,53 @@ class StoryMapScene(BaseState):
         conContorno.blit(imagen, (grosor, grosor))
         return conContorno
 
+    def ensancharVentanaMenu(self, ventana: pygame.Surface, extra: int) -> pygame.Surface:
+        ancho, alto = ventana.get_size()
+        resultado = pygame.Surface((ancho + extra, alto), pygame.SRCALPHA)
+        pedazos = (
+            ((0.0, 0.36), (0.70, 0.76)),
+            ((0.36, 0.64), (0.45, 0.55)),
+            ((0.64, 1.0), (0.28, 0.35)),
+        )
+        for (arriba, abajo), (izquierda, derecha) in pedazos:
+            y0, y1 = int(alto * arriba), int(alto * abajo)
+            x0, x1 = int(ancho * izquierda), int(ancho * derecha)
+            if y1 <= y0:
+                continue
+            resultado.blit(ventana, (0, y0), (0, y0, x0, y1 - y0))
+            franja = ventana.subsurface((x0, y0, x1 - x0, y1 - y0))
+            resultado.blit(pygame.transform.smoothscale(franja, (x1 - x0 + extra, y1 - y0)), (x0, y0))
+            resultado.blit(ventana, (x1 + extra, y0), (x1, y0, ancho - x1, y1 - y0))
+        return resultado
+
     def prepararMenuMapa(self) -> None:
         """Carga la ventana y los botones nuevos del menú del mapa y el botón para abrirlo."""
         self.menuMapaListo = False
         try:
             # El panel se ensancha y llega de arriba a abajo para que los botones quepan con aire a los lados
-            self.drawer_w = 560
+            anchoBase = 560
+            extra = 80
+            self.drawer_w = anchoBase + extra
             alto = self.screen_h
             # El papel de la ventana va del 18% al 83% del ancho; su centro queda un poco a la derecha
-            self.centroPapelMenu = int(self.drawer_w * 0.508)
-            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), self.drawer_w)
-            self.ventanaMenuMapa = pygame.transform.smoothscale(ventana, (self.drawer_w, alto))
+            self.centroPapelMenu = int(anchoBase * 0.508) + extra // 2
+            ventana = self.assets.cargarSinFondo(os.path.join("Interfaz", "ventanaMenuPausa.jpg"), anchoBase)
+            ventana = pygame.transform.smoothscale(ventana, (anchoBase, alto))
+            self.ventanaMenuMapa = self.ensancharVentanaMenu(ventana, extra)
             morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 250)
             rojo = pygame.transform.smoothscale(
                 self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 250), morado.get_size())
-            self.fuenteTituloMenu = self.assets.cargarFuenteCuento(50)
+            self.fuenteTituloMenu = self.assets.cargarFuenteTitulo(50)
+            anchoPapel = int(anchoBase * 0.59) + extra
+            tamTitulo = 50
+            while tamTitulo > 30 and self.fuenteTituloMenu.size("Modo historia")[0] + 40 > anchoPapel:
+                tamTitulo -= 2
+                self.fuenteTituloMenu = self.assets.cargarFuenteTitulo(tamTitulo)
+            self.centroTituloMenu = int(anchoBase * 0.5) + extra // 2
             self.fuenteTextoMenu = self.assets.cargarFuenteCuento(22)
             self.fuenteEstadoMenu = self.assets.cargarFuenteCuento(17)
             self.fuenteSubEstadoMenu = self.assets.cargarFuenteCuento(15)
-            fuenteBoton = self.assets.cargarFuenteCuento(36)
+            fuenteBoton = self.assets.cargarFuenteTitulo(34)
 
             cinta_raw = self.assets.load_surface("cinta_estado_modal.png", has_alpha=True)
             self.cintaEstadoMenu = pygame.transform.smoothscale(cinta_raw, (330, 56))
@@ -3484,6 +3563,11 @@ class StoryMapScene(BaseState):
                 (self.btn_exit_map, "Salir al menú", 816),
             ]
             self.botonesMenuMapa = []
+            anchoUtil = int(morado.get_width() * 0.8)
+            tam = 34
+            while tam > 20 and max(fuenteBoton.size(texto)[0] for _, texto, _ in botones) > anchoUtil:
+                tam -= 2
+                fuenteBoton = self.assets.cargarFuenteTitulo(tam)
             for boton, texto, y in botones:
                 versiones = []
                 for fondo, contorno in ((morado, (70, 30, 110)), (rojo, (120, 26, 34))):
@@ -3526,9 +3610,10 @@ class StoryMapScene(BaseState):
         cafe = (110, 68, 38)
         summary = self.settings.get_story_save_summary()
         titulo = self.textoConContorno(self.fuenteTituloMenu, "Modo historia", (110, 62, 150), (255, 250, 238))
-        panel.blit(titulo, titulo.get_rect(center=(int(self.drawer_w * 0.56), 192)))
+        centroTitulo = getattr(self, "centroTituloMenu", int(self.drawer_w * 0.56))
+        panel.blit(titulo, titulo.get_rect(center=(centroTitulo, 192)))
         explorando = self.fuenteTextoMenu.render(f"Explorando con {summary['character_name']}", True, cafe)
-        panel.blit(explorando, explorando.get_rect(center=(int(self.drawer_w * 0.56), 240)))
+        panel.blit(explorando, explorando.get_rect(center=(centroTitulo, 240)))
 
         # Cinta acuarela explicando auto-guardado, guardado manual y última marca horaria
         cinta_rect = self.cintaEstadoMenu.get_rect(center=(self.centroPapelMenu + 14, 306))
@@ -3700,9 +3785,9 @@ class StoryMapScene(BaseState):
         max_title_w = int(cw * 0.40)
         title_size = 28
         title_lines: List[str] = [title_text]
-        f_title = self.assets.cargarFuenteCuento(title_size)
+        f_title = self.assets.cargarFuenteTitulo(title_size)
         while title_size >= 25:
-            f_title = self.assets.cargarFuenteCuento(title_size)
+            f_title = self.assets.cargarFuenteTitulo(title_size)
             if f_title.size(title_text)[0] <= max_title_w:
                 title_lines = [title_text]
                 break
@@ -3776,11 +3861,11 @@ class StoryMapScene(BaseState):
 
         # Título del Microjuego / Rondas en terracota caribeño cálido
         m_size = 24
-        f_m = self.assets.cargarFuenteCuento(m_size)
+        f_m = self.assets.cargarFuenteTitulo(m_size)
         txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
         while txt_m_title.get_width() > int(cw * 0.68) and m_size > 21:
             m_size -= 1
-            f_m = self.assets.cargarFuenteCuento(m_size)
+            f_m = self.assets.cargarFuenteTitulo(m_size)
             txt_m_title = f_m.render(poi_info["microgame_title"], True, (215, 75, 35))
         card_surf.blit(txt_m_title, txt_m_title.get_rect(center=(cw // 2, int(ch * 0.506) - 1)))
 

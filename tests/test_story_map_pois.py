@@ -58,11 +58,12 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     test_screen = pygame.Surface((1920, 1080))
 
     # 1. Verificar orden de los 4 niveles y configuración de etapas
-    assert STORY_CAMPAIGN_ORDER == ["uninorte", "buenavista", "metropolitano", "aeropuerto", "aleta"]
+    assert STORY_CAMPAIGN_ORDER == ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["uninorte"]] == [UninorteSprintMicrogame, UninorteConcentrateMicrogame]
+    assert [s["cls"] for s in STORY_LEVEL_STAGES["ventana"]] == [PunchAlertMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["buenavista"]] == [BuenavistaTrendMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["metropolitano"]] == [MetropolitanoModeracionMicrogame]
-    assert [s["cls"] for s in STORY_LEVEL_STAGES["aeropuerto"]] == [PunchAlertMicrogame]
+    assert STORY_LEVEL_STAGES["aeropuerto"] == []
 
     # 2. Al llegar a Uninorte, se abre el diálogo pre-nivel con la Paloma
     scene._notify_poi_arrival("uninorte")
@@ -98,11 +99,9 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     scene.advance_paloma_dialog()
     assert scene.paloma_dialog_open is False
 
-    # 4. Siguiente objetivo de campaña debe ser Buenavista
-    assert scene.get_current_campaign_poi() == "buenavista"
+    assert scene.get_current_campaign_poi() == "ventana"
 
-    # Simular llegada y victoria en Buenavista (2 rondas: Cine + Trend), Metropolitano y Aeropuerto
-    for poi_key in ["buenavista", "metropolitano", "aeropuerto", "aleta"]:
+    for poi_key in ["ventana", "buenavista", "metropolitano", "aleta"]:
         scene._notify_poi_arrival(poi_key)
         while scene.paloma_dialog_open:
             scene.advance_paloma_dialog()
@@ -116,6 +115,9 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     scene.quest_card_open = False
     scene.paloma_dialog_open = False
     scene._notify_poi_arrival("mallorquin")
+    assert scene.quest_card_open is False
+    assert scene.paloma_dialog_open is False
+    scene._notify_poi_arrival("aeropuerto")
     assert scene.quest_card_open is False
     assert scene.paloma_dialog_open is False
 
@@ -160,8 +162,7 @@ def test_char_character_propagation_and_assets():
     assert isinstance(sm.current_state, UninorteSprintMicrogame)
     assert sm.current_state.character_id == "char"
 
-    # Al lanzar Aeropuerto (PunchAlert), el microjuego recibe character_id="char"
-    scene.active_poi = "aeropuerto"
+    scene.active_poi = "ventana"
     scene.current_level_stage_idx = 0
     scene._launch_microgame()
     assert isinstance(sm.current_state, PunchAlertMicrogame)

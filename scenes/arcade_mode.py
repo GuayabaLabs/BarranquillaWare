@@ -107,11 +107,11 @@ class ArcadeModeScene(BaseState):
         self.confetti_particles = []
 
         # Tipografías acuarela del proyecto (IndieFlower-Regular)
-        self.font_huge = self.assets.cargarFuenteCuento(64)
-        self.font_title = self.assets.cargarFuenteCuento(44)
+        self.font_huge = self.assets.cargarFuenteTitulo(64)
+        self.font_title = self.assets.cargarFuenteTitulo(44)
         self.font_sub = self.assets.cargarFuenteCuento(28)
-        self.font_btn = self.assets.cargarFuenteCuento(24)
-        self.font_rec = self.assets.cargarFuenteCuento(23)
+        self.font_btn = self.assets.cargarFuenteTitulo(24)
+        self.font_rec = self.assets.cargarFuenteTitulo(23)
 
         # Caché de fondos acuarela y overlays (cero loops de 1080 líneas)
         self._build_watercolor_assets()

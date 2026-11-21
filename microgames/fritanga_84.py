@@ -349,16 +349,16 @@ class Fritanga84Microgame(BaseMicrogame):
             return False
 
         self.fuenteHud = self.assets.cargarFuenteCuento(40)
-        self.fuenteArepa = self.assets.cargarFuenteCuento(34)
-        self.fuenteMensaje = self.assets.cargarFuenteCuento(40)
+        self.fuenteArepa = self.assets.cargarFuenteTitulo(30)
+        self.fuenteMensaje = self.assets.cargarFuenteTitulo(34)
         self.fuenteGlobo = self.assets.cargarFuenteCuento(30)
         self.fuenteChat = self.assets.cargarFuenteCuento(22)
         self.fuenteTrol = self.assets.cargarFuenteCuento(24)
         self.fuenteAyuda = self.assets.cargarFuenteCuento(28)
-        self.fuenteBoton = self.assets.cargarFuenteCuento(32)
+        self.fuenteBoton = self.assets.cargarFuenteTitulo(30)
         self.fuenteCelular = self.assets.cargarFuenteCuento(30)
         self.fuenteVistas = self.assets.cargarFuenteCuento(48)
-        self.fuentePregunta = self.assets.cargarFuenteCuento(64)
+        self.fuentePregunta = self.assets.cargarFuenteTitulo(58)
         self.fuenteCuaderno = self.assets.cargarFuenteCuento(54)
         self.fuenteTutorial = self.assets.cargarFuenteCuento(36)
 
@@ -2106,7 +2106,7 @@ class Fritanga84Microgame(BaseMicrogame):
         self.bordeRojo.set_alpha(int(255 * (0.5 + 0.5 * destello)))
         surface.blit(self.bordeRojo, (0, 0))
         if "ayMeQueme" not in self.globosHechos:
-            grande = self.assets.cargarFuenteCuento(96)
+            grande = self.assets.cargarFuenteTitulo(88)
             self.globosHechos["ayMeQueme"] = self.textoBorde(grande, "¡Ay, me quemé!", (255, 236, 200), (150, 30, 20), 6)
         texto = self.globosHechos["ayMeQueme"]
         golpe = 1.0 + 0.6 * (1.0 - min(1.0, t / 0.2)) ** 2

@@ -93,7 +93,7 @@ class FreePlayScene(BaseState):
 
         # Tipografías acuarela del proyecto (IndieFlower-Regular)
         self.font_sub = self.assets.cargarFuenteCuento(24)
-        self.font_card_title = self.assets.cargarFuenteCuento(24)
+        self.font_card_title = self.assets.cargarFuenteTitulo(24)
         self.font_card_district = self.assets.cargarFuenteCuento(17)
         self.font_card_desc = self.assets.cargarFuenteCuento(17)
         self.font_badge = self.assets.cargarFuenteCuento(18)
@@ -184,9 +184,9 @@ class FreePlayScene(BaseState):
             },
             {
                 "id": "punch_alert",
-                "title": "¡DESPACHA EL SPAM!",
-                "district": "AEROPUERTO CORTISSOZ",
-                "desc": "Batea las alertas invasivas y deja pasar las noticias reales.",
+                "title": "EL POST DEL ARBOLITO",
+                "district": "VENTANA AL MUNDO",
+                "desc": "Saca de tu publicación lo que no debes compartir.",
                 "difficulty": 4,
                 "theme_color": (68, 148, 198),
                 "cls": PunchAlertMicrogame,

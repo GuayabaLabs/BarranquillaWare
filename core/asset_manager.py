@@ -1,3 +1,4 @@
+import math
 import os
 import numpy as np
 import pygame
@@ -10,8 +11,30 @@ except ImportError:
 
 # Fuente de cuento que usa el juego de la montaña rusa
 rutaFuenteCuento = os.path.join("coaster_game", "fuenteLetra", "IndieFlower-Regular.ttf")
+rutaFuenteTitulos = os.path.join("assets", "Titulos.ttf")
 # Código del juego de la montaña rusa, para reutilizar sus dibujos (tarjeta, marco de cámara, nubes)
 rutaCoaster = os.path.join("coaster_game", "Coaster.py")
+
+class FuenteTitulo(pygame.font.Font):
+
+    def __init__(self, ruta: str, tam: int) -> None:
+        super().__init__(ruta, tam)
+        muestra = super().render("H", True, (0, 0, 0))
+        tinta = muestra.get_bounding_rect()
+        self.altoMayuscula = max(1, tinta.height)
+        self.bajoLinea = muestra.get_height() - tinta.bottom
+
+    def render(self, text, antialias, color, bgcolor=None):
+        letras = super().render(text, antialias, color, bgcolor)
+        if not antialias or bgcolor is not None or not text or "\n" in str(text):
+            return letras
+        alto = letras.get_height()
+        mitad = alto - self.bajoLinea - self.altoMayuscula / 2.0
+        medio = int(math.ceil(max(mitad, alto - mitad)))
+        centrado = pygame.Surface((letras.get_width(), medio * 2), pygame.SRCALPHA)
+        centrado.blit(letras, (0, int(round(medio - mitad))), special_flags=pygame.BLEND_RGBA_MAX)
+        return centrado
+
 
 # Puntos dentro de las asas y entre las hojas del trofeo donde también hay fondo blanco
 # (en fracción del ancho y del alto de la imagen)
@@ -479,6 +502,17 @@ class AssetManager:
             fuente = pygame.font.Font(rutaFuenteCuento, tam)
         else:
             fuente = pygame.font.SysFont("trebuchetms,verdana,arial", tam, bold=True)
+        self._font_cache[clave] = fuente
+        return fuente
+
+    def cargarFuenteTitulo(self, tam: int) -> pygame.font.Font:
+        clave = f"titulo_{tam}"
+        if clave in self._font_cache:
+            return self._font_cache[clave]
+        if os.path.exists(rutaFuenteTitulos):
+            fuente = FuenteTitulo(rutaFuenteTitulos, tam)
+        else:
+            fuente = self.cargarFuenteCuento(tam)
         self._font_cache[clave] = fuente
         return fuente
 

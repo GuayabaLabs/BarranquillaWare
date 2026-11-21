@@ -1003,6 +1003,15 @@ def pegarChispa(sup, punto, color, r, alfa=255):
     sup.blit(chispa, chispa.get_rect(center=(round(punto[0]), round(punto[1]))))
 
 
+def sonarFuego(clave, t):
+    # Sonido del estallido (módulo común de BarranquillaWare); si el Coaster corre solo, sin sonido
+    try:
+        from effects.fuegos_sonido import avisar_estallido
+    except ImportError:
+        return
+    avisar_estallido(clave, t, subidaFuego)
+
+
 def dibujarFuego(sup, centro, figura, escala, t, paleta, duracion=estallidoFuego, tamChispa=4, detalle=False,
                  chispitas=False):
     # fuego artificial: un cohete sube desde abajo y estalla en chispas de luz que forman la figura.
@@ -1502,6 +1511,17 @@ def cargarFuente(tam):
             if nombre.lower().endswith((".ttf", ".otf")):
                 return pygame.font.Font(os.path.join(carpetaFuenteLetra, nombre), int(tam * 1.3))
     return pygame.font.SysFont("trebuchetms,verdana,arial", tam, bold=True)
+
+
+def cargarFuenteTitulo(tam):
+    ruta = os.path.join(os.path.dirname(carpeta), "assets", "Titulos.ttf")
+    if os.path.exists(ruta):
+        try:
+            from core.asset_manager import FuenteTitulo
+            return FuenteTitulo(ruta, int(tam * 1.15))
+        except ImportError:
+            return pygame.font.Font(ruta, int(tam * 1.15))
+    return cargarFuente(tam)
 
 
 def crearBarra():
@@ -2239,6 +2259,7 @@ class Juego:
         pygame.display.set_caption("Lápiz coaster")
         self.reloj = pygame.time.Clock()
         self.fuentes = {n: cargarFuente(n) for n in (14, 16, 20, 26, 36, 54)}
+        self.fuentesTitulo = {n: cargarFuenteTitulo(n) for n in (20, 36)}
         self.fondoBase = crearFondo()
         self.fondos = {}                 # cada fondo se carga la primera vez que se juega su nivel
         self.barra = crearBarra()
@@ -2752,6 +2773,12 @@ class Juego:
             self.pantalla.blit(self.fuentes[tam].render(s, True, cOscuro), r.move(2, 2))
         self.pantalla.blit(sup, r)
 
+    def titulo(self, s, tam, color, punto, alinear="topleft"):
+        sup = self.fuentesTitulo[tam].render(s, True, color)
+        r = sup.get_rect()
+        setattr(r, alinear, punto)
+        self.pantalla.blit(sup, r)
+
     def textoEscalado(self, s, tam, color, centro, escala=1.0, alfa=255):
         sup = self.fuentes[tam].render(s, True, color)
         if abs(escala - 1) > 0.01:
@@ -3002,7 +3029,7 @@ class Juego:
         s.blit(almacen[("barra", hora)], (0, margenInf))
         if self.estado in ("dibujar", "tutorial"):
             for b in (self.botProbar, self.botDeshacer, self.botBorrar):
-                b.dibujar(s, self.fuentes[20])
+                b.dibujar(s, self.fuentesTitulo[20])
         if self.camara is not None and self.estado in ("dibujar", "viajando", "resultado", "tutorial"):
             vista = self.superficieCamara()
             if vista:
@@ -3057,6 +3084,7 @@ class Juego:
                     tam = escala * (0.97 + 0.18 * temblorFijo(vuelta, semilla + 0.9))
                     dibujarFuego(s, lugar, puntosFigura(forma), tam, ef % ciclo, paletaVuelta(paleta, vuelta),
                                  detalle=forma != "k", chispitas=forma == "circulo")
+                    sonarFuego(("coaster", i, j), ef % ciclo)
         if self.resultado["estrellas"] < 3:
             return
         # arriba se turnan: primero el felicidades solo (siempre amarillo) y en la siguiente vuelta un fuego redondo
@@ -3064,6 +3092,7 @@ class Juego:
         if ef > 0:
             arriba = (tarjeta.centerx, tarjeta.top - 62)
             vuelta = int(ef // cicloFuego)
+            sonarFuego(("coaster", "arriba"), ef % cicloFuego)
             if vuelta % 2 == 0:
                 dibujarFuego(s, arriba, puntosTexto("¡Felicidades!", self.fuentes[54]), 1, ef % cicloFuego,
                              paletasFuego["dorado"], 2.4, 3)
@@ -3096,7 +3125,7 @@ class Juego:
             lineasReflexion = partirTexto(res["reflexion"], self.fuentes[20], tarjeta.w - 150)
         altoBloque = 50 + (40 if res["texto"] else 0) + (78 if res["gano"] else 0) + 28 * len(lineasReflexion)
         y = (arriba + abajo - altoBloque) / 2
-        self.texto(res["titulo"], 36, cOscuro, (tarjeta.centerx, y + 25), "center")
+        self.titulo(res["titulo"], 36, cOscuro, (tarjeta.centerx, y + 25), "center")
         y += 58
         if res["texto"]:
             self.texto(res["texto"], 16, cOscuro, (tarjeta.centerx, y), "midtop")
@@ -3136,7 +3165,7 @@ class Juego:
                     if tam > 0.5:
                         lavado(s, puntosEstrella((cx + 10, cy - 14), tam, 0.25, 4), cCrema, 240, 0.1)
         for b in self.botonesAhora():
-            b.dibujar(s, self.fuentes[20])
+            b.dibujar(s, self.fuentesTitulo[20])
 
     def lineasEscritas(self, frases):
         lineas = []
@@ -3272,14 +3301,14 @@ class Juego:
                 punto = puntoNitido(cMaderaOsc if i < self.paso else cCrema, 4)
             s.blit(punto, punto.get_rect(center=(round(x0 + i * 18), cy)))
         for b in self.botonesAhora():
-            b.dibujar(s, self.fuentes[20])
+            b.dibujar(s, self.fuentesTitulo[20])
 
     def dibujarCalibracion(self):
         s = self.pantalla
         s.blit(self.fondoBase, (0, 0))
         dibujarNubes(s, self.tiempo)
         tarjetaPintada(s, pygame.Rect(10, 20, 1080, 660))
-        self.texto("Calibra tu lápiz", 36, cOscuro, (self.rectVista.x, 100))
+        self.titulo("Calibra tu lápiz", 36, cOscuro, (self.rectVista.x, 100))
         # la cámara va dentro de elementos/marcoCamara; si no hay imagen, sobre un papelito con contorno de tinta
         hayMarco = cargarMarco() is not None
         if not hayMarco:
@@ -3314,7 +3343,7 @@ class Juego:
         frase = "Para jugar, deja el lápiz sobre el botón jugar o pulsa enter en el teclado."
         for i, linea in enumerate(partirTexto(frase, self.fuentes[20], 400)):
             self.texto(linea, 20, cMaderaOsc, (590, 410 + i * 30))
-        self.botJugar.dibujar(s, self.fuentes[20])
+        self.botJugar.dibujar(s, self.fuentesTitulo[20])
 
     def dibujar(self):
         if self.estado == "calibrar":

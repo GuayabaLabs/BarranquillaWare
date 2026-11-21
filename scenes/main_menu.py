@@ -95,7 +95,7 @@ class MainMenuScene(BaseState):
         # 6. Modales acuarela y Tipografía 1080p
         self.active_modal: Optional[str] = None
         self.modal_alpha: float = 0.0
-        self.font_title = self.assets.cargarFuenteCuento(36)
+        self.font_title = self.assets.cargarFuenteTitulo(36)
         self.font_body = self.assets.cargarFuenteCuento(27)
         self._modal_frame = self.assets.get_scaled("recuadro_partida_guardada.png", target_width=1020)
         self._modal_inner = self.assets.get_scaled("tarjeta_slot_partida.png", target_width=760)

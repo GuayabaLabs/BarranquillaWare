@@ -38,6 +38,8 @@ class Engine:
         self.width = int(self.settings.get("window_width", self.VIRTUAL_WIDTH))
         self.height = int(self.settings.get("window_height", self.VIRTUAL_HEIGHT))
         self.is_fullscreen = bool(self.settings.get("fullscreen", False))
+        if not self.is_fullscreen:
+            self.width, self.height = self._fit_window_to_desktop(self.width, self.height)
 
         self.virtual_surface = pygame.Surface((self.VIRTUAL_WIDTH, self.VIRTUAL_HEIGHT))
         pygame.display.set_caption(self.title)
@@ -147,6 +149,7 @@ class Engine:
             flags = (pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE) if self.enable_gl else (pygame.DOUBLEBUF | pygame.RESIZABLE)
             self.width = max(640, int(self.settings.get("window_width", self.VIRTUAL_WIDTH)))
             self.height = max(360, int(self.settings.get("window_height", self.VIRTUAL_HEIGHT)))
+            self.width, self.height = self._fit_window_to_desktop(self.width, self.height)
             target_size = (self.width, self.height)
 
         self.screen = pygame.display.set_mode(target_size, flags)
@@ -155,31 +158,73 @@ class Engine:
             self.width, self.height = actual_size
         self.settings.save()
 
-    def _map_mouse_event(self, event: pygame.event.Event) -> pygame.event.Event:
-        """Traduce las coordenadas del mouse de la ventana a coordenadas virtuales (1920x1080)."""
-        if not self.enable_gl or self.gl_renderer is None:
-            win_w, win_h = pygame.display.get_window_size()
-            scale_x = self.VIRTUAL_WIDTH / max(1, win_w)
-            scale_y = self.VIRTUAL_HEIGHT / max(1, win_h)
-            virt_x = int(event.pos[0] * scale_x)
-            virt_y = int(event.pos[1] * scale_y)
-            event_dict = dict(event.__dict__)
-            event_dict['pos'] = (virt_x, virt_y)
-            if 'rel' in event_dict:
-                event_dict['rel'] = (int(event_dict['rel'][0] * scale_x), int(event_dict['rel'][1] * scale_y))
-            return pygame.event.Event(event.type, event_dict)
+    @staticmethod
+    def _fit_window_to_desktop(width: int, height: int):
+        """Ajusta la ventana (16:9) para que quepa en el escritorio con barra de título y de tareas.
 
+        Si la ventana es más alta que la pantalla, Windows encoge el área de dibujo sin avisar;
+        con OpenGL (que dibuja desde abajo) la imagen se ve corrida hacia arriba respecto al clic.
+        """
+        try:
+            sizes = pygame.display.get_desktop_sizes()
+        except pygame.error:
+            sizes = []
+        if not sizes:
+            return width, height
+        desk_w, desk_h = sizes[0]
+        max_w, max_h = int(desk_w * 0.92), int(desk_h * 0.86)  # margen para bordes, título y barra de tareas
+        if width <= max_w and height <= max_h:
+            return width, height
+        escala = min(max_w / width, max_h / height)
+        return max(640, int(width * escala)), max(360, int(height * escala))
+
+    def _client_size(self):
+        """Tamaño REAL del área de dibujo de la ventana.
+
+        En Windows se consulta al sistema (GetClientRect): si la ventana no cabe, Windows la recorta y
+        pygame puede seguir reportando el tamaño pedido, lo que desalinea el dibujo y el clic.
+        """
         win_w, win_h = pygame.display.get_window_size()
-        self.gl_renderer.compute_viewport(win_w, win_h)
-        virt_x, virt_y = self.gl_renderer.screen_to_virtual(event.pos[0], event.pos[1])
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                hwnd = pygame.display.get_wm_info().get("window")
+                if hwnd:
+                    rect = wintypes.RECT()
+                    if ctypes.windll.user32.GetClientRect(hwnd, ctypes.byref(rect)):
+                        cw, ch = rect.right - rect.left, rect.bottom - rect.top
+                        if cw > 0 and ch > 0:
+                            return cw, ch
+            except Exception:
+                pass
+        return win_w, win_h
+
+    def _letterbox(self, win_w: int, win_h: int):
+        """Escala y desplazamiento del lienzo 1920x1080 dentro de la ventana (igual para dibujo y clic)."""
+        scale = min(win_w / self.VIRTUAL_WIDTH, win_h / self.VIRTUAL_HEIGHT)
+        draw_w = max(1, int(self.VIRTUAL_WIDTH * scale))
+        draw_h = max(1, int(self.VIRTUAL_HEIGHT * scale))
+        return scale, (win_w - draw_w) // 2, (win_h - draw_h) // 2, draw_w, draw_h
+
+    def _map_mouse_event(self, event: pygame.event.Event) -> pygame.event.Event:
+        """Traduce las coordenadas del mouse de la ventana a coordenadas virtuales (1920x1080).
+
+        Usa el mismo tamaño real de ventana y el mismo letterbox que el dibujo, en OpenGL y sin él.
+        """
+        win_w, win_h = self._client_size()
+        if not self.enable_gl or self.gl_renderer is None:
+            scale, off_x, off_y, _, _ = self._letterbox(win_w, win_h)
+            virt_x = int((event.pos[0] - off_x) / max(1e-6, scale))
+            virt_y = int((event.pos[1] - off_y) / max(1e-6, scale))
+        else:
+            self.gl_renderer.compute_viewport(win_w, win_h)
+            scale = self.gl_renderer.scale
+            virt_x, virt_y = self.gl_renderer.screen_to_virtual(event.pos[0], event.pos[1])
         event_dict = dict(event.__dict__)
         event_dict['pos'] = (virt_x, virt_y)
-
-        if 'rel' in event_dict and self.gl_renderer.scale > 0:
-            rel_x = int(event_dict['rel'][0] / self.gl_renderer.scale)
-            rel_y = int(event_dict['rel'][1] / self.gl_renderer.scale)
-            event_dict['rel'] = (rel_x, rel_y)
-
+        if 'rel' in event_dict and scale > 0:
+            event_dict['rel'] = (int(event_dict['rel'][0] / scale), int(event_dict['rel'][1] / scale))
         return pygame.event.Event(event.type, event_dict)
 
     def _translate_joystick_event(self, event: pygame.event.Event) -> list:
@@ -334,7 +379,7 @@ class Engine:
 
     def _render_current_frame(self) -> None:
         current_state = self.state_machine.current_state
-        win_w, win_h = pygame.display.get_window_size()
+        win_w, win_h = self._client_size()
         particles = getattr(current_state, "particles", None)
 
         # Solo procesar como sistema de partículas del motor si implementa la interfaz requerida
@@ -390,11 +435,7 @@ class Engine:
 
             # Mantener 16:9 también sin OpenGL: escalar el lienzo completo a
             # la ventana deformaba la imagen y las coordenadas de interacción.
-            scale = min(win_w / self.VIRTUAL_WIDTH, win_h / self.VIRTUAL_HEIGHT)
-            draw_w = max(1, int(self.VIRTUAL_WIDTH * scale))
-            draw_h = max(1, int(self.VIRTUAL_HEIGHT * scale))
-            offset_x = (win_w - draw_w) // 2
-            offset_y = (win_h - draw_h) // 2
+            scale, offset_x, offset_y, draw_w, draw_h = self._letterbox(win_w, win_h)
             self.screen.fill((10, 10, 14))
             scaled = pygame.transform.smoothscale(self.virtual_surface, (draw_w, draw_h))
             self.screen.blit(scaled, (offset_x, offset_y))

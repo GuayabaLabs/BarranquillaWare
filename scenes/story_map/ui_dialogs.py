@@ -174,8 +174,9 @@ class StoryMapUI:
         pygame.draw.rect(vic_surf, (20, 25, 42, 250), (0, 0, vw, vh), border_radius=28)
         pygame.draw.rect(vic_surf, (255, 215, 60), (0, 0, vw, vh), width=4, border_radius=28)
 
-        font_v_title = pygame.font.SysFont("Arial Black, Impact", 38)
-        font_v_sub = pygame.font.SysFont("Arial Black, Impact", 22)
+        assets = AssetManager.get_instance()
+        font_v_title = assets.cargarFuenteTitulo(44)
+        font_v_sub = assets.cargarFuenteTitulo(26)
         font_v_body = pygame.font.SysFont("Arial, sans-serif", 17)
 
         title_text = "¡ORGULLO DE CURRAMBA!"
@@ -255,7 +256,7 @@ class StoryMapUI:
         d_surf.blit(paloma_guide, (dw - paloma_guide.get_width() - 32, 24))
 
         char_name = "LA PALOMA GUÍA"
-        font_d_title = pygame.font.SysFont("Arial Black, Impact", 24)
+        font_d_title = AssetManager.get_instance().cargarFuenteTitulo(26)
         font_d_body = pygame.font.SysFont("Arial, sans-serif", 16)
         font_d_sub = pygame.font.SysFont("Arial Black, Impact", 13)
 
@@ -292,7 +293,7 @@ class AvisoTrofeo:
         self.trofeo = assets.cargarTrofeo(210)
         self.botonCerrar = self.ponerBorde(assets.cargarSinFondo(os.path.join("Interfaz", "botonX.jpg"), 92))
         self.fuenteFelicidades = assets.cargarFuenteCuento(42)
-        self.fuenteNombre = assets.cargarFuenteCuento(58)
+        self.fuenteNombre = assets.cargarFuenteTitulo(54)
 
         self.cajaVentana = self.ventana.get_rect(center=(screen_w // 2, screen_h // 2))
         # La X va por fuera de la ventana, sobre la esquina de arriba a la derecha

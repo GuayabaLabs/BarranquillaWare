@@ -115,7 +115,7 @@ class SideNavDrawer:
         self.trofeoGris = assets.cargarTrofeo(120, enGris=True)
         self.trofeoColorCompacto = assets.cargarTrofeo(78)
         self.trofeoGrisCompacto = assets.cargarTrofeo(78, enGris=True)
-        self.fuenteTitulo = assets.cargarFuenteCuento(62)
+        self.fuenteTitulo = assets.cargarFuenteTitulo(62)
         self.fuenteTituloMensajes = assets.cargarFuenteCuento(56)
         self.fuenteNombre = assets.cargarFuenteCuento(34)
         self.fuenteDetalle = assets.cargarFuenteCuento(25)
