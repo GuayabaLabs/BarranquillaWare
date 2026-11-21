@@ -223,14 +223,14 @@ class CharacterSelectScene(BaseState):
         # 3. Icono derecho (pulgar con bocadillo de corazón) en tamaño proporcional
         like_rect = pygame.Rect(1456, 115, 684, 491)
         like_sub = raw_i.subsurface(like_rect)
-        target_lw = 230
+        target_lw = 175
         target_lh = int(target_lw * like_rect.height / like_rect.width)
         self.icon_right_surf = pygame.transform.smoothscale(like_sub, (target_lw, target_lh))
 
         self.title_center_x = 960
         self.title_center_y = 135
         self.icon_left_pos = (390, 135)
-        self.icon_right_pos = (1530, 135)
+        self.icon_right_pos = (1485, 146)
 
     def _init_cards(self) -> None:
         centers_x = [330, 750, 1170, 1590]
@@ -275,9 +275,9 @@ class CharacterSelectScene(BaseState):
         )
 
         # Botones de audio
-        audio_frames = self.assets.get_audio_button_frames(target_size=86)
+        audio_frames = self.assets.get_audio_button_frames(target_size=82)
         self.btn_music = UIButton(
-            center_pos=(1710, 78),
+            center_pos=(1730, 76),
             normal_sprite=audio_frames[0],
             alt_sprite=audio_frames[1],
             is_toggle=True,
@@ -285,13 +285,23 @@ class CharacterSelectScene(BaseState):
             on_click=self.audio.toggle_music
         )
         self.btn_sound = UIButton(
-            center_pos=(1822, 78),
+            center_pos=(1832, 76),
             normal_sprite=audio_frames[2],
             alt_sprite=audio_frames[3],
             is_toggle=True,
             initial_toggle_state=self.audio.sound_enabled,
             on_click=self.audio.toggle_sound
         )
+        voice_frames = self.assets.get_voice_button_frames(target_size=82)
+        self.btn_voice = UIButton(
+            center_pos=(1628, 76),
+            normal_sprite=voice_frames[0],
+            alt_sprite=voice_frames[1],
+            is_toggle=True,
+            initial_toggle_state=self.audio.voice_enabled,
+            on_click=self.audio.toggle_voice
+        )
+        self._draws_voice_badge = True
 
         self.buttons: List[UIButton] = [
             self.btn_back,
@@ -324,6 +334,8 @@ class CharacterSelectScene(BaseState):
     def sync_audio_buttons(self) -> None:
         self.btn_music.toggle_state = self.audio.music_enabled
         self.btn_sound.toggle_state = self.audio.sound_enabled
+        if hasattr(self, "btn_voice"):
+            self.btn_voice.toggle_state = self.audio.voice_enabled
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.sync_audio_buttons()
@@ -331,8 +343,12 @@ class CharacterSelectScene(BaseState):
         self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        for btn in self.buttons:
-            btn.handle_event(event)
+        all_buttons = list(self.buttons)
+        if hasattr(self, "btn_voice"):
+            all_buttons.append(self.btn_voice)
+        for btn in all_buttons:
+            if btn.handle_event(event) and event.type != pygame.MOUSEMOTION:
+                return
 
         if event.type == pygame.MOUSEMOTION:
             for card in self.cards:
@@ -361,6 +377,8 @@ class CharacterSelectScene(BaseState):
 
         for btn in self.buttons:
             btn.update(dt)
+        if hasattr(self, "btn_voice"):
+            self.btn_voice.update(dt)
 
         for card in self.cards:
             card.update(dt)
@@ -385,6 +403,10 @@ class CharacterSelectScene(BaseState):
         # 5. Botones UI
         for btn in self.buttons:
             btn.render(surface)
+        if hasattr(self, "btn_voice"):
+            self.btn_voice.render(surface)
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface, right_top=(1873, 130))
 
     def _render_button_glow(self, surface: pygame.Surface) -> None:
         pulse = math.sin(self.timer * 3.6) * 0.5 + 0.5

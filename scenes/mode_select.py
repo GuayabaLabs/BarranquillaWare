@@ -129,6 +129,16 @@ class ModeSelectScene(BaseState):
             initial_toggle_state=self.audio.sound_enabled,
             on_click=self.audio.toggle_sound
         )
+        voice_frames = self.assets.get_voice_button_frames(target_size=86)
+        self.btn_voice = UIButton(
+            (1598, 78),
+            voice_frames[0],
+            alt_sprite=voice_frames[1],
+            is_toggle=True,
+            initial_toggle_state=self.audio.voice_enabled,
+            on_click=self.audio.toggle_voice
+        )
+        self._draws_voice_badge = True
 
         # Tarjetas de Modo de Juego
         card_w = 470
@@ -150,7 +160,10 @@ class ModeSelectScene(BaseState):
             self.btn_libre
         ]
         # Teclado / mando: foco inicial en "Modo Historia"
-        self.focus_nav = FocusNavigator(lambda: self.buttons, default_index=3)
+        self.focus_nav = FocusNavigator(
+            lambda: [*self.buttons, self.btn_voice] if hasattr(self, "btn_voice") else self.buttons,
+            default_index=3,
+        )
 
     def _init_story_save_modal(self) -> None:
         """Inicializa el modal acuarela de 'Continuar Partida' vs 'Nueva Partida' para el Modo Historia."""
@@ -199,6 +212,8 @@ class ModeSelectScene(BaseState):
         """Sincroniza el estado visual de los toggles con el AudioManager (SSOT)."""
         self.btn_music.toggle_state = self.audio.music_enabled
         self.btn_sound.toggle_state = self.audio.sound_enabled
+        if hasattr(self, "btn_voice"):
+            self.btn_voice.toggle_state = self.audio.voice_enabled
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.sync_audio_buttons()
@@ -420,7 +435,10 @@ class ModeSelectScene(BaseState):
                 self._trigger_paloma_reaction()
                 return
 
-        for btn in self.buttons:
+        all_buttons = list(self.buttons)
+        if hasattr(self, "btn_voice"):
+            all_buttons.append(self.btn_voice)
+        for btn in all_buttons:
             consumed = btn.handle_event(event)
             if consumed and event.type != pygame.MOUSEMOTION:
                 break
@@ -441,6 +459,8 @@ class ModeSelectScene(BaseState):
         else:
             for btn in self.buttons:
                 btn.update(dt)
+            if hasattr(self, "btn_voice"):
+                self.btn_voice.update(dt)
 
         self._update_paloma(dt)
 
@@ -521,6 +541,10 @@ class ModeSelectScene(BaseState):
         # 3. Botones (Volver, Audio y Tarjetas de modo)
         for btn in self.buttons:
             btn.render(surface)
+        if hasattr(self, "btn_voice"):
+            self.btn_voice.render(surface)
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface, right_top=(1865, 134))
 
         # 4. Toast de notificación flotante
         self._render_toast(surface)

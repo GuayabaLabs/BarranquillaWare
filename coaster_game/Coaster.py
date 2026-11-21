@@ -2013,6 +2013,10 @@ def sonarEscritura(escribiendo):
 
 
 def ponerMusica():
+    gestor = gestorAudio()
+    if gestor is not None and hasattr(gestor, "play_bgm"):
+        gestor.play_bgm("tranquilaMusic.mp3")
+        return
     ruta = os.path.join(os.path.dirname(carpeta), "assets", "tranquilaMusic.mp3")
     if not os.path.exists(ruta):
         return
@@ -2033,9 +2037,13 @@ def callarMusica():
 
 
 def volverMusica():
+    gestor = gestorAudio()
     if almacen.pop("musicaCallada", False):
-        pygame.mixer.music.unpause()
-    elif gestorAudio() is None:
+        if gestor is None or getattr(gestor, "music_enabled", True):
+            pygame.mixer.music.unpause()
+            if gestor is not None and hasattr(gestor, "sync_music_volume"):
+                gestor.sync_music_volume()
+    elif gestor is None:
         ponerMusica()
 
 

@@ -25,7 +25,6 @@ from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
-from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
 
 
 INK_DARK = (78, 51, 35)       # #4E3323 Tinta café principal
@@ -98,8 +97,6 @@ class FreePlayScene(BaseState):
         self.font_card_district = self.assets.cargarFuenteCuento(17)
         self.font_card_desc = self.assets.cargarFuenteCuento(17)
         self.font_badge = self.assets.cargarFuenteCuento(18)
-        self.font_boss_title = self.assets.cargarFuenteTitulo(28)
-        self.font_boss_desc = self.assets.cargarFuenteCuento(20)
         self.font_page = self.assets.cargarFuenteCuento(22)
 
         # 2. Catálogo completo de microjuegos jugables (8 clásicos + 5 nuevos)
@@ -300,15 +297,6 @@ class FreePlayScene(BaseState):
             on_click=self._on_back_clicked,
         )
 
-        # 5. Tarjeta Dorada Acuarela de la Etapa Jefe (siempre visible en la parte inferior)
-        boss_y = nav_y + 44
-        self.boss_card_rect = pygame.Rect(self.grid_start_x, boss_y, self.grid_w, 114)
-        self.boss_card_bg = pygame.transform.smoothscale(raw_card, (self.grid_w, 114))
-        self.boss_btn_surf = make_watercolor_button_surface(
-            self.assets, "orange", "DESAFIAR JEFE", (240, 56), font_size=22
-        )
-        self._boss_hover_lift = 0.0
-
     def _rebuild_page_layout(self) -> None:
         start = self.current_page * self.cards_per_page
         end = min(len(self.games_data), start + self.cards_per_page)
@@ -352,13 +340,10 @@ class FreePlayScene(BaseState):
         count = len(self.card_rects)
         if key in moves:
             self.selected_card_pos = (0 if self.selected_card_pos < 0 else
-                                      (self.selected_card_pos + moves[key]) % (count + 1))
+                                      (self.selected_card_pos + moves[key]) % count)
             return True
         if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE) and self.selected_card_pos >= 0:
-            if self.selected_card_pos == count:
-                self._launch_boss_stage()
-            else:
-                self._launch_game(self._visible_indices[self.selected_card_pos])
+            self._launch_game(self._visible_indices[self.selected_card_pos])
             return True
         return False
 
@@ -396,27 +381,10 @@ class FreePlayScene(BaseState):
                 return
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.boss_card_rect.collidepoint(event.pos):
-                self._launch_boss_stage()
-                return
-
             for slot_idx, rect in enumerate(self.card_rects):
                 if rect.collidepoint(event.pos):
                     self._launch_game(self._visible_indices[slot_idx])
                     return
-
-    def _launch_boss_stage(self) -> None:
-        self.audio.play_click()
-        boss_game = BatallaFloresBossMicrogame(
-            character_id=self.character_id,
-            on_complete_callback=self._on_game_complete,
-        )
-        boss_game.pause_restart_callback = self._launch_boss_stage
-        boss_game.pause_menu_callback = lambda: self._on_game_complete(False)
-        boss_game.pause_return_callback = lambda: self._on_game_complete(False)
-        self._active_microgame = boss_game
-        if hasattr(self, "state_machine") and self.state_machine:
-            self.state_machine.change_state(boss_game)
 
     def _launch_game(self, game_idx: int) -> None:
         self.audio.play_click()
@@ -425,9 +393,9 @@ class FreePlayScene(BaseState):
             character_id=self.character_id,
             on_complete_callback=self._on_game_complete,
         )
-        microgame.pause_restart_callback = lambda: self._launch_game(game_idx)
-        microgame.pause_menu_callback = lambda: self._on_game_complete(False)
-        microgame.pause_return_callback = lambda: self._on_game_complete(False)
+        microgame.pause_restart_callback = lambda idx=game_idx: self._restart_from_pause(idx)
+        microgame.pause_menu_callback = lambda: self._exit_from_pause()
+        microgame.pause_return_callback = lambda: self._exit_from_pause()
         self._active_microgame = microgame
 
         if hasattr(self, "state_machine") and self.state_machine:
@@ -457,9 +425,6 @@ class FreePlayScene(BaseState):
             target = -6.0 if rect.collidepoint(mouse_pos) else 0.0
             cur = self._hover_lifts.get(game_idx, 0.0)
             self._hover_lifts[game_idx] = cur + (target - cur) * blend
-
-        boss_target = -5.0 if self.boss_card_rect.collidepoint(mouse_pos) else 0.0
-        self._boss_hover_lift += (boss_target - self._boss_hover_lift) * blend
 
     def render(self, surface: pygame.Surface) -> None:
         # 1. Fondo acuarela pre-escalado
@@ -513,11 +478,28 @@ class FreePlayScene(BaseState):
             )
             surface.blit(page_lbl, page_lbl.get_rect(center=(page_rect.centerx, page_rect.centery - 1)))
 
-        # 5. Tarjeta de la Etapa Jefe (siempre accesible abajo)
-        self._render_boss_card(surface, mouse_pos)
-
-        # 6. Botón Volver
+        # 5. Botón Volver
         self.btn_back.render(surface)
+        self._draws_voice_badge = True
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface, right_top=(1875, 108))
+
+    def _pop_pause_states(self) -> None:
+        if self.state_machine:
+            from core.microgame_pause import MicrogamePauseState
+            while self.state_machine._states and isinstance(self.state_machine._states[-1], MicrogamePauseState):
+                self.state_machine.pop_state()
+
+    def _exit_from_pause(self) -> None:
+        self._pop_pause_states()
+        self._on_game_complete(False)
+
+    def _restart_from_pause(self, game_idx: int) -> None:
+        self._pop_pause_states()
+        if self.state_machine and self in self.state_machine._states:
+            while len(self.state_machine._states) > 1 and self.state_machine._states[-1] is not self:
+                self.state_machine.pop_state()
+        self._launch_game(game_idx)
 
     def _render_game_card(
         self,
@@ -592,52 +574,3 @@ class FreePlayScene(BaseState):
         card_surf.blit(play_btn, (rect.width - play_btn.get_width() - 24, 196))
 
         surface.blit(card_surf, rect)
-
-    def _render_boss_card(self, surface: pygame.Surface, mouse_pos: Tuple[int, int]) -> None:
-        b_hover = (self.boss_card_rect.collidepoint(mouse_pos) if self.selected_card_pos < 0
-                   else self.selected_card_pos == len(self.card_rects))
-        lift = int(round(self._boss_hover_lift))
-        draw_rect = self.boss_card_rect.move(0, lift)
-
-        shadow = pygame.Surface((draw_rect.width + 14, draw_rect.height + 14), pygame.SRCALPHA)
-        pygame.draw.rect(
-            shadow,
-            (98, 62, 32, 75 if not b_hover else 110),
-            (7, 8, draw_rect.width, draw_rect.height),
-            border_radius=22,
-        )
-        surface.blit(shadow, (draw_rect.x - 7, draw_rect.y - 4))
-
-        b_surf = self.boss_card_bg.copy()
-        # Tinte dorado cálido sutil para destacar el Boss Stage
-        tint = pygame.Surface(draw_rect.size, pygame.SRCALPHA)
-        tint.fill((255, 224, 130, 52 if b_hover else 34))
-        b_surf.blit(tint, (0, 0))
-        border_col = (218, 138, 32) if b_hover else (184, 128, 56)
-        pygame.draw.rect(b_surf, border_col, (4, 4, draw_rect.width - 8, draw_rect.height - 8), width=3, border_radius=20)
-
-        # Emblema de estrella real (cero emoji roto)
-        b_surf.blit(self.emblem_surf, (30, (draw_rect.height - self.emblem_surf.get_height()) // 2))
-
-        txt_boss_t = render_outlined_text(
-            self.font_boss_title,
-            "ETAPA JEFE: LA GRAN GUACHERNA Y BATALLA DE FLORES",
-            (255, 246, 214),
-            (116, 56, 18),
-            thickness=2,
-        )
-        b_surf.blit(txt_boss_t, (112, 18))
-
-        txt_boss_d = self.font_boss_desc.render(
-            "Desafío multietapa de 15s: Esquiva la maicena, toca la tambora y corona al Rey Momo sin pantallas.",
-            True,
-            INK_DARK,
-        )
-        b_surf.blit(txt_boss_d, (114, 62))
-
-        b_surf.blit(
-            self.boss_btn_surf,
-            (draw_rect.width - self.boss_btn_surf.get_width() - 32, (draw_rect.height - self.boss_btn_surf.get_height()) // 2),
-        )
-
-        surface.blit(b_surf, draw_rect)

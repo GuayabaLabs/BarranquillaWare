@@ -37,11 +37,13 @@ class MicrogamePauseState(BaseState):
 
         self.assets = AssetManager.get_instance()
         self.audio = AudioManager.get_instance()
+        self._draws_voice_badge = True
 
         self.selected = 0
         self.items: List[Dict[str, Any]] = [
             {"id": "resume", "label": "CONTINUAR", "asset": "boton_continuar_menu_pausa.png"},
             {"id": "options", "label": "OPCIONES", "asset": "boton_opciones_menu_pausa.png"},
+            {"id": "voice", "label": self._voice_label(), "asset": None},
         ]
         if self.restart_callback:
             self.items.append({"id": "restart", "label": "REINICIAR", "asset": "boton_reiniciar_menu_pausa.png"})
@@ -109,6 +111,9 @@ class MicrogamePauseState(BaseState):
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.selected = (self.selected + 1) % len(self.items)
                 self.audio.play_click()
+            elif event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_a, pygame.K_d):
+                if 0 <= self.selected < len(self.items) and self.items[self.selected]["id"] == "voice":
+                    self._choose()
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
                 self._choose()
             elif event.key == pygame.K_ESCAPE:
@@ -120,8 +125,9 @@ class MicrogamePauseState(BaseState):
             box_y = (1080 - self.box_h) // 2
             start_y = box_y + 90
             spacing = min(92, (self.box_h - 140) // max(1, len(self.items)))
+            btn_h_eff = min(self.btn_h, max(44, spacing - 8))
             for i in range(len(self.items)):
-                btn_rect = pygame.Rect((1920 - self.btn_w) // 2, start_y + i * spacing, self.btn_w, self.btn_h)
+                btn_rect = pygame.Rect((1920 - self.btn_w) // 2, start_y + i * spacing, self.btn_w, btn_h_eff)
                 if btn_rect.collidepoint(event.pos):
                     if self.selected != i:
                         self.selected = i
@@ -133,8 +139,9 @@ class MicrogamePauseState(BaseState):
             box_y = (1080 - self.box_h) // 2
             start_y = box_y + 90
             spacing = min(92, (self.box_h - 140) // max(1, len(self.items)))
+            btn_h_eff = min(self.btn_h, max(44, spacing - 8))
             for i in range(len(self.items)):
-                btn_rect = pygame.Rect((1920 - self.btn_w) // 2, start_y + i * spacing, self.btn_w, self.btn_h)
+                btn_rect = pygame.Rect((1920 - self.btn_w) // 2, start_y + i * spacing, self.btn_w, btn_h_eff)
                 if btn_rect.collidepoint(event.pos):
                     self.selected = i
                     self._choose()
@@ -170,12 +177,24 @@ class MicrogamePauseState(BaseState):
         if self.calibrate_callback:
             self.calibrate_callback()
 
+    def _voice_label(self) -> str:
+        return "VOCES: SÍ" if getattr(self.audio, "voice_enabled", True) else "VOCES: NO"
+
+    def _toggle_voice(self) -> None:
+        if hasattr(self.audio, "toggle_voice"):
+            self.audio.toggle_voice()
+        for it in self.items:
+            if it["id"] == "voice":
+                it["label"] = self._voice_label()
+
     def _choose(self) -> None:
         current_id = self.items[self.selected]["id"]
         if current_id == "resume":
             self._resume()
         elif current_id == "options":
             self._open_options()
+        elif current_id == "voice":
+            self._toggle_voice()
         elif current_id == "restart":
             self.audio.play_click()
             if self.restart_callback:
@@ -225,14 +244,19 @@ class MicrogamePauseState(BaseState):
             pygame.draw.rect(surface, (20, 26, 44), box_rect, border_radius=24)
             pygame.draw.rect(surface, (245, 195, 75), box_rect, width=4, border_radius=24)
 
+        self._draws_voice_badge = True
+        for it in self.items:
+            if it["id"] == "voice":
+                it["label"] = self._voice_label()
         start_y = box_y + 90
         spacing = min(92, (self.box_h - 140) // max(1, len(self.items)))
+        btn_h_eff = min(self.btn_h, max(44, spacing - 8))
 
         for i, it in enumerate(self.items):
             item_id = it["id"]
             btn_x = (surface.get_width() - self.btn_w) // 2
             btn_y = start_y + i * spacing
-            btn_rect = pygame.Rect(btn_x, btn_y, self.btn_w, self.btn_h)
+            btn_rect = pygame.Rect(btn_x, btn_y, self.btn_w, btn_h_eff)
 
             surf = self.button_surfs.get(item_id)
             if surf:
@@ -254,6 +278,8 @@ class MicrogamePauseState(BaseState):
 
         hint = self.font_hint.render("↑ ↓ / CLICK ELEGIR  ·  ENTER/A ACEPTAR  ·  ESC REANUDAR", True, (240, 245, 255))
         surface.blit(hint, hint.get_rect(center=(surface.get_width() // 2, box_y + self.box_h - 38)))
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface)
 
     def prepararPausa(self) -> bool:
         """Carga una sola vez la ventana y los botones nuevos. Devuelve False si falta alguna imagen."""
@@ -266,19 +292,21 @@ class MicrogamePauseState(BaseState):
             # El papel de la ventana va del 18% al 83% del ancho; su centro queda un poco a la derecha
             anchoVentana = self.ventanaPausa.get_width()
             self.centroPapel = 960 - anchoVentana // 2 + int(anchoVentana * 0.508)
-            self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 300)
-            rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 300)
-            # El rojo crece un poquito para que se note cuál está elegido
-            self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
-            self.fuenteTituloPausa = self.assets.cargarFuenteTitulo(84)
-            self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(40)
-            anchoUtil = int(self.botonMorado.get_width() * 0.8)
-            tam = 40
-            while tam > 24 and max(self.fuenteBotonPausa.size(it["label"].capitalize())[0] for it in self.items) > anchoUtil:
-                tam -= 2
-                self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(tam)
-            self.fuenteEstadoPausa = self.assets.cargarFuenteCuento(22)
-            self.fuenteAyudaPausa = self.assets.cargarFuenteCuento(28)
+            n_items = len(self.items)
+            btn_ancho = 272 if n_items >= 7 else (268 if n_items >= 6 else 300)
+            self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), btn_ancho)
+            rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), btn_ancho)
+            if n_items >= 7:
+                self.botonMorado = pygame.transform.smoothscale(self.botonMorado, (272, 62))
+                rojo = pygame.transform.smoothscale(rojo, (272, 62))
+                # El rojo crece un poquito para que se note cuál está elegido
+                self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.04)
+            else:
+                self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
+            self.fuenteTituloPausa = self.assets.cargarFuenteTitulo(74 if n_items >= 7 else 84)
+            self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(38 if n_items >= 7 else (40 if n_items >= 6 else 44))
+            self.fuenteEstadoPausa = self.assets.cargarFuenteCuento(20 if n_items >= 7 else (21 if n_items >= 6 else 22))
+            self.fuenteAyudaPausa = self.assets.cargarFuenteCuento(24 if n_items >= 7 else (25 if n_items >= 6 else 28))
             self.pausaLista = True
         except Exception as e:
             print(f"Aviso: no se pudo cargar la ventana de pausa: {e}")
@@ -290,9 +318,15 @@ class MicrogamePauseState(BaseState):
         if not self.prepararPausa():
             return []
         alto = self.botonMorado.get_height()
-        separacion = 10
-        total = len(self.items) * alto + (len(self.items) - 1) * separacion
-        centro_y = 600 if self.save_callback else 590
+        n_items = len(self.items)
+        separacion = 4 if n_items >= 6 else 10
+        total = n_items * alto + (n_items - 1) * separacion
+        if n_items >= 7:
+            centro_y = 570 if self.save_callback else 558
+        elif n_items >= 6:
+            centro_y = 576 if self.save_callback else 564
+        else:
+            centro_y = 595 if self.save_callback else 585
         arriba = centro_y - total // 2
         cajas = []
         for i in range(len(self.items)):
@@ -327,11 +361,14 @@ class MicrogamePauseState(BaseState):
         surface.blit(self.ventanaPausa, ventana)
 
         cajas = self.cajasBotones()
+        n_items = len(self.items)
         primerBoton = cajas[0].top if cajas else ventana.top + 400
         ultimoBoton = cajas[-1].bottom if cajas else ventana.top + 760
         espacioEstado = 40 if self.save_callback else 0
+        titulo_x = self.centroPapel + 36 if n_items >= 7 else (self.centroPapel + 18 if n_items >= 6 else self.centroPapel)
+        titulo_gap = 38 if n_items >= 7 else (42 if n_items >= 6 else 44)
         titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (110, 62, 150), (255, 250, 238))
-        surface.blit(titulo, titulo.get_rect(midbottom=(self.centroPapel, primerBoton - 44 - espacioEstado)))
+        surface.blit(titulo, titulo.get_rect(midbottom=(titulo_x, primerBoton - titulo_gap - espacioEstado)))
 
         if self.save_callback:
             if self.save_feedback_timer > 0.0:
@@ -341,8 +378,19 @@ class MicrogamePauseState(BaseState):
                 estado_txt = "Auto-guardado activo tras cada misión"
                 estado_col = (116, 76, 48)
             estado_surf = self.fuenteEstadoPausa.render(estado_txt, True, estado_col)
-            surface.blit(estado_surf, estado_surf.get_rect(center=(self.centroPapel, primerBoton - 26)))
+            if n_items >= 6 and estado_surf.get_width() > 295:
+                scale_w = 295 / float(estado_surf.get_width())
+                estado_surf = pygame.transform.smoothscale(
+                    estado_surf,
+                    (295, max(1, int(round(estado_surf.get_height() * scale_w)))),
+                )
+            estado_x = self.centroPapel + 10 if n_items >= 7 else (self.centroPapel + 2 if n_items >= 6 else self.centroPapel)
+            estado_y = primerBoton - 20 if n_items >= 7 else (primerBoton - 24 if n_items >= 6 else primerBoton - 26)
+            surface.blit(estado_surf, estado_surf.get_rect(center=(estado_x, estado_y)))
 
+        for it in self.items:
+            if it["id"] == "voice":
+                it["label"] = self._voice_label()
         for i, caja in enumerate(cajas):
             elegido = i == self.selected
             boton = self.botonRojo if elegido else self.botonMorado
@@ -354,7 +402,12 @@ class MicrogamePauseState(BaseState):
             surface.blit(texto, texto.get_rect(center=(caja.centerx, caja.centery - 3)))
 
         # Ayuda corta debajo de los botones, centrada en el papel
+        ayuda_x = self.centroPapel - 26 if n_items >= 7 else (self.centroPapel - 10 if n_items >= 6 else self.centroPapel)
+        ayuda_y0 = (ultimoBoton + 10) if n_items >= 7 else ((ultimoBoton + 12) if n_items >= 6 else max(ventana.top + 790, ultimoBoton + 16))
+        ayuda_step = 26 if n_items >= 7 else (28 if n_items >= 6 else 30)
         for i, linea in enumerate(("Enter para aceptar", "Esc para seguir")):
             ayuda = self.fuenteAyudaPausa.render(linea, True, (126, 90, 62))
-            surface.blit(ayuda, ayuda.get_rect(midtop=(self.centroPapel, max(ventana.top + 790, ultimoBoton + 16) + i * 30)))
+            surface.blit(ayuda, ayuda.get_rect(midtop=(ayuda_x, ayuda_y0 + i * ayuda_step)))
+        if (not self.state_machine or self.state_machine.current_state is self) and hasattr(self.audio, "render_voice_muted_badge"):
+            self.audio.render_voice_muted_badge(surface)
         return True

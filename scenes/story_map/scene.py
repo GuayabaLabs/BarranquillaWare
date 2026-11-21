@@ -44,7 +44,6 @@ from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
-from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
 
 MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "mallorquin": MallorquinPhotoMicrogame,
@@ -65,8 +64,8 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "buenavista": BuenavistaTrendMicrogame,
     "buenavista_cine": BuenavistaCineMicrogame,
     "buenavista_trend": BuenavistaTrendMicrogame,
-    "aleta": PunchAlertMicrogame,
-    "batalla_flores": BatallaFloresBossMicrogame,
+    "aleta": Fritanga84Microgame,
+    "aleta_campeones": Fritanga84Microgame,
 }
 
 # (Constantes STORY_* y PALOMA_STORY_DIALOGS importadas de scenes.story_map_data)
@@ -188,8 +187,21 @@ class StoryMapScene(BaseState):
         self.iniciarTrofeos()
         self._sync_drawer_data()
 
+    def _is_poi_cleared(self, poi_key: str, completed_games: list) -> bool:
+        """Determina si un POI fue despejado usando sus etapas registradas (o alias de microjuego)."""
+        done_set = set(completed_games or [])
+        stages = STORY_LEVEL_STAGES.get(poi_key, [])
+        if stages and all(st["id"] in done_set for st in stages):
+            return True
+        stage_ids = {st["id"] for st in stages}
+        poi_info = self.poi_registry.get(poi_key, {})
+        m_id = poi_info.get("microgame_id")
+        if m_id and m_id not in stage_ids and m_id in done_set:
+            return True
+        return False
+
     def _count_completed_campaign_levels(self, completed_microgames: Optional[list] = None) -> int:
-        """Cuenta cuántos de los 4 niveles principales de la Historia han sido completados."""
+        """Cuenta cuántos de los 5 niveles principales de la Historia han sido completados."""
         if completed_microgames is None:
             completed_microgames = self.settings.get_story_progress().get("completed_microgames", [])
         done_set = set(completed_microgames)
@@ -239,47 +251,62 @@ class StoryMapScene(BaseState):
             return
         progress = self.settings.get_story_progress()
         completed_microgames = progress.get("completed_microgames", [])
+        completed_set = set(completed_microgames)
         unlocked_locations = progress.get("unlocked_locations", [])
         trofeos_obtenidos = self.leerTrofeosObtenidos()
 
-        # Misiones de campaña
+        def _is_poi_completed(poi_key: str, fallback_stage_id: Optional[str] = None) -> bool:
+            stages = STORY_LEVEL_STAGES.get(poi_key, [])
+            if stages:
+                return all(st["id"] in completed_set for st in stages)
+            return bool(fallback_stage_id and fallback_stage_id in completed_set)
+
+        uninorte_done = _is_poi_completed("uninorte")
+        buenavista_done = _is_poi_completed("buenavista")
+        metro_done = _is_poi_completed("metropolitano")
+        aero_done = _is_poi_completed("aeropuerto")
+        aleta_done = _is_poi_completed("aleta")
+        malecon_done = ("coaster" in completed_set) or ("malecon" in unlocked_locations)
+
+        # Misiones de campaña (las 5 paradas principales + reto secreto del Malecón)
         misiones = [
             {
                 "id": "uninorte",
                 "titulo": "Biblioteca Uninorte",
                 "desc": "Espanta distracciones y vence el doomscrolling.",
-                "completada": "uninorte" in unlocked_locations or "uninorte_concentrate" in completed_microgames,
-            },
-            {
-                "id": "ventana",
-                "titulo": "Ventana al Mundo",
-                "desc": "Arma tu post sin regalar tus datos.",
-                "completada": "ventana" in unlocked_locations or "punch_alert" in completed_microgames,
+                "completada": uninorte_done,
             },
             {
                 "id": "buenavista",
                 "titulo": "C.C. Buenavista",
                 "desc": "Sigue el compás del trend sin volverte viral adicto.",
-                "completada": "buenavista" in unlocked_locations or "buenavista_trend" in completed_microgames,
+                "completada": buenavista_done,
             },
             {
                 "id": "metropolitano",
                 "titulo": "Estadio Metropolitano",
                 "desc": "Modera el chat en vivo y frena la toxicidad.",
-                "completada": "metropolitano" in unlocked_locations or "metropolitano_moderacion" in completed_microgames,
+                "completada": metro_done,
+            },
+            {
+                "id": "aeropuerto",
+                "titulo": "Aeropuerto Cortissoz",
+                "desc": "Batea el phishing y bloquea mensajes sospechosos.",
+                "completada": aero_done,
+            },
+            {
+                "id": "aleta",
+                "titulo": "Aleta del Tiburón",
+                "desc": "Atiende los fritos sin engancharte con el trol.",
+                "completada": aleta_done,
             },
             {
                 "id": "malecon",
                 "titulo": "Gran Malecón del Río",
                 "desc": "Suelta el celular y reconéctate con el Magdalena.",
-                "completada": "malecon" in unlocked_locations or "coaster" in completed_microgames,
+                "completada": malecon_done,
             },
         ]
-        misiones.append({
-            "id": "aleta", "titulo": "Aleta del Tiburón",
-            "desc": "Atiende los fritos sin engancharte con el trol.",
-            "completada": "aleta" in unlocked_locations or "fritanga_84" in completed_microgames,
-        })
         self.side_drawer.ponerMisiones(misiones)
 
         # Mensajes narrativos y alertas de redes
@@ -294,28 +321,35 @@ class StoryMapScene(BaseState):
                 "remitente": "Alerta Digital Uninorte",
                 "asunto": "Zona Libre de Doomscrolling",
                 "cuerpo": "El estudio rinde más cuando silencias las notificaciones innecesarias.",
-                "leido": "uninorte" in unlocked_locations,
-            },
-            {
-                "remitente": "Mirador Ventana al Mundo",
-                "asunto": "Comparte el momento",
-                "cuerpo": "Antes de publicar, piensa quién más puede ver dónde estás y qué tienes.",
-                "leido": "ventana" in unlocked_locations,
+                "leido": uninorte_done,
             },
             {
                 "remitente": "Radar Buenavista",
                 "asunto": "Tendencia en Consciencia",
                 "cuerpo": "Baila por alegría y arte, no para buscar validación en métricas vacías.",
-                "leido": "buenavista" in unlocked_locations,
+                "leido": buenavista_done,
             },
             {
                 "remitente": "Tribuna Metropolitano",
                 "asunto": "Pasión con Respeto",
                 "cuerpo": "El fútbol une a Barranquilla. Deja los insultos y la toxicidad fuera de la red.",
-                "leido": "metropolitano" in unlocked_locations,
+                "leido": metro_done,
+            },
+            {
+                "remitente": "Seguridad Cortissoz",
+                "asunto": "Alerta de Phishing y Estafas",
+                "cuerpo": "Nunca abras enlaces de premios milagrosos ni compartas contraseñas.",
+                "leido": aero_done,
+            },
+            {
+                "remitente": "Aleta del Tiburón",
+                "asunto": "El Sabor del Troll",
+                "cuerpo": "No muerdas el anzuelo del trol. Respira hondo y atiende tu mesa con calma.",
+                "leido": aleta_done,
             },
         ]
         self.side_drawer.ponerMensajes(mensajes)
+        self.side_drawer.show_notification_badge = any(not m.get("leido", False) for m in mensajes)
 
         # Perfil del jugador
         metricas = self._sync_social_hud()
@@ -773,16 +807,6 @@ class StoryMapScene(BaseState):
                     "Viaja ligero de equipaje digital para cerrar tu aventura en calma."
                 ],
                 "rect": self.aeropuerto_rect
-            },
-            "batalla_flores": {
-                "title": "¡BATALLA DE FLORES!",
-                "district": "VÍA 40",
-                "microgame_id": "batalla_flores_boss",
-                "microgame_title": "¡BATALLA DE FLORES!",
-                "desc": [
-                    "Gran desfile folclórico de celebración en la Vía 40."
-                ],
-                "rect": pygame.Rect(self.quad_w - 120, self.quad_h - 120, 240, 240)
             }
         }
 
@@ -1047,9 +1071,10 @@ class StoryMapScene(BaseState):
         )
 
         # Botones de audio tipo toggle dentro del Drawer
-        audio_frames = self.assets.get_audio_button_frames(target_size=64)
+        audio_frames = self.assets.get_audio_button_frames(target_size=60)
+        voice_frames = self.assets.get_voice_button_frames(target_size=60)
         self.btn_drawer_music = UIButton(
-            center_pos=(160, 440),
+            center_pos=(120, 440),
             normal_sprite=audio_frames[0],
             alt_sprite=audio_frames[1],
             is_toggle=True,
@@ -1057,12 +1082,20 @@ class StoryMapScene(BaseState):
             on_click=self.audio.toggle_music
         )
         self.btn_drawer_sound = UIButton(
-            center_pos=(280, 440),
+            center_pos=(220, 440),
             normal_sprite=audio_frames[2],
             alt_sprite=audio_frames[3],
             is_toggle=True,
             initial_toggle_state=self.audio.sound_enabled,
             on_click=self.audio.toggle_sound
+        )
+        self.btn_drawer_voice = UIButton(
+            center_pos=(320, 440),
+            normal_sprite=voice_frames[0],
+            alt_sprite=voice_frames[1],
+            is_toggle=True,
+            initial_toggle_state=self.audio.voice_enabled,
+            on_click=self.audio.toggle_voice
         )
 
         self.drawer_buttons = [
@@ -1070,6 +1103,7 @@ class StoryMapScene(BaseState):
             self.btn_save_game,
             self.btn_drawer_music,
             self.btn_drawer_sound,
+            self.btn_drawer_voice,
             self.btn_calibrate_pointer,
             self.btn_settings,
             self.btn_exit_map
@@ -1188,7 +1222,7 @@ class StoryMapScene(BaseState):
             self.paloma_talk_frames = [self.paloma_guide] * 4
 
     def get_paloma_talk_portrait(self) -> pygame.Surface:
-        """Retorna el sprite activo de la Paloma modulando pico y pestañeo."""
+        """Retorna el sprite activo de la Paloma modulando pico con la voz y pestañeo natural."""
         frames = getattr(self, "paloma_talk_frames", None)
         if not frames or len(frames) < 4:
             return getattr(self, "paloma_dialog_portrait", self.paloma_guide)
@@ -1201,6 +1235,11 @@ class StoryMapScene(BaseState):
         # Pestañeo cada 3.8s durante 0.16s
         if (t % 3.8) < 0.16:
             return frames[3]  # Pestañeo
+
+        # Solo mover el pico mientras la locución esté reproduciéndose activamente
+        is_talking = bool(self.audio.is_voice_playing()) if hasattr(self.audio, "is_voice_playing") else False
+        if not is_talking:
+            return frames[0]
 
         # Modulación de habla a ~6.2 Hz (0 -> 1 -> 2 -> 1)
         step = int((t * 6.2) % 4)
@@ -1261,6 +1300,8 @@ class StoryMapScene(BaseState):
                 if channel is not None:
                     return
 
+        if page_idx > 0 and hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(100)
         if hasattr(self.audio, "play_pigeon") and page_idx == 0:
             self.audio.play_pigeon()
 
@@ -1274,6 +1315,8 @@ class StoryMapScene(BaseState):
             self.paloma_dialog_page_idx += 1
             self._trigger_dialog_voice(self.paloma_dialog_page_idx)
         else:
+            if hasattr(self.audio, "stop_voice"):
+                self.audio.stop_voice(100)
             self.paloma_dialog_open = False
             self.desbloquearTrofeoPorId("charlaPaloma")
             cb = self.paloma_dialog_on_finish
@@ -1555,10 +1598,12 @@ class StoryMapScene(BaseState):
         self.state_machine.push_state(self)
         self.request_exit()
 
-    def _launch_microgame(self) -> None:
+    def _launch_microgame(self, preserve_voice: bool = False) -> None:
         """Lanza el desafío exclusivo del distrito activo (soportando niveles de múltiples rondas encadenadas)."""
         self._close_quest_card()
         self.paloma_dialog_open = False
+        if not preserve_voice and hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(80)
         poi_info = self.poi_registry.get(self.active_poi, {})
 
         stages = STORY_LEVEL_STAGES.get(self.active_poi, [])
@@ -1602,6 +1647,14 @@ class StoryMapScene(BaseState):
             )
         ) if self.state_machine else None
         if hasattr(self, "state_machine") and self.state_machine:
+            prev_state = self.state_machine.current_state
+            if (
+                preserve_voice
+                and prev_state is not None
+                and prev_state is not self
+                and getattr(microgame, "paloma_intro", None) is None
+            ):
+                prev_state.preserve_voice_on_exit = True
             self.state_machine.change_state(microgame)
 
     def _restart_microgame_from_pause(self) -> None:
@@ -1648,7 +1701,7 @@ class StoryMapScene(BaseState):
                     )
                     self._sync_social_hud()
                     # Encadenar directamente la Ronda 2 sin cortar el ritmo con diálogos intermedios
-                    self._launch_microgame()
+                    self._launch_microgame(preserve_voice=True)
                     return
 
             # Nivel completado en su totalidad
@@ -1670,6 +1723,7 @@ class StoryMapScene(BaseState):
                 save_source="auto",
             )
             metrics = self._sync_social_hud()
+            self._sync_drawer_data()
             if metrics:
                 self.settings.update_story_progress(
                     followers=metrics["followers"],
@@ -1688,11 +1742,11 @@ class StoryMapScene(BaseState):
             self.toast_msg = f"¡{poi_info.get('title', 'NIVEL')} DESPEJADO CON ÉXITO!"
             self.toast_timer = 4.0
 
-            # Verificar si se completaron los 4 niveles principales de la Historia
-            all_4_levels_cleared = all(p in unlocked for p in STORY_CAMPAIGN_ORDER)
+            # Verificar si se completaron todos los niveles principales de la Historia
+            all_campaign_cleared = self._count_completed_campaign_levels(completed) >= len(STORY_CAMPAIGN_ORDER)
 
             def _after_post_win_dialog() -> None:
-                if (all_4_levels_cleared or m_id == "batalla_flores_boss" or len(completed) >= 8) and not self.victory_modal_shown:
+                if all_campaign_cleared and not self.victory_modal_shown:
                     self.show_victory_modal = True
                     self.victory_modal_shown = True
                     self._spawn_carnaval_celebration()
@@ -1757,6 +1811,8 @@ class StoryMapScene(BaseState):
             self.camera.stop_drag()
             self.btn_drawer_music.toggle_state = self.audio.music_enabled
             self.btn_drawer_sound.toggle_state = self.audio.sound_enabled
+            if hasattr(self, "btn_drawer_voice"):
+                self.btn_drawer_voice.toggle_state = self.audio.voice_enabled
 
     def _on_save_clicked(self) -> None:
         self.save_current_state(source="manual")
@@ -1837,6 +1893,8 @@ class StoryMapScene(BaseState):
 
     def request_exit(self) -> None:
         """Guarda el progreso y sale directamente al menú principal cuando está disponible."""
+        if hasattr(self.audio, "stop_voice"):
+            self.audio.stop_voice(80)
         self.save_current_state(source="auto")
         if self.on_main_menu_callback:
             self.on_main_menu_callback(self)
@@ -2498,6 +2556,12 @@ class StoryMapScene(BaseState):
         # Asegurar estado limpio de diálogos y popups
         self.show_intro_dialog = False
         self.show_victory_modal = False
+        if hasattr(self, "btn_drawer_voice"):
+            self.btn_drawer_voice.toggle_state = self.audio.voice_enabled
+
+        # Música continua de exploración sin cortes (iniciar antes o junto a la bienvenida sin cortar voces)
+        cafe_track = "cafe_bistro_mapa.ogg" if os.path.exists(os.path.join("assets", "cafe_bistro_mapa.ogg")) else "cafe_bistro_mapa.mp3"
+        self.audio.play_bgm(cafe_track)
 
         # Mostrar diálogo de bienvenida de la Paloma la primera vez que se entra a una partida limpia
         progress = self.settings.get_story_progress()
@@ -2517,10 +2581,6 @@ class StoryMapScene(BaseState):
                     voice_prefix=welcome_cfg.get("voice_clip_prefix", "")
                 )
 
-        # Música continua de exploración sin cortes
-        cafe_track = "cafe_bistro_mapa.ogg" if os.path.exists(os.path.join("assets", "cafe_bistro_mapa.ogg")) else "cafe_bistro_mapa.mp3"
-        self.audio.play_bgm(cafe_track)
-
     def handle_event(self, event: pygame.event.Event) -> None:
         # 1. DevTool intercepta eventos si está activo
         if hasattr(self, "dev_tool"):
@@ -2535,12 +2595,14 @@ class StoryMapScene(BaseState):
 
         # Interacción con el diálogo acuarela de la Paloma
         if getattr(self, "paloma_dialog_open", False):
-            if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_e):
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_e):
                 self.advance_paloma_dialog()
                 return
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.paloma_dialog_open = False
                 self.paloma_dialog_on_finish = None
+                if hasattr(self.audio, "stop_voice"):
+                    self.audio.stop_voice(100)
                 if hasattr(self.audio, "play_hover"):
                     self.audio.play_hover()
                 return
@@ -2826,6 +2888,8 @@ class StoryMapScene(BaseState):
 
     def update(self, dt: float) -> None:
         self.timer += dt
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.toast_timer > 0.0:
             self.toast_timer = max(0.0, self.toast_timer - dt)
             if self.toast_timer == 0.0:
@@ -3156,7 +3220,7 @@ class StoryMapScene(BaseState):
                 pin_center_y = p_screen_y - 18 + int(bob_y)
 
                 # Si el microjuego de la locación fue completado, mostrar Estrella Dorada
-                is_cleared = p_info["microgame_id"] in completed_games
+                is_cleared = self._is_poi_cleared(p_key, completed_games)
                 pin_to_draw = self.poi_star_surf if is_cleared else self.poi_pin_surf
                 if is_cleared and getattr(self, "estrellaPintada", None) is not None:
                     vuelta = (self.timer * 0.45 + (sum(map(ord, p_key)) % 100) / 100.0) % 1.0
@@ -3189,7 +3253,7 @@ class StoryMapScene(BaseState):
                     hx = pr.centerx - cam_x
                     hy = pr.centery - cam_y
                     if -200 < hx < self.screen_w + 200 and -200 < hy < self.screen_h + 200:
-                        is_done = p_info["microgame_id"] in completed_games
+                        is_done = self._is_poi_cleared(p_key, completed_games)
                         halo = self.night_lamp_halo.copy()
                         pulse = 0.82 + 0.18 * math.sin(self.timer * 2.2 + pr.x * 0.01)
                         halo.set_alpha(int((135 if is_done else 215) * pulse))
@@ -3252,6 +3316,8 @@ class StoryMapScene(BaseState):
         if self.menu_anim_t < 0.95:
             self.btn_menu_toggle.render(surface)
 
+        self._draws_voice_badge = True
+
         # 9. Renderizar Drawer Desplegable de Pausa y Guardado
         if self.menu_anim_t > 0.01:
             self._render_drawer_menu(surface)
@@ -3275,6 +3341,13 @@ class StoryMapScene(BaseState):
         # 10C. Aviso de trofeo ganado con sus fuegos artificiales y el vuelo al panel
         if hasattr(self, "avisoTrofeo"):
             self.avisoTrofeo.render(surface)
+
+        if (
+            self.menu_anim_t < 0.2
+            and (not self.state_machine or self.state_machine.current_state is self)
+            and hasattr(self.audio, "render_voice_muted_badge")
+        ):
+            self.audio.render_voice_muted_badge(surface, right_top=(1894, 114))
 
         # 11. Renderizar Herramienta de Desarrollo Visual (DevTool F1)
         if hasattr(self, "dev_tool"):
@@ -3374,6 +3447,12 @@ class StoryMapScene(BaseState):
             drawer_surf.blit(badge_surf, badge_surf.get_rect(center=(self.drawer_w // 2, 232)))
 
         # Renderizar botones del Drawer
+        if hasattr(self, "btn_drawer_music"):
+            self.btn_drawer_music.toggle_state = self.audio.music_enabled
+        if hasattr(self, "btn_drawer_sound"):
+            self.btn_drawer_sound.toggle_state = self.audio.sound_enabled
+        if hasattr(self, "btn_drawer_voice"):
+            self.btn_drawer_voice.toggle_state = getattr(self.audio, "voice_enabled", True)
         for btn in self.drawer_buttons:
             btn.render(drawer_surf)
 
@@ -3487,11 +3566,14 @@ class StoryMapScene(BaseState):
                 self.cambiarImagenBoton(boton, versiones[0], (self.centroPapelMenu, y))
                 self.botonesMenuMapa.append((boton, versiones[0], versiones[1]))
 
-            # Los botones de música y sonido quedan entre guardar y calibrar
-            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 60, 562)
-            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 60, 562)
-            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu + 60, 562)
-            self.btn_drawer_sound.rect.center = (self.centroPapelMenu + 60, 562)
+            # Los botones de música, sonido y voces quedan entre guardar y calibrar
+            self.btn_drawer_music.center_x, self.btn_drawer_music.center_y = (self.centroPapelMenu - 96, 562)
+            self.btn_drawer_music.rect.center = (self.centroPapelMenu - 96, 562)
+            self.btn_drawer_sound.center_x, self.btn_drawer_sound.center_y = (self.centroPapelMenu, 562)
+            self.btn_drawer_sound.rect.center = (self.centroPapelMenu, 562)
+            if hasattr(self, "btn_drawer_voice"):
+                self.btn_drawer_voice.center_x, self.btn_drawer_voice.center_y = (self.centroPapelMenu + 96, 562)
+                self.btn_drawer_voice.rect.center = (self.centroPapelMenu + 96, 562)
 
             # Botón nuevo para abrir el menú
             botonMenu = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMenu.jpg"), 76)
@@ -3534,6 +3616,10 @@ class StoryMapScene(BaseState):
         panel.blit(linea1, linea1.get_rect(center=(cinta_rect.centerx, cinta_rect.centery - 11)))
         panel.blit(linea2, linea2.get_rect(center=(cinta_rect.centerx, cinta_rect.centery + 11)))
 
+        self.btn_drawer_music.toggle_state = self.audio.music_enabled
+        self.btn_drawer_sound.toggle_state = self.audio.sound_enabled
+        if hasattr(self, "btn_drawer_voice"):
+            self.btn_drawer_voice.toggle_state = self.audio.voice_enabled
         # Morado normal y rojo cuando el mouse está encima
         for boton, morado, rojo in self.botonesMenuMapa:
             boton.normal_sprite = rojo if boton.is_hovered else morado
@@ -3623,7 +3709,7 @@ class StoryMapScene(BaseState):
             )
 
         progress = self.settings.get_story_progress()
-        is_cleared = poi_info["microgame_id"] in progress.get("completed_microgames", [])
+        is_cleared = self._is_poi_cleared(poi_key, progress.get("completed_microgames", []))
         blocked = self._get_blocked_hud_rects()
         active_poi_screen = poi_rect.move(-cam_x, -cam_y)
         player_screen = self._get_player_screen_rect(cam_x, cam_y)
@@ -3633,7 +3719,7 @@ class StoryMapScene(BaseState):
         if active_marker_rect is not None and active_marker_rect.colliderect(viewport):
             obstacle_rects.append(active_marker_rect)
         for other_key, other_info in self.poi_registry.items():
-            if other_key == poi_key or other_key == "batalla_flores":
+            if other_key == poi_key:
                 continue
             other_r = other_info.get("rect")
             if other_r is None:
@@ -3799,7 +3885,8 @@ class StoryMapScene(BaseState):
 
         # Tarjeta de estado con sello de cera ilustrado sin colisión ni huecos vacíos
         progress = self.settings.get_story_progress()
-        is_done = poi_info["microgame_id"] in progress.get("completed_microgames", [])
+        active_key = self.active_poi if self.active_poi in self.poi_registry else "uninorte"
+        is_done = self._is_poi_cleared(active_key, progress.get("completed_microgames", []))
         status_text = "ESTADO: DESPEJADO (+100 PTS)" if is_done else "ESTADO: PENDIENTE POR DESPEJAR"
         status_col = (30, 125, 55) if is_done else (190, 95, 25)
         sello_tex = self.tex_sello_despejado if is_done else self.tex_sello_pendiente
@@ -3925,6 +4012,7 @@ class StoryMapScene(BaseState):
             font_body=self.font_paloma_body,
             font_hint=self.font_paloma_hint,
             talk_frames=getattr(self, "paloma_talk_frames", None),
+            is_talking=bool(self.audio.is_voice_playing()) if hasattr(self.audio, "is_voice_playing") else False,
         )
 
     def _render_intro_dialog(self, surface: pygame.Surface) -> None:

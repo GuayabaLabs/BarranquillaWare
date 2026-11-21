@@ -27,7 +27,8 @@ class PalomaIntro:
         self.done = not pages
         self.timer = 0.0
         self._assets_listos = False
-        self._play_voice()
+        if self.pages:
+            self._play_voice()
 
     @staticmethod
     def _play_voice() -> None:
@@ -78,14 +79,16 @@ class PalomaIntro:
     def advance(self) -> None:
         if self.closing:
             return
-        AudioManager.get_instance().play_click()
+        audio = AudioManager.get_instance()
+        audio.play_click()
         if self.page + 1 < len(self.pages):
             self.page += 1
-            self._play_voice()
         else:
+            audio.stop_voice(100)
             self.closing = True
 
     def skip(self) -> None:
+        AudioManager.get_instance().stop_voice(100)
         self.closing = True
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -99,6 +102,7 @@ class PalomaIntro:
 
     def update(self, dt: float, camera=None) -> None:
         self.timer += dt
+        AudioManager.get_instance().update(dt)
         if camera is not None and getattr(camera, "enabled", False):
             try:
                 if camera.consume_fist() or camera.consume_click():
@@ -133,4 +137,5 @@ class PalomaIntro:
             font_body=self.font_body,
             font_hint=self.font_hint,
             talk_frames=self.talk_frames,
+            is_talking=AudioManager.get_instance().is_voice_playing(),
         )

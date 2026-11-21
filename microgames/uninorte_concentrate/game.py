@@ -479,6 +479,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         Sobreescribe el ciclo de actualización para que el juego dure exactamente los 25 segundos
         completos, evaluando victoria o derrota según si la tarea llegó al 100%.
         """
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:
@@ -492,10 +494,7 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
                 self.finish_game(won=self.progress_bar.completed)
 
         elif self.phase == self.PHASE_OUTRO:
-            self.outro_timer += dt
-            if self.outro_timer >= self.outro_duration:
-                if self.on_complete_callback:
-                    self.on_complete_callback(self.is_won)
+            self.update_outro(dt)
 
     def update_game(self, dt: float) -> None:
         if getattr(self, "camera_input", None) and self.camera_input.enabled and self.camera_input.is_hand_present():
@@ -605,7 +604,7 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
-        pass
+        super().exit()
 
     def render_game(self, surface: pygame.Surface) -> None:
         # Screenshake no lineal (cuadrático)

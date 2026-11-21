@@ -1443,6 +1443,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         # La cámara pertenece al motor y se comparte con el resto de escenas.
         if hasattr(self.audio, "sonarEscritura"):
             self.audio.sonarEscritura(False)
+        super().exit()
 
     def add_trauma(self, amount: float) -> None:
         """Agrega trauma con clamp en 1.0."""

@@ -219,7 +219,6 @@ def test_gameplay_sfx_triggers_across_microgames(monkeypatch):
     from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
     from microgames.troja_baile import TrojaBaileMicrogame
     from microgames.buenavista_cine import BuenavistaCineMicrogame
-    from microgames.batalla_flores_boss import BatallaFloresBossMicrogame
     from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
     from microgames.malecon_rueda import MaleconRuedaMicrogame
     from microgames.ventana_colores import VentanaColoresMicrogame
@@ -272,29 +271,7 @@ def test_gameplay_sfx_triggers_across_microgames(monkeypatch):
     finally:
         cine.cleanup()
 
-    # 4. BatallaFloresBossMicrogame
-    boss = BatallaFloresBossMicrogame()
-    calls = _spy_audio(boss)
-    boss.phase = boss.PHASE_PLAY
-    # Phase 1 projectile hit
-    boss.time_left = 12.0
-    boss.projectiles = [{"x": boss.player_x, "y": boss.player_y - 60, "vx": 0.0, "vy": 0.0, "type": "maicena", "radius": 25}]
-    boss.update_game(0.016)
-    assert "play_miss" in calls
-    # Phase 2 rhythm miss
-    calls.clear()
-    boss.time_left = 7.0
-    boss.rhythm_notes = []
-    boss._check_rhythm_hit()
-    assert "play_miss" in calls
-    # Phase 3 jump
-    calls.clear()
-    boss.time_left = 3.0
-    boss.player_is_jumping = False
-    boss.handle_game_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
-    assert "play_jump" in calls
-
-    # 5. AeropuertoAterrizajeMicrogame
+    # 4. AeropuertoAterrizajeMicrogame
     aero = AeropuertoAterrizajeMicrogame()
     calls = _spy_audio(aero)
     aero.plane_x = aero.runway_cx + 500

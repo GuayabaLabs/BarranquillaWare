@@ -293,7 +293,13 @@ class BuenavistaCineMicrogame(BaseMicrogame):
         if hasattr(self, "shh_detector"):
             self.shh_detector.stop()
 
+    def exit(self) -> None:
+        self.cleanup()
+        super().exit()
+
     def update(self, dt: float) -> None:
+        if hasattr(self.audio, "update"):
+            self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:
             self.intro_timer += dt
             if self.intro_timer >= self.intro_duration:
@@ -308,10 +314,7 @@ class BuenavistaCineMicrogame(BaseMicrogame):
                 self.finish_game(won=True)
 
         elif self.phase == self.PHASE_OUTRO:
-            self.outro_timer += dt
-            if self.outro_timer >= self.outro_duration:
-                if self.on_complete_callback:
-                    self.on_complete_callback(self.is_won)
+            self.update_outro(dt)
 
     def update_game(self, dt: float) -> None:
         if self.is_finished:
@@ -546,8 +549,16 @@ class BuenavistaCineMicrogame(BaseMicrogame):
 
         status_text = "¡SHHH DETECTADO!" if self.last_shh_visual_pulse > 0.0 else "MICRÓFONO ESCUCHANDO: ¡SHHH!"
         status_col = (255, 240, 80) if self.last_shh_visual_pulse > 0.0 else (80, 255, 120)
-        status_surf = self.font_mic_status.render(f"🎙 {status_text}", True, status_col)
-        surface.blit(status_surf, (mic_x + 20, mic_y + 14))
+        # Icono vectorial de micrófono (evita glifo roto en Arial de Windows)
+        mx_icon = mic_x + 28
+        my_icon = mic_y + 23
+        pygame.draw.rect(surface, status_col, (mx_icon - 4, my_icon - 9, 8, 13), border_radius=4)
+        pygame.draw.arc(surface, status_col, (mx_icon - 7, my_icon - 4, 14, 11), 3.14, 6.28, 2)
+        pygame.draw.line(surface, status_col, (mx_icon, my_icon + 7), (mx_icon, my_icon + 11), 2)
+        pygame.draw.line(surface, status_col, (mx_icon - 4, my_icon + 11), (mx_icon + 4, my_icon + 11), 2)
+
+        status_surf = self.font_mic_status.render(status_text, True, status_col)
+        surface.blit(status_surf, (mic_x + 44, mic_y + 13))
 
         # Barra de nivel y sibilancia de audio
         pygame.draw.rect(surface, (40, 40, 50), (mic_x + 20, mic_y + 45, 420, 14), border_radius=5)
