@@ -15,7 +15,7 @@ def test_punch_alert_standalone():
     pygame.display.set_mode((1920, 1080), pygame.NOFRAME)
 
     pygame.mixer.init()
-    game = PunchAlertMicrogame(character_id="westcol", time_limit=15.0)
+    game = PunchAlertMicrogame(character_id="valdiri", time_limit=15.0)
     surface = pygame.Surface((1920, 1080))
 
     assert game.total_wave_count == 11
