@@ -1003,6 +1003,15 @@ def pegarChispa(sup, punto, color, r, alfa=255):
     sup.blit(chispa, chispa.get_rect(center=(round(punto[0]), round(punto[1]))))
 
 
+def sonarFuego(clave, t):
+    # Sonido del estallido (módulo común de BarranquillaWare); si el Coaster corre solo, sin sonido
+    try:
+        from effects.fuegos_sonido import avisar_estallido
+    except ImportError:
+        return
+    avisar_estallido(clave, t, subidaFuego)
+
+
 def dibujarFuego(sup, centro, figura, escala, t, paleta, duracion=estallidoFuego, tamChispa=4, detalle=False,
                  chispitas=False):
     # fuego artificial: un cohete sube desde abajo y estalla en chispas de luz que forman la figura.
@@ -3067,6 +3076,7 @@ class Juego:
                     tam = escala * (0.97 + 0.18 * temblorFijo(vuelta, semilla + 0.9))
                     dibujarFuego(s, lugar, puntosFigura(forma), tam, ef % ciclo, paletaVuelta(paleta, vuelta),
                                  detalle=forma != "k", chispitas=forma == "circulo")
+                    sonarFuego(("coaster", i, j), ef % ciclo)
         if self.resultado["estrellas"] < 3:
             return
         # arriba se turnan: primero el felicidades solo (siempre amarillo) y en la siguiente vuelta un fuego redondo
@@ -3074,6 +3084,7 @@ class Juego:
         if ef > 0:
             arriba = (tarjeta.centerx, tarjeta.top - 62)
             vuelta = int(ef // cicloFuego)
+            sonarFuego(("coaster", "arriba"), ef % cicloFuego)
             if vuelta % 2 == 0:
                 dibujarFuego(s, arriba, puntosTexto("¡Felicidades!", self.fuentes[54]), 1, ef % cicloFuego,
                              paletasFuego["dorado"], 2.4, 3)

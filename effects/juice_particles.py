@@ -285,10 +285,13 @@ class FuegosArtificiales:
         self.encendidos = False
 
     def update(self, dt: float) -> None:
-        for fuego in self.fuegos:
+        from effects.fuegos_sonido import avisar_estallido
+        for i, fuego in enumerate(self.fuegos):
             fuego["t"] += dt
             if fuego["t"] >= cicloFuego and self.encendidos:
                 fuego["t"] -= cicloFuego
+            # Suena justo cuando el cohete termina de subir y estalla (no al lanzarlo)
+            avisar_estallido((id(self), i), fuego["t"], subidaFuego)
 
     def render(self, surface: pygame.Surface) -> None:
         for fuego in self.fuegos:
