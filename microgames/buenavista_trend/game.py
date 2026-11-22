@@ -89,10 +89,10 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.camera_input.start()
 
         # Tipografías
-        self.font_keys = pygame.font.SysFont("Arial Black, Impact, sans-serif", 26)
+        self.font_keys = self.assets.cargarFuenteTitulo(28)
         self.font_hud = pygame.font.SysFont("Segoe UI, Arial, sans-serif", 20, bold=True)
         self.font_timer_num = pygame.font.SysFont("Segoe UI Black, Arial Black, Impact, sans-serif", 28)
-        self.font_feedback = pygame.font.SysFont("Arial Black, Impact, sans-serif", 26)
+        self.font_feedback = self.assets.cargarFuenteTitulo(30)
         self.font_edu = pygame.font.SysFont("Arial, Helvetica, sans-serif", 22, bold=True)
 
         # 1. Cargar reloj contador oficial (contador_microjuegos.png) igual que en los demás minijuegos
@@ -1254,7 +1254,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.capsulaTecla = capsula
         self.capsulaPrendida = capsula.copy()
         self.capsulaPrendida.fill((40, 34, 0), special_flags=pygame.BLEND_RGB_ADD)
-        self.fuenteTecla = self.assets.cargarFuenteCuento(54)
+        self.fuenteTecla = self.assets.cargarFuenteTitulo(46)
         return True
 
     def dibujarPantallaVivo(self, surface: pygame.Surface, ox: int, oy: int) -> None:
@@ -1269,7 +1269,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             ("B", (224, 78, 86)),
         )
         if getattr(self, "fuenteMando", None) is None:
-            self.fuenteMando = self.assets.get_font("Arial Black, Impact, sans-serif", 22, bold=True)
+            self.fuenteMando = self.assets.cargarFuenteTitulo(20)
 
         for i, letra in enumerate(self.LANE_LABELS):
             centro = (self.lane_centers_x[i] + ox, self.hit_line_y + oy)

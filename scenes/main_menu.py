@@ -151,21 +151,86 @@ class MainMenuScene(BaseState):
         target_height = max(1, int(round(orig_h * (target_width / max(1, orig_w)))))
         return pygame.transform.smoothscale(cropped, (target_width, target_height))
 
+    def girarTono(self, imagen: pygame.Surface, grados: float) -> pygame.Surface:
+        import numpy as np
+        rgb = pygame.surfarray.array3d(imagen).astype(np.float32)
+        y = rgb @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+        i = rgb @ np.array([0.596, -0.274, -0.322], dtype=np.float32)
+        q = rgb @ np.array([0.211, -0.523, 0.312], dtype=np.float32)
+        angulo = math.radians(grados)
+        i2 = i * math.cos(angulo) - q * math.sin(angulo)
+        q2 = i * math.sin(angulo) + q * math.cos(angulo)
+        r = y + 0.956 * i2 + 0.621 * q2
+        g = y - 0.272 * i2 - 0.647 * q2
+        b = y - 1.106 * i2 + 1.703 * q2
+        girada = imagen.copy()
+        pygame.surfarray.pixels3d(girada)[...] = np.clip(np.stack([r, g, b], axis=2), 0, 255).astype(np.uint8)
+        return girada
+
+    def textoConContornoMenu(self, fuente, texto: str, color, colorContorno) -> pygame.Surface:
+        cuerpo = fuente.render(texto, True, color)
+        borde = fuente.render(texto, True, colorContorno)
+        lienzo = pygame.Surface((cuerpo.get_width() + 8, cuerpo.get_height() + 8), pygame.SRCALPHA)
+        for grados in range(0, 360, 30):
+            dx = round(math.cos(math.radians(grados)) * 4)
+            dy = round(math.sin(math.radians(grados)) * 4)
+            lienzo.blit(borde, (4 + dx, 4 + dy))
+        lienzo.blit(cuerpo, (4, 4))
+        return lienzo
+
+    def armarBotonesMenu(self):
+        import os
+        try:
+            naranja = self.assets.load_cropped_surface("boton_acuarela_naranja.png")
+            verde = self.assets.load_cropped_surface("boton_acuarela_verde.png")
+            morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 440)
+            rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 440)
+        except Exception as e:
+            print(f"Aviso: no se pudieron armar los botones del menú: {e}")
+            return None
+        tam = (440, 104)
+        amarillo = self.girarTono(naranja, -25)
+        azul = self.girarTono(morado, 80)
+        rosado = self.girarTono(rojo, 30)
+        bases = [
+            ("Jugar", amarillo, (150, 96, 10)),
+            ("Cargar partida", verde, (20, 100, 60)),
+            ("Opciones", azul, (28, 58, 120)),
+            ("Logros", morado, (70, 30, 110)),
+            ("Salir", rosado, (140, 20, 80)),
+        ]
+        tamLetra = 46
+        fuente = self.assets.cargarFuenteTitulo(tamLetra)
+        while tamLetra > 24 and max(fuente.size(n)[0] for n, _, _ in bases) > tam[0] * 0.78:
+            tamLetra -= 2
+            fuente = self.assets.cargarFuenteTitulo(tamLetra)
+        listos = []
+        for nombre, base, contorno in bases:
+            boton = pygame.transform.smoothscale(base, tam)
+            letras = self.textoConContornoMenu(fuente, nombre, (255, 248, 236), contorno)
+            boton.blit(letras, letras.get_rect(center=(tam[0] // 2, tam[1] // 2 - 3)))
+            listos.append(boton)
+        return listos
+
     def _init_buttons(self) -> None:
         audio_frames = self.assets.get_audio_button_frames(target_size=86)
         music_on, music_off, sound_on, sound_off = audio_frames[0], audio_frames[1], audio_frames[2], audio_frames[3]
 
-        btn_jugar_surf = self._scale_button_tight("boton_jugar_main_menu.png", target_width=496)
-        btn_cargar_surf = self._scale_button_tight("boton_cargar_partida_main_menu.png", target_width=364)
-        btn_opciones_surf = self._scale_button_tight("boton_opciones_main_menu.png", target_width=366)
-        btn_logros_surf = self._scale_button_tight("boton_logros_mapa.png", target_width=364)
-        # El arte de Logros viene sin halo: se aplana 4 px para conservar el ritmo vertical del menú.
-        btn_logros_surf = pygame.transform.smoothscale(
-            btn_logros_surf, (btn_logros_surf.get_width(), btn_logros_surf.get_height() - 4)
-        )
-        btn_salir_surf = self._scale_button_tight("boton_salir_main_menu.png", target_width=366)
-
-        centers_y = [414, 544, 666, 784, 902]
+        botones = self.armarBotonesMenu()
+        if botones is not None:
+            btn_jugar_surf, btn_cargar_surf, btn_opciones_surf, btn_logros_surf, btn_salir_surf = botones
+            paso = btn_jugar_surf.get_height() + 22
+            centers_y = [410 + i * paso for i in range(5)]
+        else:
+            btn_jugar_surf = self._scale_button_tight("boton_jugar_main_menu.png", target_width=496)
+            btn_cargar_surf = self._scale_button_tight("boton_cargar_partida_main_menu.png", target_width=364)
+            btn_opciones_surf = self._scale_button_tight("boton_opciones_main_menu.png", target_width=366)
+            btn_logros_surf = self._scale_button_tight("boton_logros_mapa.png", target_width=364)
+            btn_logros_surf = pygame.transform.smoothscale(
+                btn_logros_surf, (btn_logros_surf.get_width(), btn_logros_surf.get_height() - 4)
+            )
+            btn_salir_surf = self._scale_button_tight("boton_salir_main_menu.png", target_width=366)
+            centers_y = [414, 544, 666, 784, 902]
         self.btn_jugar = UIButton((self.screen_w // 2, centers_y[0]), btn_jugar_surf, on_click=self._on_play_clicked)
         self.btn_cargar = UIButton((self.screen_w // 2, centers_y[1]), btn_cargar_surf, on_click=self._on_load_game_clicked)
         self.btn_opciones = UIButton((self.screen_w // 2, centers_y[2]), btn_opciones_surf, on_click=self._on_open_settings)

@@ -106,7 +106,7 @@ STORY_LEVEL_PREVIEW_META: Dict[str, Dict[str, Any]] = {
     "aleta": {
         "difficulty": 4,
         "max_difficulty": 5,
-        "preview_asset": "Fritanga/fondoFritanga.jpg",
+        "preview_asset": "Fritanga/fondoFritanga.png",
         "crop_anchor": "center",
         "callout_title": "ALETA DEL TIBURÓN",
     },

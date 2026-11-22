@@ -2259,7 +2259,7 @@ class Juego:
         pygame.display.set_caption("Lápiz coaster")
         self.reloj = pygame.time.Clock()
         self.fuentes = {n: cargarFuente(n) for n in (14, 16, 20, 26, 36, 54)}
-        self.fuentesTitulo = {n: cargarFuenteTitulo(n) for n in (20, 36)}
+        self.fuentesTitulo = {n: cargarFuenteTitulo(n) for n in (13, 16, 18, 20, 24, 36)}
         self.fondoBase = crearFondo()
         self.fondos = {}                 # cada fondo se carga la primera vez que se juega su nivel
         self.barra = crearBarra()
@@ -2779,6 +2779,12 @@ class Juego:
         setattr(r, alinear, punto)
         self.pantalla.blit(sup, r)
 
+    def tituloEscalado(self, s, tam, color, centro, escala=1.0):
+        sup = self.fuentesTitulo[tam].render(s, True, color)
+        if abs(escala - 1) > 0.01:
+            sup = pygame.transform.smoothscale_by(sup, escala)
+        self.pantalla.blit(sup, sup.get_rect(center=centro))
+
     def textoEscalado(self, s, tam, color, centro, escala=1.0, alfa=255):
         sup = self.fuentes[tam].render(s, True, color)
         if abs(escala - 1) > 0.01:
@@ -3000,15 +3006,15 @@ class Juego:
             s.blit(luz, (cajaMonedas.x - 35, cajaMonedas.y - 35))
         for caja in (cajaNivel, cajaMonedas, cajaTinta):
             cajaPintada(s, caja)
-        self.texto(f"Nivel {self.numNivel + 1}/{len(niveles)}", 20, cOscuro, cajaNivel.center, "center")
+        self.titulo(f"Nivel {self.numNivel + 1}/{len(niveles)}", 18, cOscuro, cajaNivel.center, "center")
         tomadas = len(self.viaje.tomadas) if self.viaje else 0
         cy = cajaMonedas.centery
         dibujarMoneda(s, (cajaMonedas.x + 28, cy), brilloM * 4, 0, 22)
-        self.textoEscalado(f"{tomadas}/{len(self.nivel['monedas'])}", 26, cOscuro,
-                           (cajaMonedas.x + 80, cy), 1 + 0.3 * brilloM)
-        self.texto(f"necesitas {self.nivel['necesarias']}", 14, cMaderaOsc, (cajaMonedas.x + 122, cy + 1), "midleft")
+        self.tituloEscalado(f"{tomadas}/{len(self.nivel['monedas'])}", 24, cOscuro,
+                            (cajaMonedas.x + 80, cy), 1 + 0.3 * brilloM)
+        self.titulo(f"necesitas {self.nivel['necesarias']}", 13, cMaderaOsc, (cajaMonedas.x + 118, cy), "midleft")
         resto = limitar(1 - self.tintaUsada / self.nivel["tinta"], 0, 1)
-        self.texto("Tinta", 16, cMaderaOsc, (cajaTinta.x + 14, cajaTinta.centery), "midleft")
+        self.titulo("Tinta", 16, cMaderaOsc, (cajaTinta.x + 14, cajaTinta.centery), "midleft")
         barra = pygame.Rect(cajaTinta.x + 72, cajaTinta.centery - 8, 184, 16)
         # barra de tinta pintada: fondo de papel y una mancha que se acorta al gastar
         # turquesa cuando está llena, amarillo a la mitad y coral cuando se acaba
