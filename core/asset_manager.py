@@ -408,6 +408,37 @@ class AssetManager:
         self._cache[clave] = imagen
         return imagen
 
+    # Piezas de interfaz comunes de los minijuegos (barra de tiempo, instrucción, letreros, pausa).
+    # Quitarles el fondo blanco tarda ~0.1-0.3 s cada una: si se hace en pleno juego, congela la pantalla.
+    INTERFAZ_COMUN = ("barraTiempoRiel.jpg", "barraTiempoRelleno.jpg", "fondoInstruccion.jpg",
+                      "letreroGanaste.jpg", "letreroPerdiste.jpg", "bannerUbicacion.jpg",
+                      "ventanaMenuPausa.jpg", "botonMorado.jpg", "botonRojo.jpg")
+
+    def precargarInterfaz(self, en_segundo_plano: bool = False) -> None:
+        """Deja listas las piezas de INTERFAZ_COMUN.
+
+        En segundo plano (desde el menú principal) no detiene nada. Sin segundo plano (al crear un
+        minijuego) espera a que termine la carga en curso y completa lo que falte.
+        """
+        import threading
+
+        def cargar() -> None:
+            for nombre in self.INTERFAZ_COMUN:
+                try:
+                    self.cargarSinFondo(os.path.join("Interfaz", nombre), 300)
+                except Exception:
+                    pass
+
+        hilo = getattr(self, "_hilo_interfaz", None)
+        if en_segundo_plano:
+            if hilo is None:
+                self._hilo_interfaz = threading.Thread(target=cargar, name="precarga-interfaz", daemon=True)
+                self._hilo_interfaz.start()
+            return
+        if hilo is not None and hilo.is_alive():
+            hilo.join(timeout=5.0)
+        cargar()
+
     def cargarTrofeo(self, ancho: int, enGris: bool = False) -> pygame.Surface:
         """Trofeo de los logros; en gris cuando todavía no se ha ganado."""
         clave = f"trofeo_{ancho}_{enGris}"

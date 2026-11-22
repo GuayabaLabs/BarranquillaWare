@@ -38,7 +38,18 @@ ideasPublicacion = [
     ("permiso", "Pedir permiso antes de etiquetar", False),
     ("cercanos", "Solo para familia y amigos", False),
     ("album", "Guardarla en el álbum familiar", False),
+    # Tarjetas nuevas (inofensivas): cada una se aplica a la publicación si se deja caer
+    ("nieve", "Filtro de nieve", False),
+    ("recuerdo", "Filtro de foto antigua", False),
+    ("hashtag", "Hashtag navideño", False),
+    ("abuela", "Comentario de la abuela", False),
 ]
+# Las tarjetas nuevas no están en Punch/tarjetas.png: se arman con la tarjeta vacía y su icono.
+# Icono propio (acuarela, fondo blanco) en assets/Punch/iconos/<codigo>.png; si falta, uno dibujado por código.
+tarjetasNuevas = ("nieve", "recuerdo", "hashtag", "abuela")
+# Música que suena cuando la tarjeta del villancico llega a la publicación
+musicaVillancico = ("Punch/villancico.mp3", "Punch/villancico.ogg")
+comentarioAbuela = "Abuela: ¡Qué lindos mis muchachos!"
 ensenanzasRiesgo = {
     "ninos": "Esa carita no decidió estar en internet. Decidiste tú por ella.",
     "casa": "Ahora medio mundo sabe dónde duermes.",
@@ -59,6 +70,7 @@ destinoIdea = {
     "regalos": "descripcion", "placa": "descripcion", "tiquete": "descripcion", "rutina": "descripcion",
     "arbolito": "descripcion", "felicitacion": "descripcion", "permiso": "descripcion",
     "lucecitas": "filtro", "villancico": "cancion", "despues": "hora", "cercanos": "publico", "album": "guardar",
+    "nieve": "nieve", "recuerdo": "recuerdo", "hashtag": "descripcion", "abuela": "comentario",
 }
 textosDescripcion = {
     "ubicacion": "En la Ventana al Mundo ahorita mismo.",
@@ -72,6 +84,7 @@ textosDescripcion = {
     "arbolito": "¡Qué belleza de arbolito!",
     "felicitacion": "¡Feliz Navidad, familia!",
     "permiso": "Etiqueté a la familia con su permiso.",
+    "hashtag": "#NavidadEnCurramba",
 }
 cancionPost = "Los peces en el río"
 horaPost = "Se publica mañana, ya en la casa"
@@ -116,6 +129,61 @@ def partirTexto(texto: str, fuente: pygame.font.Font, ancho: int) -> List[str]:
     if actual:
         lineas.append(actual)
     return lineas
+
+
+def iconoDibujado(codigo: str, lado: int) -> pygame.Surface:
+    """Icono provisional dibujado por código (al doble y reducido, trazo de tinta suave)."""
+    k = 3
+    n = lado * k
+    sup = pygame.Surface((n, n), pygame.SRCALPHA)
+    tinta = (98, 70, 92)
+    c = n // 2
+    if codigo == "nieve":
+        azul = (120, 170, 220)
+        for i in range(6):
+            a = math.radians(i * 60 + 90)
+            fin = (c + math.cos(a) * n * 0.38, c - math.sin(a) * n * 0.38)
+            pygame.draw.line(sup, azul, (c, c), fin, 5 * k)
+            for lado_r in (-1, 1):
+                b = a + lado_r * math.radians(40)
+                medio = (c + math.cos(a) * n * 0.22, c - math.sin(a) * n * 0.22)
+                pygame.draw.line(sup, azul, medio, (medio[0] + math.cos(b) * n * 0.11, medio[1] - math.sin(b) * n * 0.11), 4 * k)
+        pygame.draw.circle(sup, (230, 242, 255), (c, c), n * 0.07)
+        pygame.draw.circle(sup, azul, (c, c), n * 0.07, 2 * k)
+    elif codigo == "recuerdo":
+        foto = pygame.Rect(0, 0, int(n * 0.66), int(n * 0.6))
+        foto.center = (c, c)
+        pygame.draw.rect(sup, (250, 240, 222), foto, border_radius=4 * k)
+        dentro = foto.inflate(-int(n * 0.1), -int(n * 0.16)).move(0, -int(n * 0.03))
+        pygame.draw.rect(sup, (205, 160, 110), dentro)
+        pygame.draw.circle(sup, (240, 205, 140), (dentro.x + dentro.w * 0.7, dentro.y + dentro.h * 0.32), n * 0.06)
+        pygame.draw.polygon(sup, (150, 110, 74), [(dentro.x, dentro.bottom), (dentro.x + dentro.w * 0.42, dentro.y + dentro.h * 0.45),
+                                                (dentro.right, dentro.bottom)])
+        pygame.draw.rect(sup, tinta, foto, 3 * k, border_radius=4 * k)
+    elif codigo == "hashtag":
+        try:
+            from core.asset_manager import AssetManager
+            fuente = AssetManager.get_instance().cargarFuenteCuento(int(n * 0.8))
+            letra = fuente.render("#", True, (214, 120, 150))
+            sup.blit(letra, letra.get_rect(center=(c, c + n * 0.04)))
+        except Exception:
+            for d in (-0.13, 0.13):
+                pygame.draw.line(sup, (214, 120, 150), (c + d * n - n * 0.05, c - n * 0.3), (c + d * n - n * 0.12, c + n * 0.3), 6 * k)
+                pygame.draw.line(sup, (214, 120, 150), (c - n * 0.32, c + d * n), (c + n * 0.3, c + d * n), 6 * k)
+    else:  # abuela: globo de comentario con corazón
+        globo = pygame.Rect(0, 0, int(n * 0.72), int(n * 0.5))
+        globo.center = (c, c - int(n * 0.06))
+        pygame.draw.ellipse(sup, (255, 248, 238), globo)
+        pygame.draw.polygon(sup, (255, 248, 238), [(globo.x + globo.w * 0.25, globo.bottom - 6 * k),
+                                                  (globo.x + globo.w * 0.18, globo.bottom + n * 0.12),
+                                                  (globo.x + globo.w * 0.42, globo.bottom - 4 * k)])
+        pygame.draw.ellipse(sup, tinta, globo, 3 * k)
+        r = n * 0.07
+        hx, hy = globo.centerx, globo.centery
+        pygame.draw.circle(sup, (226, 96, 110), (hx - r * 0.7, hy - r * 0.3), r)
+        pygame.draw.circle(sup, (226, 96, 110), (hx + r * 0.7, hy - r * 0.3), r)
+        pygame.draw.polygon(sup, (226, 96, 110), [(hx - r * 1.6, hy), (hx + r * 1.6, hy), (hx, hy + r * 1.8)])
+    return pygame.transform.smoothscale(sup, (lado, lado))
 
 
 def suavizar(x: float) -> float:
@@ -267,6 +335,15 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def ponerMusica(self) -> None:
         self.audio.play_bgm("PunchMusic.mp3", volume_scale=0.35)
+
+    def ponerVillancico(self) -> bool:
+        """La publicación ya tiene el villancico: suena "Los peces en el río" en lugar de la música del juego."""
+        for nombre in musicaVillancico:
+            if os.path.exists(os.path.join(self.audio.base_assets_dir, nombre)):
+                self.audio.play_bgm(nombre, volume_scale=0.5)
+                self.villancicoSonando = True
+                return True
+        return False
 
     def _extract_tight_surface(self, surface: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
         """Extrae un subsurface y lo ajusta a su bounding box de píxeles no transparentes."""
@@ -482,6 +559,67 @@ class PunchAlertMicrogame(BaseMicrogame):
             tarjeta.blit(letras, letras.get_rect(midtop=(zona.centerx, y)))
             y += alto
 
+    def tarjetaVacia(self, hoja: pygame.Surface, columnas, filas, ancho: int, alto: int) -> pygame.Surface:
+        """Tarjeta de la hoja original con el cuadro del icono vaciado (mismo papel, borde y brillo)."""
+        n = [c for c, _, _ in ideasPublicacion].index("lucecitas")
+        (x0, x1), (y0, y1) = columnas[n % 4], filas[n // 4]
+        recorte = self._extract_tight_surface(hoja, pygame.Rect(x0, y0, x1 - x0, y1 - y0))
+        base = pygame.transform.smoothscale(recorte, (ancho, alto))
+        caja = self.cajaIcono(base)
+        interior = caja.inflate(-round(caja.w * 0.16), -round(caja.h * 0.16))
+        # Color del papel del cuadro: los píxeles más claros de adentro (el icono y el borde son más oscuros)
+        zona = pygame.surfarray.array3d(base.subsurface(interior)).reshape(-1, 3).astype(np.int32)
+        brillo = zona.sum(axis=1)
+        claros = zona[brillo >= np.percentile(brillo, 70)]
+        papel = tuple(int(v) for v in np.median(claros, axis=0))
+        pygame.draw.rect(base, papel, interior, border_radius=round(interior.w * 0.18))
+        return base
+
+    def iconoTarjeta(self, codigo: str, lado: int) -> pygame.Surface:
+        """Icono acuarela de assets/Punch/iconos/<codigo>.png (fondo blanco), o uno dibujado por código."""
+        ruta = os.path.join("Punch", "iconos", f"{codigo}.png")
+        if os.path.exists(os.path.join("assets", ruta)):
+            try:
+                icono = self.assets.cargarSinFondo(ruta, 600)
+                escala = lado / float(max(icono.get_size()))
+                return pygame.transform.smoothscale_by(icono, escala)
+            except Exception:
+                pass
+        return iconoDibujado(codigo, lado)
+
+    def tarjetaConIcono(self, plantilla: pygame.Surface, codigo: str) -> pygame.Surface:
+        base = plantilla.copy()
+        caja = self.cajaIcono(base)
+        icono = self.iconoTarjeta(codigo, round(caja.w * 0.66))
+        base.blit(icono, icono.get_rect(center=caja.center))
+        return base
+
+    def cajaIcono(self, tarjeta: pygame.Surface) -> pygame.Rect:
+        w, h = tarjeta.get_size()
+        rgb = pygame.surfarray.array3d(tarjeta).astype(np.int16)
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        marco = (r > 165) & (r < 220) & (g > 135) & (g < 182) & (b > 145) & (b < 192) & (r - g > 15)
+        izquierda, derecha = int(w * 0.05), w // 2
+        arriba, abajo = int(h * 0.07), int(h * 0.93)
+        filas = [np.flatnonzero(marco[izquierda:derecha, y]) + izquierda for y in (h // 2 - 12, h // 2, h // 2 + 12)]
+        filas = [f for f in filas if f.size >= 2]
+        if not filas:
+            lado = int(h * 0.7)
+            return pygame.Rect(int(w * 0.07), (h - lado) // 2, lado, lado)
+        x0 = int(np.median([f.min() for f in filas]))
+        x1 = int(np.median([f.max() for f in filas]))
+        columnas = [np.flatnonzero(marco[x, arriba:abajo]) + arriba for x in ((x0 + x1) // 2 - 12, (x0 + x1) // 2, (x0 + x1) // 2 + 12)]
+        columnas = [c for c in columnas if c.size >= 2]
+        if columnas:
+            y0 = int(np.median([c.min() for c in columnas]))
+            y1 = int(np.median([c.max() for c in columnas]))
+        else:
+            y0, y1 = h // 2 - (x1 - x0) // 2, h // 2 + (x1 - x0) // 2
+        lado = max(x1 - x0, y1 - y0) + 1
+        caja = pygame.Rect(0, 0, lado, lado)
+        caja.center = ((x0 + x1 + 1) // 2, (y0 + y1 + 1) // 2)
+        return caja
+
     def recortarIcono(self, tarjeta: pygame.Surface) -> pygame.Surface:
         w, h = tarjeta.get_size()
         rgb = pygame.surfarray.array3d(tarjeta).astype(np.int16)
@@ -522,7 +660,17 @@ class PunchAlertMicrogame(BaseMicrogame):
             columnas = self.tramosOcupados(opaco.sum(axis=1) > 20)
             filas = self.tramosOcupados(opaco.sum(axis=0) > 20)
             ideas = []
+            plantilla = None
             for n, (codigo, texto, riesgosa) in enumerate(ideasPublicacion):
+                if codigo in tarjetasNuevas:
+                    if plantilla is None:
+                        plantilla = self.tarjetaVacia(hoja, columnas, filas, ancho, alto)
+                    base = self.tarjetaConIcono(plantilla, codigo)
+                    icono = self.recortarIcono(base)
+                    tarjeta = base.copy()
+                    self.escribirEnTarjeta(tarjeta, texto)
+                    ideas.append({"codigo": codigo, "texto": texto, "riesgosa": riesgosa, "sprite": tarjeta, "icono": icono})
+                    continue
                 (x0, x1), (y0, y1) = columnas[n % 4], filas[n // 4]
                 recorte = self._extract_tight_surface(hoja, pygame.Rect(x0, y0, x1 - x0, y1 - y0))
                 base = pygame.transform.smoothscale(recorte, (ancho, alto))
@@ -624,14 +772,29 @@ class PunchAlertMicrogame(BaseMicrogame):
         color = (70, 52, 60)
         if self.fotoEnPost is not None and self.etapa != "foto":
             lienzo.blit(self.fotoEnPost, hueco)
+            recuerdo = self.avance("recuerdo", 0.9)
+            if recuerdo > 0.0:
+                # Foto antigua: tonos sepia y viñeta suave
+                self.fotoRecuerdo.set_alpha(int(235 * recuerdo))
+                lienzo.blit(self.fotoRecuerdo, hueco)
             filtro = self.avance("filtro", 0.9)
             if filtro > 0.0:
-                self.fotoCalida.set_alpha(int(255 * filtro))
-                lienzo.blit(self.fotoCalida, hueco)
+                if recuerdo <= 0.0:  # Con foto antigua se conserva el sepia y solo se suman las lucecitas
+                    self.fotoCalida.set_alpha(int(255 * filtro))
+                    lienzo.blit(self.fotoCalida, hueco)
                 for x, y, fase, imagen in self.lucesFiltro:
                     brillo = filtro * (0.35 + 0.65 * (0.5 + 0.5 * math.sin(self.relojPost * 3.2 + fase)) ** 2)
                     imagen.set_alpha(int(255 * brillo))
                     lienzo.blit(imagen, imagen.get_rect(center=(hueco.x + x * hueco.w, hueco.y + y * hueco.h)))
+            nieve = self.avance("nieve", 0.9)
+            if nieve > 0.0:
+                # Nieve que cae despacio sobre la foto (solo dentro del recuadro)
+                capa = pygame.Surface(hueco.size, pygame.SRCALPHA)
+                for x, v, fase, r in self.coposNieve:
+                    py = ((self.relojPost * v + fase * hueco.h) % (hueco.h + 20)) - 10
+                    px = x * hueco.w + math.sin(self.relojPost * 1.4 + fase * 6.0) * 6
+                    pygame.draw.circle(capa, (255, 255, 255, int(220 * nieve)), (int(px), int(py)), r)
+                lienzo.blit(capa, hueco)
         barra = self.barraUsuario
         cancion = self.avance("cancion")
         letras = self.assets.cargarFuenteCuento(22).render(self.nombreUsuario, True, color)
@@ -644,6 +807,18 @@ class PunchAlertMicrogame(BaseMicrogame):
             linea.blit(tema, tema.get_rect(midleft=(nota.get_width() + 4, linea.get_height() // 2)))
             linea.set_alpha(int(255 * cancion))
             lienzo.blit(linea, linea.get_rect(midleft=(barra.x + 2, round(barra.centery + 12))))
+        comentario = self.avance("comentario")
+        if comentario > 0.0:
+            # Comentario de la abuela: globito sobre la parte baja de la foto
+            fuenteC = self.assets.cargarFuenteCuento(15)
+            texto = fuenteC.render(comentarioAbuela, True, (70, 52, 60))
+            globo = pygame.Surface((texto.get_width() + 22, texto.get_height() + 10), pygame.SRCALPHA)
+            pygame.draw.rect(globo, (255, 248, 238, 240), globo.get_rect(), border_radius=globo.get_height() // 2)
+            pygame.draw.rect(globo, (118, 92, 146), globo.get_rect(), 2, border_radius=globo.get_height() // 2)
+            globo.blit(texto, texto.get_rect(center=globo.get_rect().center))
+            globo.set_alpha(int(255 * comentario))
+            sube = round(10 * (1.0 - comentario))
+            lienzo.blit(globo, globo.get_rect(midbottom=(hueco.centerx, hueco.bottom - 10 + sube)))
         publico = self.avance("publico")
         if publico > 0.0:
             texto = self.assets.cargarFuenteCuento(14).render(publicoPost, True, (255, 255, 255))
@@ -699,6 +874,20 @@ class PunchAlertMicrogame(BaseMicrogame):
         tamanos = (brilloEstrella(19), brilloEstrella(27), brilloEstrella(35))
         self.lucesFiltro = [(azar.uniform(0.05, 0.95), azar.uniform(0.04, 0.6), azar.uniform(0.0, math.tau),
                              azar.choice(tamanos).copy()) for _ in range(22)]
+        # Foto antigua (sepia + viñeta) y copos para el filtro de nieve
+        gris = pygame.transform.grayscale(self.fotoEnPost)
+        gris.fill((255, 226, 178), special_flags=pygame.BLEND_RGB_MULT)
+        gris.fill((28, 16, 4), special_flags=pygame.BLEND_RGB_ADD)
+        w, h = gris.get_size()
+        yy, xx = np.mgrid[0:h, 0:w]
+        d = np.sqrt(((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2)
+        oscuro = np.clip(1.0 - 0.45 * np.clip(d - 0.55, 0.0, 1.0) / 0.6, 0.55, 1.0)
+        arr = pygame.surfarray.pixels3d(gris)
+        arr[:] = (arr * oscuro.T[..., None]).astype(np.uint8)
+        del arr
+        self.fotoRecuerdo = gris
+        self.coposNieve = [(azar.uniform(0.0, 1.0), azar.uniform(18.0, 42.0), azar.uniform(0.0, 1.0),
+                            azar.choice((2, 2, 3, 3, 4))) for _ in range(70)]
         if self.sonidoFoto is not None:
             self._play_sfx(self.sonidoFoto)
         elif hasattr(self.audio, "play_click"):
@@ -718,6 +907,8 @@ class PunchAlertMicrogame(BaseMicrogame):
             self.descripcion.append((textosDescripcion[idea["codigo"]], inicio))
         else:
             self.partesPost[destino] = self.relojPost
+        if destino == "cancion":
+            self.ponerVillancico()
         if idea["riesgosa"]:
             self.riesgosPublicados.append(idea["codigo"])
             self._play_sfx(self.sonidoMalo)
@@ -732,8 +923,10 @@ class PunchAlertMicrogame(BaseMicrogame):
 
     def destinoVuelo(self, idea: dict) -> Tuple[float, float]:
         destino = destinoIdea[idea["codigo"]]
-        if destino == "filtro":
+        if destino in ("filtro", "nieve", "recuerdo"):
             return self.puntoHueco((0.5, 0.5))
+        if destino == "comentario":
+            return self.puntoHueco((0.5, 0.92))
         if destino == "cancion":
             return self.puntoPantalla(usuarioPost[0] + 160, 430)
         if destino == "publico":
@@ -1378,6 +1571,8 @@ class PunchAlertMicrogame(BaseMicrogame):
         seguras = [idea for idea in self.ideas if not idea["riesgosa"]]
         random.shuffle(riesgosas)
         random.shuffle(seguras)
+        # El villancico siempre aparece (se pone de último en la pila para salir en la primera tarjeta segura)
+        seguras.sort(key=lambda idea: idea["codigo"] == "villancico")
         cuantasRiesgosas = max(1, round(cantidad * 0.6))
         tipos = [True] + random.sample([True] * (cuantasRiesgosas - 1) + [False] * (cantidad - cuantasRiesgosas), cantidad - 1)
         wave_blueprint = []

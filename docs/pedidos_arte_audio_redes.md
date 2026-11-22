@@ -108,3 +108,21 @@ suena audio reciclado de otros minijuegos (hay que escucharlo y confirmar que te
 
 Si quieren voz en el diálogo de contexto: un clip por página, por ejemplo `paloma_curramgram_0.ogg` … `_3.ogg`
 y `paloma_emoji_0.ogg` … `_2.ogg`. Hoy suena el arrullo de la paloma al abrir el diálogo.
+
+---
+
+## Juego Punch (Ventana al Mundo): tarjetas nuevas y villancico
+
+El código ya está listo; mientras falten estos archivos se usan iconos dibujados por código y no cambia la música.
+
+| Archivo | Dónde se usa | Qué es |
+|---|---|---|
+| `assets/Punch/villancico.mp3` (o `.ogg`) | Suena en lugar de la música del juego cuando la tarjeta "Villancico de fondo" cae en la publicación | Grabación de **"Los peces en el río"** (instrumental o cantado, 1-2 min, en bucle) |
+| `assets/Punch/iconos/nieve.png` | Icono de la tarjeta "Filtro de nieve" | Copo de nieve acuarela |
+| `assets/Punch/iconos/recuerdo.png` | Icono de la tarjeta "Filtro de foto antigua" | Foto vieja / polaroid sepia acuarela |
+| `assets/Punch/iconos/hashtag.png` | Icono de la tarjeta "Hashtag navideño" | Símbolo # acuarela (con un toque navideño: rojo y verde) |
+| `assets/Punch/iconos/abuela.png` | Icono de la tarjeta "Comentario de la abuela" | Abuelita sonriente con un globito de comentario y un corazón |
+
+Iconos: mismo estilo que los de `assets/Punch/tarjetas.png` (acuarela suave, contorno marrón), **solo el icono,
+sin la tarjeta y sin texto**, fondo blanco puro, cuadrado, 400×400 o más. El código lo pone dentro de la tarjeta
+y escribe el texto con la fuente de las demás tarjetas.

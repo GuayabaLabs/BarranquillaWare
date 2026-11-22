@@ -87,6 +87,8 @@ class BaseMicrogame(BaseState):
         self.font_timer = self.assets.get_font("Arial Black, Impact, sans-serif", 28)
         self._outro_shader_cache: dict = {}
 
+        # Interfaz común lista antes del primer cuadro (si no, el primer cuadro y el letrero final se congelan)
+        self.assets.precargarInterfaz()
         self.setup_game()
 
         self.paloma_intro = None

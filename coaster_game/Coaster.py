@@ -3193,9 +3193,11 @@ class Juego:
 
     def dibujarEscritura(self, lineas, t, centroY=330, sup=None, doradas=1):
         s = sup or self.pantalla
+        # La pantalla queda negra desde el primer cuadro; el parpadeo inicial solo oculta las letras
+        # (antes se saltaba el relleno y se alcanzaba a ver el juego detrás).
+        s.fill((8, 6, 12))
         if t < 0.3 and int(t * 20) % 2 == 0:
             return
-        s.fill((8, 6, 12))
         horario = self.horarioEscritura(lineas)
         altoLinea = self.fuentes[36].get_linesize() + 16
         y = centroY - altoLinea * len(lineas) // 2
