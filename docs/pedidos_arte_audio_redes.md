@@ -113,6 +113,8 @@ y `paloma_emoji_0.ogg` … `_2.ogg`. Hoy suena el arrullo de la paloma al abrir 
 
 ## Juego Punch (Ventana al Mundo): tarjetas nuevas y villancico
 
+✅ **Recibido e integrado**: la canción "Los peces en el río" y los 4 iconos acuarela.
+
 El código ya está listo; mientras falten estos archivos se usan iconos dibujados por código y no cambia la música.
 
 | Archivo | Dónde se usa | Qué es |

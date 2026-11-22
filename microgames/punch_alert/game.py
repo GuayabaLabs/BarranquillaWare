@@ -590,7 +590,7 @@ class PunchAlertMicrogame(BaseMicrogame):
     def tarjetaConIcono(self, plantilla: pygame.Surface, codigo: str) -> pygame.Surface:
         base = plantilla.copy()
         caja = self.cajaIcono(base)
-        icono = self.iconoTarjeta(codigo, round(caja.w * 0.66))
+        icono = self.iconoTarjeta(codigo, round(caja.w * 0.8))
         base.blit(icono, icono.get_rect(center=caja.center))
         return base
 
