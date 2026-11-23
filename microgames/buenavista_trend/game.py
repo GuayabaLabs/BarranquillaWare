@@ -1448,27 +1448,6 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             surface.blit(self.heart_full_surf, (int(hl["x"]), int(hl["y"])))
             self.heart_full_surf.set_alpha(255)
 
-        # 2. Reloj contador dinámico en la esquina superior derecha (encima del badge de voz muteada)
-        counter_x = self.screen_w - int(round(269 * s))
-        counter_y = max(8, int(round(16 * s)))
-        sec_left = max(0.0, self.time_left)
-        time_display = f"0:{int(math.ceil(sec_left)):02d}"
-        if self.spr_counter:
-            surface.blit(self.spr_counter, (counter_x, counter_y))
-            display_rect = pygame.Rect(
-                counter_x + int(round(70 * s)),
-                counter_y + int(round(34 * s)),
-                max(60, int(round(138 * s))),
-                max(22, int(round(40 * s))),
-            )
-            col = (68, 40, 32) if sec_left > 5.0 else (205, 48, 48)
-            txt_t = self.font_timer_num.render(time_display, True, col)
-            surface.blit(txt_t, txt_t.get_rect(center=display_rect.center))
-        else:
-            col = (255, 235, 95) if sec_left > 5.0 else (255, 95, 95)
-            txt_t = self.font_timer_num.render(time_display, True, col)
-            surface.blit(txt_t, (self.screen_w - int(round(160 * s)), int(round(36 * s))))
-
         # 3. Tarjeta acuarela derecha: Canción / Combo / Precisión / Paloma
         self._render_rhythm_card(surface)
 
