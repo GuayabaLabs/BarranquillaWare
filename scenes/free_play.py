@@ -25,6 +25,7 @@ from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
+from microgames.heladero_metro import HeladeroMetroMicrogame
 
 
 INK_DARK = (78, 51, 35)       # #4E3323 Tinta café principal
@@ -163,6 +164,15 @@ class FreePlayScene(BaseState):
                 "difficulty": 3,
                 "theme_color": (214, 118, 52),
                 "cls": MaleconRuedaMicrogame,
+            },
+            {
+                "id": "heladero_metro",
+                "title": "EL HELADERO DEL METRO",
+                "district": "ESTADIO METROPOLITANO",
+                "desc": "Prepara raspados y helados de coco y corozo para la hinchada del Junior.",
+                "difficulty": 3,
+                "theme_color": (212, 70, 75),
+                "cls": HeladeroMetroMicrogame,
             },
             {
                 "id": "metropolitano_moderacion",

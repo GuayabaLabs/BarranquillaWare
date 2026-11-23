@@ -9,6 +9,7 @@ from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
+from microgames.heladero_metro import HeladeroMetroMicrogame
 
 # Progresión de los 5 Niveles Principales del Modo Historia
 STORY_CAMPAIGN_ORDER = ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
@@ -49,9 +50,9 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
     ],
     "metropolitano": [
         {
-            "id": "metropolitano_moderacion",
-            "title": "¡MODERA LA BARRA BRAVA!",
-            "cls": MetropolitanoModeracionMicrogame,
+            "id": "heladero_metro",
+            "title": "EL HELADERO DEL METRO",
+            "cls": HeladeroMetroMicrogame,
             "difficulty": 3,
         }
     ],
@@ -92,7 +93,7 @@ STORY_LEVEL_PREVIEW_META: Dict[str, Dict[str, Any]] = {
     "metropolitano": {
         "difficulty": 3,
         "max_difficulty": 5,
-        "preview_asset": "fondo_chat_estadio_microjuego.png",
+        "preview_asset": "Estadio/fondoHelado.png",
         "crop_anchor": "center",
         "callout_title": "ESTADIO METROPOLITANO",
     },

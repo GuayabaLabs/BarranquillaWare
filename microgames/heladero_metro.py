@@ -2320,3 +2320,32 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             texto = self.textoBorde(self.fuenteAviso, m["texto"], m["color"], m["borde"])
             texto.set_alpha(int(255 * min(1.0, m["vida"] / 0.4)))
             surface.blit(texto, texto.get_rect(center=(int(m["x"]), int(m["y"] - subida))))
+
+
+if __name__ == "__main__":
+    import os
+    import sys
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    for driver in ("SDL_AUDIODRIVER", "SDL_VIDEODRIVER"):
+        if os.environ.get(driver) == "dummy":
+            del os.environ[driver]
+    pygame.init()
+    screen = pygame.display.set_mode((1920, 1080))
+    pygame.display.set_caption("BarranquillaWare · El Heladero del Metro")
+    clock = pygame.time.Clock()
+    from core.asset_manager import AssetManager
+    from core.audio_manager import AudioManager
+    assets = AssetManager()
+    audio = AudioManager(assets.base_dir)
+    game = HeladeroMetroMicrogame(assets, audio=audio)
+    running = True
+    while running:
+        dt = clock.tick(60) / 1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                running = False
+            game.handle_event(event)
+        game.update(dt)
+        game.render(screen)
+        pygame.display.flip()
+    pygame.quit()
