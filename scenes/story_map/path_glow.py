@@ -76,17 +76,122 @@ def compute_campaign_dijkstra_path(
     return None
 
 
+def _fillet_sharp_corners(
+    pts: List[Tuple[float, float]],
+    fillet_px: float = 18.0,
+    min_angle_deg: float = 18.0,
+) -> List[Tuple[float, float]]:
+    """Suaviza vértices angulosos (p. ej. intersecciones en L/V) con arcos Bézier tangentes."""
+    if len(pts) < 3 or fillet_px <= 1.0:
+        return pts
+
+    raw_s: List[float] = [0.0]
+    for i in range(1, len(pts)):
+        raw_s.append(raw_s[-1] + math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]))
+    total_raw = raw_s[-1]
+    if total_raw <= 4.0:
+        return pts
+
+    candidates: List[Tuple[float, int]] = []
+    for j in range(1, len(pts) - 1):
+        v1x, v1y = pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1]
+        v2x, v2y = pts[j + 1][0] - pts[j][0], pts[j + 1][1] - pts[j][1]
+        l1 = math.hypot(v1x, v1y)
+        l2 = math.hypot(v2x, v2y)
+        if l1 <= 1e-4 or l2 <= 1e-4:
+            continue
+        cos_a = max(-1.0, min(1.0, (v1x * v2x + v1y * v2y) / (l1 * l2)))
+        ang = math.degrees(math.acos(cos_a))
+        if ang >= min_angle_deg and raw_s[j] > 2.0 and (total_raw - raw_s[j]) > 2.0:
+            candidates.append((ang, j))
+
+    if not candidates:
+        return pts
+
+    # Supresión no-máxima sobre longitud de arco para evitar solapar filetes vecinos
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    chosen: List[int] = []
+    min_sep = fillet_px * 2.1
+    for _ang, j in candidates:
+        sj = raw_s[j]
+        if all(abs(sj - raw_s[cj]) > min_sep for cj in chosen):
+            chosen.append(j)
+    chosen.sort()
+
+    def _sample_at_s(target_s: float) -> Tuple[float, float]:
+        if target_s <= 0.0:
+            return pts[0]
+        if target_s >= total_raw:
+            return pts[-1]
+        lo, hi = 0, len(raw_s) - 2
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if raw_s[mid + 1] < target_s:
+                lo = mid + 1
+            else:
+                hi = mid
+        seg = max(1e-4, raw_s[lo + 1] - raw_s[lo])
+        t = max(0.0, min(1.0, (target_s - raw_s[lo]) / seg))
+        return (
+            pts[lo][0] + (pts[lo + 1][0] - pts[lo][0]) * t,
+            pts[lo][1] + (pts[lo + 1][1] - pts[lo][1]) * t,
+        )
+
+    def _append_dedup(dst: List[Tuple[float, float]], pt: Tuple[float, float]) -> None:
+        if not dst or math.hypot(pt[0] - dst[-1][0], pt[1] - dst[-1][1]) >= 1e-4:
+            dst.append(pt)
+
+    out: List[Tuple[float, float]] = [pts[0]]
+    cursor_s = 0.0
+    orig_idx = 1
+
+    for j in chosen:
+        sj = raw_s[j]
+        d = min(fillet_px, sj - cursor_s, total_raw - sj)
+        if d < 2.0:
+            continue
+        s_in = sj - d
+        s_out = sj + d
+        while orig_idx < len(pts) and raw_s[orig_idx] < s_in:
+            if raw_s[orig_idx] > cursor_s:
+                _append_dedup(out, pts[orig_idx])
+            orig_idx += 1
+
+        q_in = _sample_at_s(s_in)
+        vc = pts[j]
+        q_out = _sample_at_s(s_out)
+        n_sub = max(6, int(math.ceil((2.0 * d) / 4.0)))
+        for k in range(n_sub + 1):
+            t = k / float(n_sub)
+            omt = 1.0 - t
+            fx = omt * omt * q_in[0] + 2.0 * omt * t * vc[0] + t * t * q_out[0]
+            fy = omt * omt * q_in[1] + 2.0 * omt * t * vc[1] + t * t * q_out[1]
+            _append_dedup(out, (fx, fy))
+
+        cursor_s = s_out
+        while orig_idx < len(pts) and raw_s[orig_idx] <= cursor_s:
+            orig_idx += 1
+
+    while orig_idx < len(pts):
+        _append_dedup(out, pts[orig_idx])
+        orig_idx += 1
+
+    _append_dedup(out, pts[-1])
+    return out
+
+
 def build_route_polyline(
     node_map: Dict[int, Dict[str, Any]],
     edge_map: Dict[Tuple[int, int], Dict[str, Any]],
     node_path: List[int],
     step_px: int = 6,
+    fillet_px: float = 18.0,
 ) -> Tuple[List[Tuple[float, float]], List[float], float]:
-    """Muestrea puntos densos sobre las curvas Bézier de una ruta y calcula distancias acumuladas."""
+    """Muestrea puntos densos en flotante sobre curvas Bézier, suaviza quiebres y calcula distancias."""
     if not node_path:
         return [], [], 0.0
 
-    pts: List[Tuple[float, float]] = []
+    raw_pts: List[Tuple[float, float]] = []
     for i in range(len(node_path) - 1):
         u, v = node_path[i], node_path[i + 1]
         nu, nv = node_map.get(u), node_map.get(v)
@@ -102,19 +207,33 @@ def build_route_polyline(
             )
         else:
             pc = ((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5)
-        seg_pts = get_bezier_points((int(p0[0]), int(p0[1])), (int(pc[0]), int(pc[1])), (int(p1[0]), int(p1[1])), step_px=step_px)
-        if len(seg_pts) < 2:
-            seg_pts = [(p0[0], p0[1]), (p1[0], p1[1])]
-        for idx, pt in enumerate(seg_pts):
-            if i > 0 and idx == 0 and pts:
-                continue
-            pts.append((float(pt[0]), float(pt[1])))
 
-    if not pts:
+        chord = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+        ctrl_dist = math.hypot(pc[0] - p0[0], pc[1] - p0[1]) + math.hypot(p1[0] - pc[0], p1[1] - pc[1])
+        num_steps = max(6, int(max(10.0, (chord + ctrl_dist) * 0.5) // max(4, step_px)))
+        seg_pts: List[Tuple[float, float]] = []
+        for s_i in range(num_steps + 1):
+            t = s_i / float(num_steps)
+            omt = 1.0 - t
+            bx = omt * omt * p0[0] + 2.0 * omt * t * pc[0] + t * t * p1[0]
+            by = omt * omt * p0[1] + 2.0 * omt * t * pc[1] + t * t * p1[1]
+            seg_pts.append((bx, by))
+
+        for pt in seg_pts:
+            if not raw_pts or math.hypot(pt[0] - raw_pts[-1][0], pt[1] - raw_pts[-1][1]) >= 1e-3:
+                raw_pts.append(pt)
+
+    if not raw_pts:
         n0 = node_map.get(node_path[0])
         if n0 is not None:
             return [(float(n0["x"]), float(n0["y"]))], [0.0], 0.0
         return [], [], 0.0
+
+    pts_filleted = _fillet_sharp_corners(raw_pts, fillet_px=fillet_px, min_angle_deg=18.0)
+    pts: List[Tuple[float, float]] = []
+    for pt in pts_filleted:
+        if not pts or math.hypot(pt[0] - pts[-1][0], pt[1] - pts[-1][1]) >= 1e-4:
+            pts.append(pt)
 
     cum_dists: List[float] = [0.0]
     for i in range(1, len(pts)):
@@ -129,7 +248,7 @@ class WatercolorRouteRenderer:
     con `mapa_destello_ruta.png`.
     """
 
-    def __init__(self, world_w: int, world_h: int, brush_h: int = 44) -> None:
+    def __init__(self, world_w: int, world_h: int, brush_h: int = 32) -> None:
         self.world_w = world_w
         self.world_h = world_h
         self.brush_h = max(16, int(brush_h))
@@ -139,6 +258,9 @@ class WatercolorRouteRenderer:
         self._brush_rgba: Optional[np.ndarray] = None
         self._tile_w: int = 1
         self._sparkle_surf: Optional[pygame.Surface] = None
+        self._flow_sparkle_surf: Optional[pygame.Surface] = None
+        self._flow_orb_buckets: List[pygame.Surface] = []
+        self._flow_orb_surf: Optional[pygame.Surface] = None
         self._route_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self._load_assets()
 
@@ -166,9 +288,30 @@ class WatercolorRouteRenderer:
         try:
             raw_sp = self.assets.load_cropped_surface("mapa_destello_ruta.png", alpha_threshold=6)
             self._sparkle_surf = pygame.transform.smoothscale(raw_sp, (92, 92))
+            self._flow_sparkle_surf = pygame.transform.smoothscale(raw_sp, (26, 26))
         except Exception as exc:
             print(f"[PathGlow] Aviso cargando mapa_destello_ruta.png: {exc}")
             self._sparkle_surf = None
+            self._flow_sparkle_surf = None
+
+        # Pre-hornear 10 cubetas cuantizadas (0.1..1.0) para el orbe aditivo (SDL2 BLEND_RGB_ADD ignora set_alpha)
+        orb_size = 44
+        hc = orb_size * 0.5
+        yy, xx = np.mgrid[0:orb_size, 0:orb_size].astype(np.float32)
+        dist = np.sqrt((xx + 0.5 - hc) ** 2 + (yy + 0.5 - hc) ** 2) / hc
+        falloff = np.clip(1.0 - dist, 0.0, 1.0) ** 2.0
+        base_col = np.array([255.0, 215.0, 110.0], dtype=np.float32)
+        self._flow_orb_buckets = []
+        for q in range(1, 11):
+            level = q / 10.0
+            orb = pygame.Surface((orb_size, orb_size))
+            orb.fill((0, 0, 0))
+            orb_rgb = np.clip(falloff[:, :, None] * (0.34 * level) * base_col[None, None, :], 0.0, 255.0).astype(np.uint8)
+            arr = pygame.surfarray.pixels3d(orb)
+            arr[:] = orb_rgb.transpose(1, 0, 2)
+            del arr
+            self._flow_orb_buckets.append(orb)
+        self._flow_orb_surf = self._flow_orb_buckets[-1]
 
     def invalidate_cache(self) -> None:
         self._route_cache.clear()
@@ -186,7 +329,7 @@ class WatercolorRouteRenderer:
         if key in self._route_cache:
             return self._route_cache[key]
 
-        pts, cum_dists, total_dist = build_route_polyline(node_map, edge_map, node_path, step_px=6)
+        pts, cum_dists, total_dist = build_route_polyline(node_map, edge_map, node_path, step_px=6, fillet_px=18.0)
         if len(pts) < 2 or total_dist <= 1.0:
             return None
 
@@ -201,18 +344,14 @@ class WatercolorRouteRenderer:
         bb_h = max(1, max_y - min_y)
         bbox = pygame.Rect(min_x, min_y, bb_w, bb_h)
 
-        # Segmentos de proyección (~14 px) para rasterizado exacto sin costuras ni solapamientos
-        seg_indices = list(range(0, len(pts), 2))
-        if seg_indices[-1] != len(pts) - 1:
-            seg_indices.append(len(pts) - 1)
-
+        # Segmentos de proyección a resolución completa (~4-6 px) para curvas/filetes continuos sin quiebres
         best_d2 = np.full((bb_w, bb_h), 1e9, dtype=np.float32)
         best_s = np.zeros((bb_w, bb_h), dtype=np.float32)
         r_lim = self.half_w
         r2_lim = r_lim * r_lim
 
-        for k in range(len(seg_indices) - 1):
-            i0, i1 = seg_indices[k], seg_indices[k + 1]
+        for k in range(len(pts) - 1):
+            i0, i1 = k, k + 1
             ax, ay = pts[i0][0] - min_x, pts[i0][1] - min_y
             bx, by = pts[i1][0] - min_x, pts[i1][1] - min_y
             sa, sb = cum_dists[i0], cum_dists[i1]
@@ -256,10 +395,10 @@ class WatercolorRouteRenderer:
             rgb_out = sampled[:, :, :3]
             a_out = sampled[:, :, 3].astype(np.float32)
 
-            # Desvanecimiento limpio en extremos para entrar/salir suave de los nodos
+            # Desvanecimiento compacto dentro del radio del nodo de parada (9 px) para uniones continuas
             end_fade = np.minimum(
-                np.clip(best_s / 18.0, 0.0, 1.0),
-                np.clip((total_dist - best_s) / 18.0, 0.0, 1.0),
+                np.clip((best_s + 2.0) / 8.0, 0.0, 1.0),
+                np.clip((total_dist - best_s + 2.0) / 8.0, 0.0, 1.0),
             )
             a_out = np.where(inside, a_out * end_fade, 0.0)
             a_u8 = np.clip(a_out, 0, 255).astype(np.uint8)
@@ -395,18 +534,199 @@ class WatercolorRouteRenderer:
         cam_x: int,
         cam_y: int,
         timer: float = 0.0,
+        alpha_scale: float = 1.0,
     ) -> None:
         """Dibuja una ruta ya desbloqueada con brillo cálido sutil persistente."""
+        alpha_scale = max(0.0, min(1.0, float(alpha_scale)))
+        if alpha_scale <= 0.01:
+            return
         bbox: pygame.Rect = route_data["bbox"]
         sx = bbox.x - cam_x
         sy = bbox.y - cam_y
         if sx + bbox.width < 0 or sy + bbox.height < 0 or sx > surface.get_width() or sy > surface.get_height():
             return
         full_surf: pygame.Surface = route_data["full_surf"]
-        pulse = int(122 + 22 * math.sin(timer * 2.1))
+        pulse = int(round((122 + 22 * math.sin(timer * 2.1)) * alpha_scale))
+        if pulse <= 2:
+            return
         full_surf.set_alpha(pulse)
         surface.blit(full_surf, (sx, sy))
         full_surf.set_alpha(255)
+
+    def _get_night_glow_surfaces(
+        self,
+        route_data: Dict[str, Any],
+        tier: str = "active",
+    ) -> Tuple[pygame.Surface, Optional[np.ndarray], Dict[int, pygame.Surface]]:
+        """Construye y cachea superficies nocturnas por jerarquía ('active'|'completed'|'locked') respetando POI_SPECS."""
+        tiers_cache: Dict[str, Any] = route_data.setdefault("_night_glow_tiers", {})
+        cached = tiers_cache.get(tier)
+        if cached is not None:
+            return cached
+
+        full_surf: pygame.Surface = route_data["full_surf"]
+        full_alpha: np.ndarray = route_data["full_alpha"]
+        w, h = full_surf.get_size()
+
+        night_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        rgb = pygame.surfarray.array3d(full_surf).astype(np.float32)
+        a_norm = (full_alpha.astype(np.float32) / 255.0)[:, :, None]
+
+        if tier == "active":
+            warm_tint = np.array([255.0, 224.0, 128.0], dtype=np.float32)[None, None, :]
+            glow_rgb = np.clip(0.82 * rgb + 0.18 * warm_tint, 0.0, 255.0)
+            add_scale = 0.28
+        elif tier == "completed":
+            ember_tint = np.array([255.0, 198.0, 105.0], dtype=np.float32)[None, None, :]
+            glow_rgb = np.clip(0.76 * rgb + 0.24 * ember_tint, 0.0, 255.0)
+            add_scale = 0.16
+        else:
+            moon_tint = np.array([185.0, 218.0, 238.0], dtype=np.float32)[None, None, :]
+            glow_rgb = np.clip(0.55 * rgb + 0.45 * moon_tint, 0.0, 255.0)
+            add_scale = 0.08
+
+        # En píxeles transparentes (edificios/bordes) RGB debe ser estrictamente 0
+        glow_rgb = np.where(full_alpha[:, :, None] > 0, glow_rgb, 0.0)
+
+        n_rgb = pygame.surfarray.pixels3d(night_surf)
+        n_a = pygame.surfarray.pixels_alpha(night_surf)
+        n_rgb[:] = glow_rgb.astype(np.uint8)
+        n_a[:] = full_alpha
+        del n_rgb, n_a
+
+        add_base_f32: Optional[np.ndarray] = None
+        add_buckets: Dict[int, pygame.Surface] = {}
+        if add_scale > 0.0:
+            add_base_f32 = np.clip(glow_rgb * a_norm * add_scale, 0.0, 255.0)
+            add_full = pygame.Surface((w, h))
+            a_rgb = pygame.surfarray.pixels3d(add_full)
+            a_rgb[:] = add_base_f32.astype(np.uint8)
+            del a_rgb
+            add_buckets[10] = add_full
+
+        entry = (night_surf, add_base_f32, add_buckets)
+        tiers_cache[tier] = entry
+        return entry
+
+    def _get_quantized_add_surf(
+        self,
+        add_base_f32: Optional[np.ndarray],
+        add_buckets: Dict[int, pygame.Surface],
+        intensity: float,
+    ) -> Optional[pygame.Surface]:
+        """Retorna una cubeta cuantizada (1..10) para BLEND_RGB_ADD ya que SDL2 ignora set_alpha()."""
+        if add_base_f32 is None:
+            return None
+        q = max(0, min(10, int(round(intensity * 10.0))))
+        if q <= 0:
+            return None
+        cached = add_buckets.get(q)
+        if cached is not None:
+            return cached
+        w, h, _ = add_base_f32.shape
+        surf = pygame.Surface((w, h))
+        arr = pygame.surfarray.pixels3d(surf)
+        arr[:] = np.clip(add_base_f32 * (q / 10.0), 0.0, 255.0).astype(np.uint8)
+        del arr
+        add_buckets[q] = surf
+        return surf
+
+    def render_night_glow_route(
+        self,
+        surface: pygame.Surface,
+        route_data: Dict[str, Any],
+        cam_x: int,
+        cam_y: int,
+        timer: float = 0.0,
+        unlocked: bool = False,
+        tier: Optional[str] = None,
+        intensity: float = 1.0,
+    ) -> None:
+        """Dibuja el brillo nocturno del camino por encima del overlay de noche, respetando POI_SPECS."""
+        intensity = max(0.0, min(1.0, float(intensity)))
+        if intensity <= 0.01:
+            return
+
+        bbox: pygame.Rect = route_data["bbox"]
+        sx = bbox.x - cam_x
+        sy = bbox.y - cam_y
+        if sx + bbox.width < 0 or sy + bbox.height < 0 or sx > surface.get_width() or sy > surface.get_height():
+            return
+
+        resolved_tier = tier if tier in ("active", "completed", "locked") else ("active" if unlocked else "locked")
+        night_surf, add_base_f32, add_buckets = self._get_night_glow_surfaces(route_data, tier=resolved_tier)
+
+        if resolved_tier == "active":
+            pulse = 0.88 + 0.12 * math.sin(timer * 2.4)
+            alpha = int(round(136 * pulse * intensity))
+            if alpha > 2:
+                night_surf.set_alpha(alpha)
+                surface.blit(night_surf, (sx, sy))
+                night_surf.set_alpha(255)
+            add_surf = self._get_quantized_add_surf(add_base_f32, add_buckets, intensity)
+            if add_surf is not None:
+                surface.blit(add_surf, (sx, sy), special_flags=pygame.BLEND_RGB_ADD)
+
+            # Flujo direccional con dt hacia el siguiente nivel (norm_s 0 -> 1)
+            full_alpha: np.ndarray = route_data["full_alpha"]
+            total_dist = max(1.0, float(route_data["total_dist"]))
+            spacing_px = 175.0
+            speed_px = 210.0
+            n_beads = max(2, int(round(total_dist / spacing_px)))
+            phase = (timer * speed_px / total_dist) % 1.0
+            sw_screen, sh_screen = surface.get_size()
+
+            for b in range(n_beads):
+                p = (b / float(n_beads) + phase) % 1.0
+                edge_w = min(1.0, p / 0.06, (1.0 - p) / 0.06)
+                if edge_w <= 0.05:
+                    continue
+                wx, wy = self.sample_point_at_progress(route_data, p)
+                lx = int(round(wx)) - bbox.x
+                ly = int(round(wy)) - bbox.y
+                if lx < 0 or ly < 0 or lx >= bbox.width or ly >= bbox.height:
+                    continue
+                if int(full_alpha[lx, ly]) < 12:
+                    continue
+                bx = int(round(wx - cam_x))
+                by = int(round(wy - cam_y))
+                if not (-60 <= bx <= sw_screen + 60 and -60 <= by <= sh_screen + 60):
+                    continue
+
+                bead_strength = edge_w * intensity
+                if self._flow_orb_buckets:
+                    orb_idx = min(9, int(round(bead_strength * 10.0)) - 1)
+                    if orb_idx >= 0:
+                        orb = self._flow_orb_buckets[orb_idx]
+                        surface.blit(orb, orb.get_rect(center=(bx, by)), special_flags=pygame.BLEND_RGB_ADD)
+
+                if self._flow_sparkle_surf is not None:
+                    twinkle = 0.78 + 0.22 * math.sin(timer * 5.0 + b * 1.3)
+                    sp_alpha = int(round(255 * bead_strength * twinkle))
+                    if sp_alpha > 4:
+                        self._flow_sparkle_surf.set_alpha(sp_alpha)
+                        surface.blit(self._flow_sparkle_surf, self._flow_sparkle_surf.get_rect(center=(bx, by)))
+                        self._flow_sparkle_surf.set_alpha(255)
+        elif resolved_tier == "completed":
+            pulse = 0.94 + 0.06 * math.sin(timer * 1.4)
+            alpha = int(round(120 * pulse * intensity))
+            if alpha > 2:
+                night_surf.set_alpha(alpha)
+                surface.blit(night_surf, (sx, sy))
+                night_surf.set_alpha(255)
+            add_surf = self._get_quantized_add_surf(add_base_f32, add_buckets, intensity)
+            if add_surf is not None:
+                surface.blit(add_surf, (sx, sy), special_flags=pygame.BLEND_RGB_ADD)
+        else:
+            pulse = 0.90 + 0.10 * math.sin(timer * 1.6)
+            alpha = int(round(100 * pulse * intensity))
+            if alpha > 2:
+                night_surf.set_alpha(alpha)
+                surface.blit(night_surf, (sx, sy))
+                night_surf.set_alpha(255)
+            add_surf = self._get_quantized_add_surf(add_base_f32, add_buckets, intensity)
+            if add_surf is not None:
+                surface.blit(add_surf, (sx, sy), special_flags=pygame.BLEND_RGB_ADD)
 
     def render_animated_route(
         self,
@@ -416,6 +736,7 @@ class WatercolorRouteRenderer:
         cam_x: int,
         cam_y: int,
         timer: float = 0.0,
+        night_mix: float = 0.0,
     ) -> None:
         """Dibuja la revelación progresiva del camino iluminado y el destello IA en la punta."""
         bbox: pygame.Rect = route_data["bbox"]
@@ -424,12 +745,21 @@ class WatercolorRouteRenderer:
         rev_surf = self.get_revealed_surface(route_data, progress)
         if not (sx + bbox.width < 0 or sy + bbox.height < 0 or sx > surface.get_width() or sy > surface.get_height()):
             surface.blit(rev_surf, (sx, sy))
+            if night_mix > 0.5 and progress >= 0.999:
+                _ns, add_base_f32, add_buckets = self._get_night_glow_surfaces(route_data, tier="active")
+                add_surf = self._get_quantized_add_surf(add_base_f32, add_buckets, night_mix)
+                if add_surf is not None:
+                    surface.blit(add_surf, (sx, sy), special_flags=pygame.BLEND_RGB_ADD)
 
         if 0.01 < progress < 0.995 and self._sparkle_surf is not None:
             wx, wy = self.sample_point_at_progress(route_data, progress)
             sp_x = int(round(wx - cam_x))
             sp_y = int(round(wy - cam_y))
             if -120 < sp_x < surface.get_width() + 120 and -120 < sp_y < surface.get_height() + 120:
+                if night_mix > 0.1 and self._flow_orb_buckets:
+                    orb_idx = min(9, max(0, int(round(night_mix * 10.0)) - 1))
+                    orb = self._flow_orb_buckets[orb_idx]
+                    surface.blit(orb, orb.get_rect(center=(sp_x, sp_y)), special_flags=pygame.BLEND_RGB_ADD)
                 pulse_scale = 0.85 + 0.22 * math.sin(timer * 10.0)
                 rot = (timer * 95.0) % 360.0
                 sp = pygame.transform.rotozoom(self._sparkle_surf, rot, pulse_scale)

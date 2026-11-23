@@ -207,26 +207,26 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
-                "¡Llegamos al C.C. Buenavista! Huele a tarde de helado, amigos y música bacana.",
-                "En la plaza todos están grabando el trend viral de bachata para ganar likes,",
-                "pero ojo: bailamos por gozárnosla, ¡no para que un algoritmo nos diga cuánto valemos!"
+                "¡C.C. Buenavista! Huele a raspado y salsa costeña.",
+                "En la plaza todos graban el trend pa' cazar likes,",
+                "¡pero aquí bailamos pa' gozar, no por un algoritmo!"
             ],
             [
-                "Suena 'Imitadora': sigue el ritmo de las notas con las teclas D, F, J y K.",
-                "Diviértete al compás sin dejar que la presión social te robe la sonrisa."
+                "Suena 'En Barranquilla Me Quedo': usa D, F, J y K.",
+                "Disfruta el ritmo sabroso sin dejar que la presión te gane."
             ]
         ],
         "post_win_pages": [
             [
-                "¡Qué sabrosura! Bailaste con el corazón ligero y gozaste de principio a fin.",
-                "Las redes son para compartir sonrisas, no para medir tu valor en corazoncitos.",
-                "¡Ahora despleguemos las alas hacia el calor del Estadio Metropolitano!"
+                "¡Cipote sabor, mi llave! Bailaste con el alma alegre.",
+                "Un raspado frío y una buena salsa valen más que mil likes.",
+                "¡Ahora despleguemos alas hacia el Estadio Metropolitano!"
             ]
         ],
         "post_lose_pages": [
             [
-                "¡Casi, casi! Entre tanta coreografía y flashes es normal perder el compás.",
-                "Sacúdete las plumas sin pena y volvamos a tirarnos ese paso en Buenavista."
+                "¡Ombe, casi coronas! Ese golpe salsero estuvo bravo.",
+                "Sacude las plumas sin pena y volvamos a tirar ese paso."
             ]
         ],
         "voice_clip_prefix": "paloma_buenavista"

@@ -8,7 +8,8 @@ os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from microgames.buenavista_trend import BuenavistaTrendMicrogame, MusicalNoteEvent, IMITADORA_BEATMAP_DATA
+from microgames.buenavista_trend import BuenavistaTrendMicrogame, MusicalNoteEvent, EN_BARRANQUILLA_BEATMAP_DATA, IMITADORA_BEATMAP_DATA
+from microgames.buenavista_trend.beatmap import BPM, beat
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -66,7 +67,7 @@ def test_buenavista_trend_assets_and_geometry():
 
 def test_beatmap_progressive_difficulty_and_lane_balance():
     """
-    Valida que el mapa de notas de 'Imitadora' cumpla con:
+    Valida que el mapa de notas de 'En Barranquilla Me Quedo' cumpla con:
     - Progresión de dificultad en 3 tramos (0-10s, 10-20s, 20-30s).
     - Distribución equilibrada en los 4 carriles (0, 1, 2, 3).
     - Sin notas simultáneas imposibles en los primeros segundos.
@@ -109,7 +110,7 @@ def test_controls_hit_detection_and_anti_hold():
     game = BuenavistaTrendMicrogame(character_id="westcol")
     game.phase = game.PHASE_PLAY
 
-    # Tomar la primera nota (carril 0 -> tecla D, impacto en 1.80s)
+    # Tomar la primera nota (carril 0 -> tecla D, impacto en 1.579s)
     first_note = game.musical_events[0]
     first_note.spawned = True
     first_note.state = "falling"
@@ -284,5 +285,190 @@ def test_camera_mode_prevents_double_penalty_and_grants_invulnerability():
     note2.state = "falling"
     game._mark_note_missed(note2, reason="¡SE PASÓ!")
     assert game.lives == 3
+
+    game.cleanup()
+
+
+def test_audio_mp3_fallback_and_preload(monkeypatch):
+    """Valida ruta .ogg principal, fallback automático a .mp3 y ejecución segura sin archivo."""
+    ogg_path = os.path.join("assets", "en_barranquilla_me_quedo_piano.ogg")
+    mp3_path = os.path.join("assets", "en_barranquilla_me_quedo_piano.mp3")
+
+    loaded_paths = []
+    played_calls = []
+
+    monkeypatch.setattr(pygame.mixer, "get_init", lambda: True)
+    monkeypatch.setattr(pygame.mixer.music, "load", lambda p: loaded_paths.append(p))
+    monkeypatch.setattr(pygame.mixer.music, "play", lambda **kw: played_calls.append(kw))
+
+    real_exists = os.path.exists
+
+    # Caso A: .ogg ausente y .mp3 presente -> precarga y reproduce .mp3 conservando track nominal
+    def fake_exists_mp3(path):
+        if os.path.normpath(path) == os.path.normpath(ogg_path):
+            return False
+        if os.path.normpath(path) == os.path.normpath(mp3_path):
+            return True
+        return real_exists(path)
+
+    monkeypatch.setattr(os.path, "exists", fake_exists_mp3)
+    game_a = BuenavistaTrendMicrogame(character_id="westcol")
+    assert game_a.music_track_name == "en_barranquilla_me_quedo_piano.ogg"
+    assert loaded_paths == [mp3_path]
+    game_a._start_music_if_needed()
+    assert game_a.audio.current_track == "en_barranquilla_me_quedo_piano.ogg"
+    assert len(played_calls) == 1
+    game_a.cleanup()
+
+    # Caso B: ni .ogg ni .mp3 presentes -> silencio seguro y song_elapsed avanza con dt
+    loaded_paths.clear()
+    played_calls.clear()
+
+    def fake_exists_none(path):
+        if os.path.normpath(path) in (os.path.normpath(ogg_path), os.path.normpath(mp3_path)):
+            return False
+        return real_exists(path)
+
+    monkeypatch.setattr(os.path, "exists", fake_exists_none)
+    game_b = BuenavistaTrendMicrogame(character_id="westcol")
+    game_b.phase = game_b.PHASE_PLAY
+    game_b._start_music_if_needed()
+    assert loaded_paths == []
+    game_b.update_game(0.05)
+    assert game_b.song_elapsed == pytest.approx(0.05, abs=1e-4)
+    game_b.cleanup()
+
+
+def test_spritesheet_no_bleed_and_union_bbox_balance():
+    """Valida ausencia de sangrado entre celdas 4x2 y proporciones equilibradas por caja unión."""
+    sheet_path = os.path.join("assets", "spritesheet_teclas_costenas_piano.png")
+    sheet = pygame.image.load(sheet_path).convert_alpha()
+    sw, sh = sheet.get_size()
+    cw, ch = sw // 4, sh // 2
+
+    for r in range(2):
+        for c in range(4):
+            cell = sheet.subsurface((c * cw, r * ch, cw, ch))
+            for x in range(cw):
+                assert cell.get_at((x, 0)).a == 0
+                assert cell.get_at((x, ch - 1)).a == 0
+            for y in range(ch):
+                assert cell.get_at((0, y)).a == 0
+                assert cell.get_at((cw - 1, y)).a == 0
+
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    max_dims = []
+    for i in range(4):
+        n_spr = game.normal_tile_sprites[i]
+        a_spr = game.active_tile_sprites[i]
+        assert n_spr.get_size() == a_spr.get_size()
+        bbox = n_spr.get_bounding_rect(min_alpha=80)
+        assert bbox.width > 0 and bbox.height > 0
+        max_dims.append(max(bbox.width, bbox.height))
+
+    assert min(max_dims) >= 0.72 * max(max_dims)
+    game.cleanup()
+
+
+def test_beatmap_salsa_grid_spacing_and_lane_sprite_alignment():
+    """Valida compás 4/4 a 114 BPM, alineación 1:1 carril==icono y sin repeticiones consecutivas."""
+    assert BPM == 114.0
+    assert callable(beat)
+
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    events = game.musical_events
+
+    for i, ev in enumerate(events):
+        assert ev.lane == ev.sprite_type
+        eighth_pos = ev.impact_time * (BPM / 60.0) * 2.0
+        assert abs(round(eighth_pos) - eighth_pos) < 0.02
+        if i > 0:
+            assert ev.impact_time - events[i - 1].impact_time >= 0.25
+            assert ev.lane != events[i - 1].lane
+
+    game.cleanup()
+
+
+def test_note_at_hit_line_does_not_overlap_key_badges():
+    """Valida separación vertical entre notas en hit_line_y y los badges [D][F][J][K]/(X)(A)(Y)(B)."""
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    assert hasattr(game, "key_badge_rects")
+    assert len(game.key_badge_rects) == 4
+
+    for i in range(4):
+        badge_r = game.key_badge_rects[i]
+        assert game.phone_rect.contains(badge_r)
+        spr_size = game.normal_tile_sprites[i].get_size()
+        note_rect = pygame.Rect(0, 0, spr_size[0], spr_size[1])
+        note_rect.center = (game.lane_centers_x[i], game.hit_line_y)
+        assert not note_rect.colliderect(badge_r)
+        assert note_rect.bottom <= badge_r.top
+
+    game.cleanup()
+
+
+def test_dt_animations_lane_glow_and_squash_stretch():
+    """Valida decaimiento con dt de yellow_glow_alpha, lane_press_timers y hit_anim_timer + render."""
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    surface = pygame.Surface((1920, 1080))
+    game.phase = game.PHASE_PLAY
+
+    ev = game.musical_events[0]
+    ev.spawned = True
+    ev.state = "falling"
+    game.song_elapsed = ev.impact_time
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d))
+
+    assert ev.state == "hit"
+    assert game.yellow_glow_alpha > 0.0
+    assert game.lane_press_timers[0] > 0.0
+    assert ev.hit_anim_timer > 0.0
+
+    initial_glow = game.yellow_glow_alpha
+    game.update_game(0.08)
+    game.render(surface)
+    assert 0.0 < game.yellow_glow_alpha < initial_glow
+
+    game.update_game(0.20)
+    game.render(surface)
+    assert game.yellow_glow_alpha == 0.0
+    assert game.lane_press_timers[0] == 0.0
+    assert ev.state == "done"
+
+    game.cleanup()
+
+
+def test_gamepad_buttons_parity_with_gamepad_button_keys():
+    """Valida paridad exacta entre GAMEPAD_BUTTONS, GAMEPAD_BUTTON_KEYS y eventos JOYBUTTONDOWN."""
+    assert set(BuenavistaTrendMicrogame.GAMEPAD_BUTTONS.keys()) == set(BuenavistaTrendMicrogame.GAMEPAD_BUTTON_KEYS.keys())
+    for btn, key in BuenavistaTrendMicrogame.GAMEPAD_BUTTON_KEYS.items():
+        lane = BuenavistaTrendMicrogame.GAMEPAD_BUTTONS[btn]
+        assert BuenavistaTrendMicrogame.LANE_KEYS[lane] == key
+
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    game.phase = game.PHASE_PLAY
+    ev = game.musical_events[0]  # Carril 0 -> D -> botón X (2)
+    ev.spawned = True
+    ev.state = "falling"
+    game.song_elapsed = ev.impact_time
+
+    game.handle_event(pygame.event.Event(pygame.JOYBUTTONDOWN, button=2))
+    assert ev.state == "hit"
+    assert game.hits_perfect == 1
+
+    game.cleanup()
+
+
+def test_arcade_short_time_limit_keeps_snappy_outro():
+    """Valida que en Modo Arcade (time_limit < 20s) no se fuerce outro largo de 17s."""
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    game.time_limit = 6.5
+    game.time_left = 6.5
+    game.phase = game.PHASE_PLAY
+
+    game.update(6.6)
+    assert game.is_finished is True
+    assert game.phase == game.PHASE_OUTRO
+    assert game.outro_duration <= 3.0
 
     game.cleanup()
