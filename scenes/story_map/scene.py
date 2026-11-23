@@ -185,7 +185,7 @@ class StoryMapScene(BaseState):
         self.timer: float = 0.0
         self.toast_msg: Optional[str] = None
         self.toast_timer: float = 0.0
-        self.font_toast = self.assets.cargarFuenteCuento(26)
+        self.font_toast = self.assets.cargarFuenteTitulo(24)
         self._init_rain_particles()
 
         # 7. Sistema de Punto de Interés Clave (Uninorte Key Location Effects)
@@ -2571,6 +2571,51 @@ class StoryMapScene(BaseState):
                 if hasattr(self, "level_preview"):
                     self.level_preview.clear_last_callout()
 
+    def cargarPuntito(self):
+        if hasattr(self, "puntitoBase"):
+            return self.puntitoBase
+        self.puntitoBase = None
+        self.puntitosHechos = {}
+        guardado = getattr(StoryMapScene, "puntitoGuardado", None)
+        if guardado is not None:
+            self.puntitoBase = guardado
+            return guardado
+        try:
+            import numpy as np
+            crudo = self.assets.load_surface("puntito.png", has_alpha=True)
+            rgb = pygame.surfarray.array3d(crudo).astype(np.float32)
+            alfa = rgb.max(axis=2)
+            color = np.clip(rgb * 255.0 / np.maximum(alfa, 1.0)[..., None], 0, 255)
+            peso = (alfa / 255.0)[..., None]
+            color = color * peso + np.array([255.0, 214.0, 110.0]) * (1.0 - peso)
+            luz = pygame.Surface(crudo.get_size(), pygame.SRCALPHA)
+            pygame.surfarray.pixels3d(luz)[...] = color.astype(np.uint8)
+            canal = pygame.surfarray.pixels_alpha(luz)
+            canal[...] = np.clip((alfa - 14.0) * 255.0 / 241.0, 0, 255).astype(np.uint8)
+            del canal
+            caja = luz.get_bounding_rect(min_alpha=6)
+            lado = max(caja.w, caja.h)
+            cuadro = pygame.Rect(0, 0, lado, lado)
+            cuadro.center = caja.center
+            cuadro = cuadro.clip(luz.get_rect())
+            self.puntitoBase = pygame.transform.smoothscale(luz.subsurface(cuadro), (256, 256))
+            StoryMapScene.puntitoGuardado = self.puntitoBase
+        except Exception as e:
+            print(f"[StoryMap] Aviso: no se pudo cargar el puntito: {e}")
+        return self.puntitoBase
+
+    def dibujarPuntito(self, surface: pygame.Surface, sx: int, sy: int, encima: bool, pulso: float) -> bool:
+        base = self.cargarPuntito()
+        if base is None:
+            return False
+        lado = int((76 if encima else 58) * (1.0 + 0.08 * pulso))
+        imagen = self.puntitosHechos.get(lado)
+        if imagen is None:
+            imagen = pygame.transform.smoothscale(base, (lado, lado))
+            self.puntitosHechos[lado] = imagen
+        surface.blit(imagen, imagen.get_rect(center=(int(sx), int(sy))))
+        return True
+
     def _render_level_stops(self, surface: pygame.Surface, cam_x: int, cam_y: int) -> None:
         """Renderiza todos los nodos, destacando en amarillo solo los POI."""
         nodes, _, node_map, _, _ = self._get_street_graph()
@@ -2590,6 +2635,8 @@ class StoryMapScene(BaseState):
                     is_node_hover = (n["id"] == hovered_node_id) or (
                         poi_key is not None and getattr(self, f"{poi_key}_hover", False)
                     )
+                    if self.dibujarPuntito(surface, sx, sy, is_node_hover, pulse):
+                        continue
                     glow_r = int((19 if is_node_hover else 14) + 4 * pulse)
                     glow_alpha = min(220, int((125 if is_node_hover else 70) + 50 * pulse))
                     g_key = (glow_r, (glow_alpha // 16) * 16)
@@ -4219,7 +4266,7 @@ class StoryMapScene(BaseState):
         if self.dibujarLetrero(surface):
             return
         alpha = min(255, int(255 * (self.toast_timer / 0.5))) if self.toast_timer < 0.5 else 255
-        font_toast = self.assets.cargarFuenteCuento(24)
+        font_toast = self.assets.cargarFuenteTitulo(22)
         txt_surf = font_toast.render(self.toast_msg, True, (76, 48, 102))
         bw = max(460, txt_surf.get_width() + 92)
         bh = 60
@@ -4347,6 +4394,22 @@ class StoryMapScene(BaseState):
         conContorno.blit(imagen, (grosor, grosor))
         return conContorno
 
+    def volverAzul(self, imagen: pygame.Surface, grados: float = 80.0) -> pygame.Surface:
+        import numpy as np
+        rgb = pygame.surfarray.array3d(imagen).astype(np.float32)
+        y = rgb @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+        i = rgb @ np.array([0.596, -0.274, -0.322], dtype=np.float32)
+        q = rgb @ np.array([0.211, -0.523, 0.312], dtype=np.float32)
+        angulo = math.radians(grados)
+        i2 = i * math.cos(angulo) - q * math.sin(angulo)
+        q2 = i * math.sin(angulo) + q * math.cos(angulo)
+        r = y + 0.956 * i2 + 0.621 * q2
+        g = y - 0.272 * i2 - 0.647 * q2
+        b = y - 1.106 * i2 + 1.703 * q2
+        azul = imagen.copy()
+        pygame.surfarray.pixels3d(azul)[...] = np.clip(np.stack([r, g, b], axis=2), 0, 255).astype(np.uint8)
+        return azul
+
     def ensancharVentanaMenu(self, ventana: pygame.Surface, extra: int) -> pygame.Surface:
         ancho, alto = ventana.get_size()
         resultado = pygame.Surface((ancho + extra, alto), pygame.SRCALPHA)
@@ -4382,6 +4445,7 @@ class StoryMapScene(BaseState):
             morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 268)
             rojo = pygame.transform.smoothscale(
                 self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 268), morado.get_size())
+            azul = self.volverAzul(morado)
             self.fuenteTituloMenu = self.assets.cargarFuenteTitulo(44)
             self.fuenteTextoMenu = self.assets.cargarFuenteCuento(22)
             self.fuenteEstadoMenu = self.assets.cargarFuenteCuento(17)
@@ -4407,7 +4471,7 @@ class StoryMapScene(BaseState):
                 fuenteBoton = self.assets.cargarFuenteTitulo(tam)
             for boton, texto, y in botones:
                 versiones = []
-                for fondo, contorno in ((morado, (70, 30, 110)), (rojo, (120, 26, 34))):
+                for fondo, contorno in ((azul, (28, 58, 120)), (rojo, (120, 26, 34))):
                     imagen = fondo.copy()
                     letras = self.textoConContorno(fuenteBoton, texto, (255, 248, 236), contorno)
                     imagen.blit(letras, letras.get_rect(center=(imagen.get_width() // 2, imagen.get_height() // 2 - 3)))

@@ -259,7 +259,7 @@ class Fritanga84Microgame(BaseMicrogame):
 
     def cargarImagenes(self) -> bool:
         try:
-            fondo = self.assets.load_surface(os.path.join(carpetaFritanga, "fondoFritanga.jpg"), has_alpha=False)
+            fondo = self.assets.load_surface(os.path.join(carpetaFritanga, "fondoFritanga.png"), has_alpha=False)
             self.fondo = pygame.transform.smoothscale(fondo, (self.screen_w, self.screen_h))
 
             caldero = self.recortar(self.assets.cargarSinFondo(os.path.join(carpetaFritanga, "calderoNormal.jpg"), 1200))
@@ -348,6 +348,8 @@ class Fritanga84Microgame(BaseMicrogame):
             print(f"[Fritanga] Aviso: faltan imágenes de la fritanga: {e}")
             return False
 
+        self.imagenQuemadura = self.cargarOpcional("FAy.png")
+
         self.fuenteHud = self.assets.cargarFuenteCuento(40)
         self.fuenteArepa = self.assets.cargarFuenteTitulo(30)
         self.fuenteMensaje = self.assets.cargarFuenteTitulo(34)
@@ -424,6 +426,16 @@ class Fritanga84Microgame(BaseMicrogame):
                 celda = hoja.subsurface((columna * w // 4, fila * h // 2, w // 4, h // 2))
                 avatares.append(self.aAncho(self.recortar(celda), 42))
         return avatares
+
+    def cargarOpcional(self, archivo: str):
+        ruta = os.path.join(carpetaFritanga, archivo)
+        try:
+            if not os.path.exists(os.path.join(self.assets.base_dir, ruta)):
+                return None
+            return self.recortar(self.assets.cargarSinFondo(ruta, 1200))
+        except Exception as e:
+            print(f"[Fritanga] Aviso al cargar {archivo}: {e}")
+            return None
 
     def recortar(self, imagen: pygame.Surface) -> pygame.Surface:
         caja = imagen.get_bounding_rect(min_alpha=60)
@@ -2041,6 +2053,24 @@ class Fritanga84Microgame(BaseMicrogame):
         self.bordeRojo.set_alpha(int(255 * visible * (0.55 + 0.35 * math.sin(t * 6.0))))
         surface.blit(self.bordeRojo, (0, 0))
 
+        conImagen = getattr(self, "imagenQuemadura", None) is not None
+        if "lupaMano" not in self.globosHechos and conImagen:
+            lupa = self.aAncho(self.imagenQuemadura, 660)
+            mano = self.manoCuritas
+            w, h = mano.get_size()
+            dedos = mano.subsurface((0, int(h * 0.3), w, h - int(h * 0.3)))
+            dedos = pygame.transform.smoothscale_by(dedos, lupa.get_width() * 0.86 / float(dedos.get_width()))
+            capa = pygame.Surface(lupa.get_size(), pygame.SRCALPHA)
+            capa.blit(dedos, dedos.get_rect(midtop=(lupa.get_width() // 2 + 30, -int(lupa.get_height() * 0.14))))
+            anchoL, altoL = lupa.get_size()
+            dentro = pygame.mask.from_surface(lupa, 40).scale((int(anchoL * 0.9), int(altoL * 0.88)))
+            forma = pygame.Surface((anchoL, altoL), pygame.SRCALPHA)
+            forma.fill((255, 255, 255, 0))
+            recorte = dentro.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(255, 255, 255, 0))
+            forma.blit(recorte, recorte.get_rect(center=(anchoL // 2, altoL // 2)))
+            capa.blit(forma, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            lupa.blit(capa, (0, 0))
+            self.globosHechos["lupaMano"] = lupa
         if "lupaMano" not in self.globosHechos:
             mano = self.manoCuritas
             w, h = mano.get_size()
@@ -2062,9 +2092,10 @@ class Fritanga84Microgame(BaseMicrogame):
         temblor = int(math.sin(t * 70.0) * 8 * max(0.0, 1.0 - t / 0.5))
         hueco = lupa.get_rect(center=(960 + temblor, 680))
         surface.blit(lupa, hueco)
-        borde = hueco.inflate(int(14 + 6 * latido), int(14 + 6 * latido))
-        self.trazoAMano(surface, borde, True, (255, 196, 90), 5, 2.0)
-        self.trazoAMano(surface, borde.inflate(14, 14), True, (110, 50, 25), 2, 2.5)
+        if not conImagen:
+            borde = hueco.inflate(int(14 + 6 * latido), int(14 + 6 * latido))
+            self.trazoAMano(surface, borde, True, (255, 196, 90), 5, 2.0)
+            self.trazoAMano(surface, borde.inflate(14, 14), True, (110, 50, 25), 2, 2.5)
 
         for i in range(3):
             subida = (t * 0.6 + i * 0.33) % 1.0
@@ -2666,10 +2697,15 @@ class Fritanga84Microgame(BaseMicrogame):
         marco = self.marcoTermometro
         c = self.celularCentro if self.secuencia != "explosion" else 0.0
         suave = c * c * (3 - 2 * c)
-        x = int(925 + (self.botonesAviso[0].centerx - 925) * suave)
+        x = int(925 + (self.xTermometroAviso() - 925) * suave)
         y = int(150 + (300 - 150) * suave)
         caja = marco.get_rect(midtop=(x, y))
         surface.blit(self.armarTermometro(), caja.move(-8, 0))
+
+    def xTermometroAviso(self) -> int:
+        marco = self.marcoTermometro
+        orilla = self.centroGrande[0] - int(self.marcoCelular.get_width() * self.escalaGrande) // 2
+        return min(self.botonesAviso[0].centerx, orilla - 70 - marco.get_width() // 2)
 
     def armarTermometro(self) -> pygame.Surface:
         marco = self.marcoTermometro
@@ -2694,7 +2730,7 @@ class Fritanga84Microgame(BaseMicrogame):
         llegar = llegar * llegar * (3 - 2 * llegar)
         c = self.celularCentro if self.secuencia != "explosion" else 0.0
         c = c * c * (3 - 2 * c)
-        x0 = 925 + (self.botonesAviso[0].centerx - 925) * c
+        x0 = 925 + (self.xTermometroAviso() - 925) * c
         y0 = 150 + (300 - 150) * c
         destinoY, crecer = (300, 1.1) if d["pausado"] else (90, 0.75)
         x = x0 + (960 - x0) * llegar

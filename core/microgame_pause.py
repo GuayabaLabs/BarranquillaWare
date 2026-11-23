@@ -297,16 +297,26 @@ class MicrogamePauseState(BaseState):
             self.botonMorado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), btn_ancho)
             rojo = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), btn_ancho)
             if n_items >= 7:
-                self.botonMorado = pygame.transform.smoothscale(self.botonMorado, (272, 62))
-                rojo = pygame.transform.smoothscale(rojo, (272, 62))
+                self.botonMorado = pygame.transform.smoothscale(self.botonMorado, (256, 54))
+                rojo = pygame.transform.smoothscale(rojo, (256, 54))
                 # El rojo crece un poquito para que se note cuál está elegido
                 self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.04)
             else:
                 self.botonRojo = pygame.transform.smoothscale_by(rojo, 1.05)
-            self.fuenteTituloPausa = self.assets.cargarFuenteTitulo(74 if n_items >= 7 else 84)
-            self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(38 if n_items >= 7 else (40 if n_items >= 6 else 44))
+            self.fuenteTituloPausa = self.assets.cargarFuenteTitulo(70 if n_items >= 7 else 80)
+            tam = 38 if n_items >= 7 else (40 if n_items >= 6 else 44)
+            self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(tam)
+            anchoUtil = int(self.botonMorado.get_width() * 0.8)
+            while tam > 22 and max(self.fuenteBotonPausa.size(it["label"].capitalize())[0] for it in self.items) > anchoUtil:
+                tam -= 2
+                self.fuenteBotonPausa = self.assets.cargarFuenteTitulo(tam)
             self.fuenteEstadoPausa = self.assets.cargarFuenteCuento(20 if n_items >= 7 else (21 if n_items >= 6 else 22))
             self.fuenteAyudaPausa = self.assets.cargarFuenteCuento(24 if n_items >= 7 else (25 if n_items >= 6 else 28))
+            try:
+                naranja = self.assets.load_cropped_surface("boton_acuarela_naranja.png")
+                self.botonNaranja = pygame.transform.smoothscale(naranja, self.botonMorado.get_size())
+            except Exception:
+                self.botonNaranja = self.botonMorado
             self.pausaLista = True
         except Exception as e:
             print(f"Aviso: no se pudo cargar la ventana de pausa: {e}")
@@ -322,9 +332,9 @@ class MicrogamePauseState(BaseState):
         separacion = 4 if n_items >= 6 else 10
         total = n_items * alto + (n_items - 1) * separacion
         if n_items >= 7:
-            centro_y = 570 if self.save_callback else 558
+            centro_y = 540 if self.save_callback else 530
         elif n_items >= 6:
-            centro_y = 576 if self.save_callback else 564
+            centro_y = 548 if self.save_callback else 540
         else:
             centro_y = 595 if self.save_callback else 585
         arriba = centro_y - total // 2
@@ -365,14 +375,14 @@ class MicrogamePauseState(BaseState):
         primerBoton = cajas[0].top if cajas else ventana.top + 400
         ultimoBoton = cajas[-1].bottom if cajas else ventana.top + 760
         espacioEstado = 34 if (self.save_callback and self.save_feedback_timer > 0.0) else 0
-        titulo_x = self.centroPapel + 44 if n_items >= 7 else (self.centroPapel + 24 if n_items >= 6 else self.centroPapel)
+        titulo_x = self.centroPapel + (34 if n_items >= 7 else 20)
         titulo_gap = 26 if n_items >= 7 else (30 if n_items >= 6 else 36)
-        titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (110, 62, 150), (255, 250, 238))
+        titulo = self.textoConContorno(self.fuenteTituloPausa, "Pausa", (226, 86, 150), (255, 250, 238))
         surface.blit(titulo, titulo.get_rect(midbottom=(titulo_x, primerBoton - titulo_gap - espacioEstado)))
 
         if self.save_callback and self.save_feedback_timer > 0.0:
             estado_surf = self.fuenteEstadoPausa.render("¡Partida guardada!", True, (38, 134, 68))
-            estado_x = self.centroPapel + 10 if n_items >= 7 else self.centroPapel
+            estado_x = self.centroPapel
             estado_y = primerBoton - 18
             surface.blit(estado_surf, estado_surf.get_rect(center=(estado_x, estado_y)))
 
@@ -381,16 +391,16 @@ class MicrogamePauseState(BaseState):
                 it["label"] = self._voice_label()
         for i, caja in enumerate(cajas):
             elegido = i == self.selected
-            boton = self.botonRojo if elegido else self.botonMorado
+            boton = self.botonRojo if elegido else self.botonNaranja
             surface.blit(boton, boton.get_rect(center=caja.center))
-            contorno = (120, 26, 34) if elegido else (70, 30, 110)
+            contorno = (120, 26, 34) if elegido else (150, 70, 20)
             # Solo la primera letra en mayúscula
             etiqueta = self.items[i]["label"].capitalize()
             texto = self.textoConContorno(self.fuenteBotonPausa, etiqueta, (255, 248, 236), contorno)
             surface.blit(texto, texto.get_rect(center=(caja.centerx, caja.centery - 3)))
 
         # Ayuda corta en una sola línea despejada de las flores inferiores
-        ayuda_x = self.centroPapel - 32 if n_items >= 7 else (self.centroPapel - 16 if n_items >= 6 else self.centroPapel)
+        ayuda_x = self.centroPapel - 26
         ayuda_y = ultimoBoton + 14
         ayuda = self.fuenteAyudaPausa.render("Enter: aceptar · Esc: seguir", True, (126, 90, 62))
         surface.blit(ayuda, ayuda.get_rect(midtop=(ayuda_x, ayuda_y)))

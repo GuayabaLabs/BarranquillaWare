@@ -117,6 +117,12 @@ class SideNavDrawer:
         self.trofeoGrisCompacto = assets.cargarTrofeo(74, enGris=True)
         self.fuenteTitulo = assets.cargarFuenteTitulo(62)
         self.fuenteTituloMensajes = assets.cargarFuenteCuento(54)
+        tam = 62
+        self.fuenteTituloSeccion = assets.cargarFuenteTitulo(tam)
+        anchoTitulo = 2 * (self.rectBotonCerrar(0).left - self.centroPanel(0) - 14)
+        while tam > 30 and max(self.fuenteTituloSeccion.size(n)[0] for n in ("Logros", "Mensajes", "Misiones", "Perfil")) > anchoTitulo:
+            tam -= 2
+            self.fuenteTituloSeccion = assets.cargarFuenteTitulo(tam)
         self.fuenteNombre = assets.cargarFuenteCuento(34)
         self.fuenteDetalle = assets.cargarFuenteCuento(25)
         self.fuenteNombreCompacto = assets.cargarFuenteCuento(21)
@@ -152,6 +158,8 @@ class SideNavDrawer:
 
     def _init_buttons(self) -> None:
         """Carga y optimiza los sprites oficiales de cada botón y sus variantes hover."""
+        if self.armarBotonesConBase():
+            return
         for item in self.nav_items:
             item_id = item["id"]
             rect = item["rect"]
@@ -166,6 +174,52 @@ class SideNavDrawer:
                 self.button_hover_sprites[item_id] = hov
             elif norm:
                 self.button_hover_sprites[item_id] = norm
+
+    def armarBotonesConBase(self) -> bool:
+        from core.asset_manager import AssetManager
+        assets = AssetManager.get_instance()
+        try:
+            ancho, alto = self.nav_items[0]["rect"].size
+            bases = []
+            naranja = assets.load_cropped_surface("boton_acuarela_naranja.png")
+            rojo = assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), ancho)
+            for base in (naranja, rojo):
+                altoBase = int(base.get_height() * ancho / float(base.get_width()))
+                base = pygame.transform.smoothscale(base, (ancho, min(alto, altoBase)))
+                lienzo = pygame.Surface((ancho, alto), pygame.SRCALPHA)
+                lienzo.blit(base, base.get_rect(center=(ancho // 2, alto // 2)))
+                bases.append(lienzo)
+        except Exception as e:
+            print(f"[SideNavDrawer] Aviso al armar los botones: {e}")
+            return False
+
+        tam = 40
+        fuente = assets.cargarFuenteTitulo(tam)
+        while tam > 20 and max(fuente.size(item["label"])[0] for item in self.nav_items) > ancho * 0.62:
+            tam -= 2
+            fuente = assets.cargarFuenteTitulo(tam)
+
+        for item in self.nav_items:
+            versiones = []
+            for base, contorno in ((bases[0], (150, 70, 20)), (bases[1], (120, 26, 34))):
+                imagen = base.copy()
+                letras = self.textoConContorno(fuente, item["label"], (255, 248, 236), contorno)
+                imagen.blit(letras, letras.get_rect(center=(ancho // 2, alto // 2 - 3)))
+                versiones.append(imagen)
+            self.button_sprites[item["id"]] = versiones[0]
+            self.button_hover_sprites[item["id"]] = versiones[1]
+        return True
+
+    def textoConContorno(self, fuente, texto: str, color, colorContorno) -> pygame.Surface:
+        cuerpo = fuente.render(texto, True, color)
+        borde = fuente.render(texto, True, colorContorno)
+        lienzo = pygame.Surface((cuerpo.get_width() + 6, cuerpo.get_height() + 6), pygame.SRCALPHA)
+        for dx in (-3, -2, 0, 2, 3):
+            for dy in (-3, -2, 0, 2, 3):
+                if abs(dx) + abs(dy) >= 3:
+                    lienzo.blit(borde, (3 + dx, 3 + dy))
+        lienzo.blit(cuerpo, (3, 3))
+        return lienzo
 
     def _load_scaled(self, filename: str, size: Tuple[int, int]) -> Optional[pygame.Surface]:
         from core.asset_manager import AssetManager
@@ -541,6 +595,9 @@ class SideNavDrawer:
         conLuz.blit(luz, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
         return conLuz
 
+    def centroPanel(self, panelX: int) -> int:
+        return panelX + 214
+
     def dibujarSeccionTrofeos(self, surface: pygame.Surface, panelX: int) -> None:
         """Dibuja los trofeos sobre fichas acuarela: en gris los que faltan y a color los ganados."""
         cafeOscuro = (82, 48, 28)
@@ -548,8 +605,9 @@ class SideNavDrawer:
         cafeApagado = (134, 108, 86)
         top = self.panel_top_y
 
-        titulo = self.fuenteTitulo.render("Logros", True, cafeOscuro)
-        surface.blit(titulo, titulo.get_rect(center=(panelX + 200, top + 72)))
+        centro = self.centroPanel(panelX)
+        titulo = self.fuenteTituloSeccion.render("Logros", True, cafeOscuro)
+        surface.blit(titulo, titulo.get_rect(center=(centro, top + 72)))
 
         cerrar = self.botonCerrar
         if self.hoverBotonCerrar:
@@ -566,7 +624,7 @@ class SideNavDrawer:
         card_h = 116 if compacto else 184
         paso_fila = 128 if compacto else 200
         offset_inicio = 132 if compacto else 156
-        card_x = panelX + 40
+        card_x = centro - card_w // 2
         text_x = (card_x + 92) if compacto else (card_x + 136)
         text_w = card_w - (104 if compacto else 148)
         trofeo_x = card_x + 10
@@ -599,7 +657,7 @@ class SideNavDrawer:
 
         cuantos = len([t for t in self.trofeos if t["id"] in self.trofeosObtenidos])
         cuenta = f_nombre.render(f"{cuantos} de {len(self.trofeos)} trofeos", True, cafeOscuro)
-        surface.blit(cuenta, cuenta.get_rect(center=(panelX + 200, top + (698 if compacto else 705))))
+        surface.blit(cuenta, cuenta.get_rect(center=(centro, top + (698 if compacto else 705))))
 
     def dibujarSeccionMensajes(self, surface: pygame.Surface, panelX: int) -> None:
         """Dibuja la bandeja de mensajes narrativos sobre tarjetas acuarela con alta legibilidad."""
@@ -608,8 +666,9 @@ class SideNavDrawer:
         cafeTexto = (86, 56, 38)
         top = self.panel_top_y
 
-        titulo = self.fuenteTituloMensajes.render("Mensajes", True, cafeOscuro)
-        titulo_rect = titulo.get_rect(center=(panelX + 200, top + 60))
+        centro = self.centroPanel(panelX)
+        titulo = self.fuenteTituloSeccion.render("Mensajes", True, cafeOscuro)
+        titulo_rect = titulo.get_rect(center=(centro, top + 66))
         surface.blit(titulo, titulo_rect)
 
         cerrar = self.botonCerrar
@@ -618,7 +677,7 @@ class SideNavDrawer:
         surface.blit(cerrar, cerrar.get_rect(center=self.rectBotonCerrar(panelX).center))
 
         sub = self.fuenteDetalleCompacto.render("Avisos de Curramba", True, cafe)
-        sub_rect = sub.get_rect(center=(panelX + 200, top + 114))
+        sub_rect = sub.get_rect(center=(centro, top + 114))
         surface.blit(sub, sub_rect)
 
         mensajes_a_mostrar = self.mensajes if self.mensajes else [
@@ -640,7 +699,7 @@ class SideNavDrawer:
             card_h, card_gap, card_y = 94, 4, top + 131
 
         card_w = 316
-        card_x = panelX + 42
+        card_x = centro - card_w // 2
         cards_metrics = []
         for msg in visibles:
             card_surf = self._get_ficha_card(card_w, card_h).copy()
@@ -697,7 +756,7 @@ class SideNavDrawer:
             card_y += card_h + card_gap
 
         pie = self.fuenteDetalleCompacto.render(f"{len(visibles)} avisos", True, cafeOscuro)
-        pie_rect = pie.get_rect(center=(panelX + 200, top + 736))
+        pie_rect = pie.get_rect(center=(centro, top + 736))
         surface.blit(pie, pie_rect)
 
         self.last_mensajes_layout_metrics = {
@@ -715,8 +774,9 @@ class SideNavDrawer:
         cafeTexto = (96, 66, 46)
         top = self.panel_top_y
 
-        titulo = self.fuenteTitulo.render("Misiones", True, cafeOscuro)
-        surface.blit(titulo, titulo.get_rect(center=(panelX + 200, top + 72)))
+        centro = self.centroPanel(panelX)
+        titulo = self.fuenteTituloSeccion.render("Misiones", True, cafeOscuro)
+        surface.blit(titulo, titulo.get_rect(center=(centro, top + 72)))
 
         cerrar = self.botonCerrar
         if self.hoverBotonCerrar:
@@ -741,7 +801,7 @@ class SideNavDrawer:
         compact_mis = card_h < 90
 
         card_w = 316
-        card_x = panelX + 42
+        card_x = centro - card_w // 2
         completadas = 0
 
         for mis in visibles:
@@ -777,7 +837,7 @@ class SideNavDrawer:
             card_y += card_h + card_gap
 
         pie = self.fuenteNombreCompacto.render(f"{completadas} de {len(visibles)} misiones superadas", True, cafeOscuro)
-        surface.blit(pie, pie.get_rect(center=(panelX + 200, top + 712)))
+        surface.blit(pie, pie.get_rect(center=(centro, top + 712)))
 
     def dibujarSeccionPerfil(self, surface: pygame.Surface, panelX: int) -> None:
         """Dibuja la ficha esencial del jugador sin repetir métricas que ya muestra el HUD superior."""
@@ -787,8 +847,9 @@ class SideNavDrawer:
         cafe = (112, 68, 38)
         top = self.panel_top_y
 
-        titulo = self.fuenteTitulo.render("Perfil", True, cafeOscuro)
-        surface.blit(titulo, titulo.get_rect(center=(panelX + 200, top + 75)))
+        centro = self.centroPanel(panelX)
+        titulo = self.fuenteTituloSeccion.render("Perfil", True, cafeOscuro)
+        surface.blit(titulo, titulo.get_rect(center=(centro, top + 72)))
 
         cerrar = self.botonCerrar
         if self.hoverBotonCerrar:
@@ -802,7 +863,7 @@ class SideNavDrawer:
         niveles = pdata.get("niveles", "0/5")
 
         card_w = 316
-        card_x = panelX + 42
+        card_x = centro - card_w // 2
         avatar_card = self._get_ficha_card(card_w, 250).copy()
 
         portrait_surf = None
@@ -845,4 +906,4 @@ class SideNavDrawer:
         surface.blit(prog_card, (card_x, top + 424))
 
         pie = self.fuenteDetalleCompacto.render("BarranquillaWare", True, cafe)
-        surface.blit(pie, pie.get_rect(center=(panelX + 200, top + 705)))
+        surface.blit(pie, pie.get_rect(center=(centro, top + 705)))
