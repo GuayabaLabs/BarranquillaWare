@@ -389,17 +389,25 @@ class FreePlayScene(BaseState):
     def _launch_game(self, game_idx: int) -> None:
         self.audio.play_click()
         g_data = self.games_data[game_idx]
-        microgame = g_data["cls"](
-            character_id=self.character_id,
-            on_complete_callback=self._on_game_complete,
-        )
-        microgame.pause_restart_callback = lambda idx=game_idx: self._restart_from_pause(idx)
-        microgame.pause_menu_callback = lambda: self._exit_from_pause()
-        microgame.pause_return_callback = lambda: self._exit_from_pause()
-        self._active_microgame = microgame
+        if not (hasattr(self, "state_machine") and self.state_machine):
+            return
 
-        if hasattr(self, "state_machine") and self.state_machine:
-            self.state_machine.change_state(microgame)
+        from scenes.loading_scene import LoadingScene
+
+        def _build():
+            microgame = g_data["cls"](
+                character_id=self.character_id,
+                on_complete_callback=self._on_game_complete,
+            )
+            microgame.pause_restart_callback = lambda idx=game_idx: self._restart_from_pause(idx)
+            microgame.pause_menu_callback = lambda: self._exit_from_pause()
+            microgame.pause_return_callback = lambda: self._exit_from_pause()
+            self._active_microgame = microgame
+            return microgame
+
+        self.state_machine.change_state(
+            LoadingScene(_build, message=f"Cargando {g_data['title']}...")
+        )
 
     def _on_game_complete(self, won: bool) -> None:
         if self._active_microgame is not None and hasattr(self._active_microgame, "cleanup"):
