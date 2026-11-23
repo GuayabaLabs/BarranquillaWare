@@ -113,7 +113,7 @@ esquinaPost = (52, 168)
 rectFoto = (560, 100, 960, 960)
 ladoFotoVista = 600
 duracionPublicar = 3.4
-velocidadCaida = (430.0, 540.0)
+velocidadCaida = (620.0, 760.0)
 separacionTarjetas = 0.8
 
 
