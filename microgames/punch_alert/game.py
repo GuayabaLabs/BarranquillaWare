@@ -114,7 +114,7 @@ rectFoto = (560, 100, 960, 960)
 ladoFotoVista = 600
 duracionPublicar = 3.4
 velocidadCaida = (430.0, 540.0)
-separacionTarjetas = 1.4
+separacionTarjetas = 0.8
 
 
 def partirTexto(texto: str, fuente: pygame.font.Font, ancho: int) -> List[str]:
