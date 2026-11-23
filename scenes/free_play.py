@@ -139,15 +139,6 @@ class FreePlayScene(BaseState):
                 "cls": HeladeroMetroMicrogame,
             },
             {
-                "id": "metropolitano_moderacion",
-                "title": "¡MODERA LA BARRA!",
-                "district": "ESTADIO METROPOLITANO",
-                "desc": "Frena el ciberacoso en el chat en vivo sin silenciar al hincha sano.",
-                "difficulty": 3,
-                "theme_color": (205, 68, 76),
-                "cls": MetropolitanoModeracionMicrogame,
-            },
-            {
                 "id": "punch_alert",
                 "title": "EL POST DEL ARBOLITO",
                 "district": "VENTANA AL MUNDO",

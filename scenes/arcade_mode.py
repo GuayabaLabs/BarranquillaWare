@@ -64,7 +64,6 @@ class ArcadeModeScene(BaseState):
             UninorteConcentrateMicrogame,
             PunchAlertMicrogame,
             BuenavistaTrendMicrogame,
-            MetropolitanoModeracionMicrogame,
             HeladeroMetroMicrogame,
             Fritanga84Microgame,
             CurramGramGoMicrogame,
@@ -309,18 +308,27 @@ class ArcadeModeScene(BaseState):
 
     def _launch_next_microgame(self) -> None:
         """Elige un microjuego al azar del catálogo arcade y lo ejecuta con su tiempo natural."""
-        chosen_cls = random.choice(self.microgame_pool)
-        microgame = chosen_cls(
-            character_id=self.character_id,
-            on_complete_callback=self._on_microgame_result,
-        )
-        microgame.hide_return_to_map = True
-        microgame.pause_return_callback = self._exit_from_pause
-        microgame.pause_menu_callback = self._exit_from_pause
-        self._active_microgame = microgame
+        if not (hasattr(self, "state_machine") and self.state_machine):
+            return
 
-        if hasattr(self, "state_machine") and self.state_machine:
-            self.state_machine.change_state(microgame)
+        from scenes.loading_scene import LoadingScene
+
+        chosen_cls = random.choice(self.microgame_pool)
+
+        def _build():
+            microgame = chosen_cls(
+                character_id=self.character_id,
+                on_complete_callback=self._on_microgame_result,
+            )
+            microgame.hide_return_to_map = True
+            microgame.pause_return_callback = self._exit_from_pause
+            microgame.pause_menu_callback = self._exit_from_pause
+            self._active_microgame = microgame
+            return microgame
+
+        self.state_machine.change_state(
+            LoadingScene(_build, message="Cargando siguiente microjuego...")
+        )
 
     def _on_microgame_result(self, won: bool) -> None:
         """Callback al terminar el microjuego."""
