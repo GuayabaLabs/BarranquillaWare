@@ -277,38 +277,34 @@ class ModeSelectScene(BaseState):
         if self.state_machine is None:
             return
 
+        from scenes.loading_scene import LoadingScene
         from scenes.story_map import StoryMapScene
-        story_map = StoryMapScene(
-            character_id=character_id,
-            on_back_callback=self._return_from_subscene,
-            on_main_menu_callback=self.on_main_menu_callback,
-        )
-        trans = SlideTransitionState(
-            from_scene=self.character_select_scene,
-            to_scene=story_map,
-            direction="left",
-            duration=0.65
-        )
-        self.state_machine.change_state(trans)
+
+        def _build():
+            return StoryMapScene(
+                character_id=character_id,
+                on_back_callback=self._return_from_subscene,
+                on_main_menu_callback=self.on_main_menu_callback,
+            )
+
+        self.state_machine.change_state(LoadingScene(_build, message="Cargando mapa de Barranquilla..."))
 
     def _continue_saved_story_map(self, character_id: str) -> None:
         """Entra directamente a StoryMapScene desde ModeSelectScene al continuar partida guardada."""
         if self.state_machine is None:
             return
 
+        from scenes.loading_scene import LoadingScene
         from scenes.story_map import StoryMapScene
-        story_map = StoryMapScene(
-            character_id=character_id,
-            on_back_callback=self._return_to_mode_select_from_story,
-            on_main_menu_callback=self.on_main_menu_callback,
-        )
-        trans = SlideTransitionState(
-            from_scene=self,
-            to_scene=story_map,
-            direction="left",
-            duration=0.65
-        )
-        self.state_machine.change_state(trans)
+
+        def _build():
+            return StoryMapScene(
+                character_id=character_id,
+                on_back_callback=self._return_to_mode_select_from_story,
+                on_main_menu_callback=self.on_main_menu_callback,
+            )
+
+        self.state_machine.change_state(LoadingScene(_build, message="Cargando partida guardada..."))
 
     def _return_to_mode_select_from_story(self) -> None:
         if self.state_machine is None:
@@ -327,35 +323,31 @@ class ModeSelectScene(BaseState):
         if self.state_machine is None:
             return
 
+        from scenes.loading_scene import LoadingScene
         from scenes.arcade_mode import ArcadeModeScene
-        arcade_scene = ArcadeModeScene(
-            character_id=character_id,
-            on_exit_callback=self._return_from_subscene
-        )
-        trans = SlideTransitionState(
-            from_scene=self.character_select_scene,
-            to_scene=arcade_scene,
-            direction="left",
-            duration=0.65
-        )
-        self.state_machine.change_state(trans)
+
+        def _build():
+            return ArcadeModeScene(
+                character_id=character_id,
+                on_exit_callback=self._return_from_subscene,
+            )
+
+        self.state_machine.change_state(LoadingScene(_build, message="Cargando Modo Arcade..."))
 
     def _enter_free_play(self, character_id: str) -> None:
         if self.state_machine is None:
             return
 
+        from scenes.loading_scene import LoadingScene
         from scenes.free_play import FreePlayScene
-        free_scene = FreePlayScene(
-            character_id=character_id,
-            on_back_callback=self._return_from_subscene
-        )
-        trans = SlideTransitionState(
-            from_scene=self.character_select_scene,
-            to_scene=free_scene,
-            direction="left",
-            duration=0.65
-        )
-        self.state_machine.change_state(trans)
+
+        def _build():
+            return FreePlayScene(
+                character_id=character_id,
+                on_back_callback=self._return_from_subscene,
+            )
+
+        self.state_machine.change_state(LoadingScene(_build, message="Cargando Modo Libre..."))
 
     def _return_from_subscene(self) -> None:
         if self.state_machine is None:

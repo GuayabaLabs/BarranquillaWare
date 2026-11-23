@@ -319,7 +319,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         character_id: str = "westcol",
         on_complete_callback: Optional[Callable[[bool], None]] = None,
         command_text: str = "¡Cuida tu publicación!\nGolpea lo que no debes compartir",
-        time_limit: float = 22.0
+        time_limit: float = 48.0
     ) -> None:
         self.character_id = character_id
         super().__init__(

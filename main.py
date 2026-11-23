@@ -16,6 +16,7 @@ def _prefer_project_python() -> None:
 def main() -> None:
     _prefer_project_python()
     from core.engine import Engine
+    from scenes.loading_scene import LoadingScene
     from scenes.main_menu import MainMenuScene
 
     # Al ejecutar el juego, limpiar el modo dummy heredado de pruebas.
@@ -23,8 +24,13 @@ def main() -> None:
         if os.environ.get(driver) == "dummy":
             del os.environ[driver]
     engine = Engine(title="BarranquillaWare")
-    menu_scene = MainMenuScene(screen_w=engine.VIRTUAL_WIDTH, screen_h=engine.VIRTUAL_HEIGHT)
-    engine.state_machine.change_state(menu_scene)
+    loading_scene = LoadingScene(
+        loader_fn=lambda: MainMenuScene(screen_w=engine.VIRTUAL_WIDTH, screen_h=engine.VIRTUAL_HEIGHT),
+        message="Preparando BarranquillaWare...",
+        screen_w=engine.VIRTUAL_WIDTH,
+        screen_h=engine.VIRTUAL_HEIGHT,
+    )
+    engine.state_machine.change_state(loading_scene)
     engine.run()
 
 if __name__ == "__main__":

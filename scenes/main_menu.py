@@ -112,16 +112,28 @@ class MainMenuScene(BaseState):
         self._modal_trofeo_on = self.assets.cargarTrofeo(48)
         self._modal_trofeo_off = self.assets.cargarTrofeo(48, enGris=True)
 
-        # 7. Precarga Cálida de Selección de Modo y Cargar Partida
-        self.mode_select_scene = ModeSelectScene(
-            on_back_callback=self._return_from_mode_select,
-            on_main_menu_callback=self._return_from_mode_select,
-        )
-        self.load_game_scene = LoadGameScene(
-            on_continue_story=self._continue_story_from_load,
-            on_new_story=self._new_story_from_load,
-            on_back=self._return_from_load_game,
-        )
+        # 7. Carga diferida (lazy) de Selección de Modo y Cargar Partida para arranque instantáneo
+        self._mode_select_scene: Optional[ModeSelectScene] = None
+        self._load_game_scene: Optional[LoadGameScene] = None
+
+    @property
+    def mode_select_scene(self) -> ModeSelectScene:
+        if self._mode_select_scene is None:
+            self._mode_select_scene = ModeSelectScene(
+                on_back_callback=self._return_from_mode_select,
+                on_main_menu_callback=self._return_from_mode_select,
+            )
+        return self._mode_select_scene
+
+    @property
+    def load_game_scene(self) -> LoadGameScene:
+        if self._load_game_scene is None:
+            self._load_game_scene = LoadGameScene(
+                on_continue_story=self._continue_story_from_load,
+                on_new_story=self._new_story_from_load,
+                on_back=self._return_from_load_game,
+            )
+        return self._load_game_scene
 
     def _init_iguana(self) -> None:
         self.iguana_hd = self.assets.load_cropped_surface("iguana_main_menu.png")
@@ -350,6 +362,19 @@ class MainMenuScene(BaseState):
             return
 
         self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
+        if self._mode_select_scene is None:
+            from scenes.loading_scene import LoadingScene
+
+            def _build_mode():
+                sc = self.mode_select_scene
+                sc.sync_audio_buttons()
+                return sc
+
+            self.state_machine.change_state(
+                LoadingScene(_build_mode, message="Cargando selección de modo...")
+            )
+            return
+
         self.mode_select_scene.sync_audio_buttons()
         trans_to_mode = SlideTransitionState(
             from_scene=self,
@@ -364,6 +389,19 @@ class MainMenuScene(BaseState):
             return
 
         self.audio.play_click()
+        if self._load_game_scene is None:
+            from scenes.loading_scene import LoadingScene
+
+            def _build_load():
+                sc = self.load_game_scene
+                sc.enter()
+                return sc
+
+            self.state_machine.change_state(
+                LoadingScene(_build_load, message="Cargando partidas guardadas...")
+            )
+            return
+
         self.load_game_scene.enter()
         trans_to_load = SlideTransitionState(
             from_scene=self,
