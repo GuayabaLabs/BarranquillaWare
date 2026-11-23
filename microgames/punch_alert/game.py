@@ -255,6 +255,14 @@ def estelaFugaz(largo: int = 220, grueso: int = 17) -> pygame.Surface:
 
 class PunchAlertMicrogame(BaseMicrogame):
     CAMERA_POINTER = False  # Usa la cámara directamente
+    dialogoPaloma = [
+        ["¡Qué foto tan bacana en la Ventana al Mundo!",
+         "Ahora el celular sugiere ideas para tu post,",
+         "pero ojo: no todo se debe contar en internet."],
+        ["Cuando una tarjeta caiga en la caja,",
+         "saca con ESPACIO (o puño) lo que exponga tus datos.",
+         "¡Deja pasar solo los recuerdos seguros!"],
+    ]
     """
     Minijuego Punch-Alert: El Despachador de Notificaciones (Estilo WarioWare / Béisbol).
     Compatible 100% con el sistema de niveles / escenas (StoryMap, ArcadeMode, FreePlay)

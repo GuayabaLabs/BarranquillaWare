@@ -97,6 +97,14 @@ class ZombieNPC:
 
 
 class UninorteSprintMicrogame(BaseMicrogame):
+    dialogoPaloma = [
+        ["¡Hora de ir a clase en Uninorte!",
+         "Todo el mundo camina pegado al celular",
+         "y ni mira por dónde va."],
+        ["Cruza el pasillo saltando con ESPACIO,",
+         "FLECHA ARRIBA, W o clic izquierdo.",
+         "¡Ojos al frente para no tropezar!"],
+    ]
     """
     Microjuego 1: 'Carrera al Salón A-203' (Campus Uninorte).
     - Duración: 10 Segundos exactos.

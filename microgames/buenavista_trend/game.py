@@ -16,6 +16,14 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
     TIME_BAR_LAYOUT = (960, 1044, 724)  # Margen limpio bajo marcoCelular.bottom (1002) sin mover phone_rect
     # Carriles de izquierda a derecha con el mando: X, A, Y, B.
     GAMEPAD_BUTTON_KEYS = {2: pygame.K_d, 0: pygame.K_f, 3: pygame.K_j, 1: pygame.K_k}
+    dialogoPaloma = [
+        ["¡Llegamos a Buenavista! Todos graban",
+         "el trend viral para ganar likes,",
+         "pero tú bailas por gozártela, no por el algoritmo."],
+        ["Sigue el ritmo con las teclas D, F, J y K",
+         "(o los botones X, A, Y, B del mando).",
+         "¡Cada 5 aciertos seguidos recuperas +1 corazón!"],
+    ]
     """
     Microjuego de ritmo y supervivencia: «El Trend en Buenavista» (Inspirado en Piano Tiles).
     - Ubicación: Centro Comercial Buenavista, Barranquilla.
