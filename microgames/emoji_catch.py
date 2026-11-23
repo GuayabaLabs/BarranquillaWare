@@ -123,7 +123,8 @@ class EmojiCatchMicrogame(BaseMicrogame):
         cam = self.camera_input
         if not (cam and cam.enabled and cam.is_hand_present()):
             return
-        for x_norm, _y in cam.get_hands():
+        hands = cam.get_hands() if hasattr(cam, "get_hands") else [cam.get_position()]
+        for x_norm, _y in hands:
             side = 0 if x_norm < 0.5 else 1
             lo, hi = HAND_LIMITS[side]
             local = (x_norm - 0.5 * side) / 0.5  # 0..1 dentro de su mitad
