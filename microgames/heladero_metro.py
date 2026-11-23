@@ -1767,15 +1767,14 @@ class HeladeroMetroMicrogame(BaseMicrogame):
     def dibujarConoEnCarrito(self, surface: pygame.Surface) -> None:
         if self.arrastrandoCono or self.conoViaje is not None:
             return
-        if self.carrito is None:
-            x, y = self.puntoCono
-            if self.utensilios is not None:
-                cono = self.utensilios["cono"]
-                surface.blit(cono, cono.get_rect(midtop=(x, y - 6)))
-            else:
-                puntos = [(x - 46, y), (x + 46, y), (x, y + 150)]
-                pygame.draw.polygon(surface, (222, 168, 96), puntos)
-                pygame.draw.polygon(surface, (96, 56, 30), puntos, 4)
+        x, y = self.puntoCono
+        if self.utensilios is not None:
+            cono = self.utensilios["cono"]
+            surface.blit(cono, cono.get_rect(midtop=(x, y - 6)))
+        else:
+            puntos = [(x - 46, y), (x + 46, y), (x, y + 150)]
+            pygame.draw.polygon(surface, (222, 168, 96), puntos)
+            pygame.draw.polygon(surface, (96, 56, 30), puntos, 4)
         for i, bola in enumerate(self.cono):
             self.dibujarBola(surface, bola, self.puntoBolaEnCono(i), 48)
 
