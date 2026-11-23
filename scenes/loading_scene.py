@@ -6,6 +6,7 @@ o al instanciar escenas pesadas como StoryMapScene.
 from __future__ import annotations
 
 import math
+import threading
 from typing import Callable, Optional
 import pygame
 
@@ -36,7 +37,10 @@ class LoadingScene(BaseState):
         self.assets = AssetManager.get_instance()
         self.timer: float = 0.0
         self._frames_rendered: int = 0
-        self._loaded: bool = False
+        self._started: bool = False
+        self._thread: Optional[threading.Thread] = None
+        self._result: Optional[BaseState] = None
+        self._error: Optional[BaseException] = None
 
         # Carga mínima y rápida para mostrar el primer frame de inmediato
         try:
@@ -59,19 +63,31 @@ class LoadingScene(BaseState):
     def handle_event(self, event: pygame.event.Event) -> None:
         pass
 
+    def _run_loader(self) -> None:
+        try:
+            self._result = self.loader_fn()
+        except BaseException as exc:
+            self._error = exc
+
     def update(self, dt: float) -> None:
         self.timer += dt
-        if self._loaded or self._frames_rendered < 2:
+        if not self._started:
+            if self._frames_rendered < 1:
+                return
+            self._started = True
+            self._thread = threading.Thread(target=self._run_loader, name="bw-loader", daemon=True)
+            self._thread.start()
             return
 
-        self._loaded = True
-        try:
-            pygame.event.pump()
-        except Exception:
-            pass
+        if self._thread is not None and self._thread.is_alive():
+            return
 
-        next_state = self.loader_fn()
-        if next_state is not None and self.state_machine is not None:
+        if self._error is not None:
+            raise self._error
+
+        if self._result is not None and self.state_machine is not None:
+            next_state = self._result
+            self._result = None
             self.state_machine.change_state(next_state)
 
     def render(self, surface: pygame.Surface) -> None:
