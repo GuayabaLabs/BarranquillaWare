@@ -22,6 +22,14 @@ _SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 class UninorteConcentrateMicrogame(BaseMicrogame):
     CAMERA_POINTER = False  # Usa la cámara directamente
+    dialogoPaloma = [
+        ["¡A estudiar en la biblioteca de Uninorte!",
+         "Las notificaciones de redes sociales",
+         "quieren robarte la atención a toda costa."],
+        ["Mueve el puntero (mouse, flechas o cámara)",
+         "y haz CLIC o pulsa ESPACIO sobre las nubes",
+         "para reventarlas y llenar la barra de Enfoque."],
+    ]
     """
     Microjuego «¡Concéntrate, llave!» — Nivel 1: Uninorte
     - Duración: 25 segundos.
@@ -479,6 +487,9 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         Sobreescribe el ciclo de actualización para que el juego dure exactamente los 25 segundos
         completos, evaluando victoria o derrota según si la tarea llegó al 100%.
         """
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            super().update(dt)
+            return
         if hasattr(self.audio, "update"):
             self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:

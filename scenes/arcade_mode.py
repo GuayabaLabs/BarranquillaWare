@@ -12,20 +12,14 @@ from core.settings import SettingsManager
 from ui.button import UIButton
 from scenes.load_game import make_watercolor_button_surface, render_outlined_text
 
-# Microjuegos disponibles en el Modo Arcade (Clásicos + Nuevos + Jefe)
-from microgames.mallorquin_photo import MallorquinPhotoMicrogame
+# Microjuegos reales con arte completo disponibles en el Modo Arcade
 from microgames.uninorte_sprint import UninorteSprintMicrogame
-from microgames.ventana_colores import VentanaColoresMicrogame
-from microgames.malecon_rueda import MaleconRuedaMicrogame
-from microgames.metropolitano_penalty import MetropolitanoPenaltyMicrogame
-from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
-from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.uninorte_concentrate import UninorteConcentrateMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
+from microgames.heladero_metro import HeladeroMetroMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
-from microgames.buenavista_cine import BuenavistaCineMicrogame
 from microgames.curramgram_go import CurramGramGoMicrogame
 from microgames.emoji_catch import EmojiCatchMicrogame
 
@@ -64,21 +58,14 @@ class ArcadeModeScene(BaseState):
         self.audio = AudioManager.get_instance()
         self.settings = SettingsManager.get_instance()
 
-        # Pool completo compatible de microjuegos
+        # Pool de microjuegos reales (sin juegos placeholder)
         self.microgame_pool: List[Type[BaseMicrogame]] = [
-            MallorquinPhotoMicrogame,
             UninorteSprintMicrogame,
-            VentanaColoresMicrogame,
-            MaleconRuedaMicrogame,
-            MetropolitanoPenaltyMicrogame,
-            AeropuertoAterrizajeMicrogame,
-            Fritanga84Microgame,
-            TrojaBaileMicrogame,
             UninorteConcentrateMicrogame,
-            BuenavistaTrendMicrogame,
-            MetropolitanoModeracionMicrogame,
             PunchAlertMicrogame,
-            BuenavistaCineMicrogame,
+            BuenavistaTrendMicrogame,
+            HeladeroMetroMicrogame,
+            Fritanga84Microgame,
             CurramGramGoMicrogame,
             EmojiCatchMicrogame,
         ]
@@ -320,41 +307,28 @@ class ArcadeModeScene(BaseState):
         return max(1.8, 4.0 / self.speed_multiplier)
 
     def _launch_next_microgame(self) -> None:
-        """Elige un microjuego al azar del catálogo arcade y lo ejecuta."""
-        chosen_cls = random.choice(self.microgame_pool)
-        fair_time = self._compute_arcade_time_limit(chosen_cls)
+        """Elige un microjuego al azar del catálogo arcade y lo ejecuta con su tiempo natural."""
+        if not (hasattr(self, "state_machine") and self.state_machine):
+            return
 
-        if chosen_cls is MetropolitanoModeracionMicrogame:
-            microgame = MetropolitanoModeracionMicrogame(
-                character_id=self.character_id,
-                on_complete_callback=self._on_microgame_result,
-                time_limit=fair_time,
-                target_bans=3,
-                arcade_mode=True,
-            )
-        elif chosen_cls is PunchAlertMicrogame:
-            microgame = PunchAlertMicrogame(
-                character_id=self.character_id,
-                on_complete_callback=self._on_microgame_result,
-                time_limit=fair_time,
-            )
-        else:
+        from scenes.loading_scene import LoadingScene
+
+        chosen_cls = random.choice(self.microgame_pool)
+
+        def _build():
             microgame = chosen_cls(
                 character_id=self.character_id,
                 on_complete_callback=self._on_microgame_result,
             )
-            microgame.time_limit = fair_time
-            microgame.time_left = fair_time
-            if chosen_cls in (CurramGramGoMicrogame, EmojiCatchMicrogame):
-                # Estos juegos llevan su propio reloj, sincronizado con la barra común.
-                microgame.game.tiempo = fair_time
+            microgame.hide_return_to_map = True
+            microgame.pause_return_callback = self._exit_from_pause
+            microgame.pause_menu_callback = self._exit_from_pause
+            self._active_microgame = microgame
+            return microgame
 
-        microgame.pause_return_callback = self._exit_from_pause
-        microgame.pause_menu_callback = self._exit_from_pause
-        self._active_microgame = microgame
-
-        if hasattr(self, "state_machine") and self.state_machine:
-            self.state_machine.change_state(microgame)
+        self.state_machine.change_state(
+            LoadingScene(_build, message="Cargando siguiente microjuego...")
+        )
 
     def _on_microgame_result(self, won: bool) -> None:
         """Callback al terminar el microjuego."""

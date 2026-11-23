@@ -113,8 +113,8 @@ esquinaPost = (52, 168)
 rectFoto = (560, 100, 960, 960)
 ladoFotoVista = 600
 duracionPublicar = 3.4
-velocidadCaida = (340.0, 430.0)
-separacionTarjetas = 1.6
+velocidadCaida = (620.0, 760.0)
+separacionTarjetas = 0.8
 
 
 def partirTexto(texto: str, fuente: pygame.font.Font, ancho: int) -> List[str]:
@@ -255,6 +255,14 @@ def estelaFugaz(largo: int = 220, grueso: int = 17) -> pygame.Surface:
 
 class PunchAlertMicrogame(BaseMicrogame):
     CAMERA_POINTER = False  # Usa la cámara directamente
+    dialogoPaloma = [
+        ["¡Qué foto tan bacana en la Ventana al Mundo!",
+         "Ahora el celular sugiere ideas para tu post,",
+         "pero ojo: no todo se debe contar en internet."],
+        ["Cuando una tarjeta caiga en la caja,",
+         "saca con ESPACIO (o puño) lo que exponga tus datos.",
+         "¡Deja pasar solo los recuerdos seguros!"],
+    ]
     """
     Minijuego Punch-Alert: El Despachador de Notificaciones (Estilo WarioWare / Béisbol).
     Compatible 100% con el sistema de niveles / escenas (StoryMap, ArcadeMode, FreePlay)
@@ -1869,10 +1877,8 @@ class PunchAlertMicrogame(BaseMicrogame):
                     else:
                         self._play_sfx(self.snd_safe)
                         self.combo_streak += 1
-                        recupera = self.strikes > 0
-                        self.strikes = max(0, self.strikes - 1)
                         self.popups.append({
-                            "text": "¡ESO, MI LLAVE! +1 VIDA" if recupera else "¡A TU POST!",
+                            "text": "¡A TU POST!",
                             "x": float(self.lane_center_x),
                             "y": float(self.hit_zone_y_max - 20),
                             "timer": 0.55,

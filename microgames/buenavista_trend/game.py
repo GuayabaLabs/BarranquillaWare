@@ -16,6 +16,14 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
     TIME_BAR_LAYOUT = (960, 1044, 724)  # Margen limpio bajo marcoCelular.bottom (1002) sin mover phone_rect
     # Carriles de izquierda a derecha con el mando: X, A, Y, B.
     GAMEPAD_BUTTON_KEYS = {2: pygame.K_d, 0: pygame.K_f, 3: pygame.K_j, 1: pygame.K_k}
+    dialogoPaloma = [
+        ["¡Llegamos a Buenavista! Todos graban",
+         "el trend viral para ganar likes,",
+         "pero tú bailas por gozártela, no por el algoritmo."],
+        ["Sigue el ritmo con las teclas D, F, J y K",
+         "(o los botones X, A, Y, B del mando).",
+         "¡Cada 5 aciertos seguidos recuperas +1 corazón!"],
+    ]
     """
     Microjuego de ritmo y supervivencia: «El Trend en Buenavista» (Inspirado en Piano Tiles).
     - Ubicación: Centro Comercial Buenavista, Barranquilla.
@@ -786,6 +794,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     def update(self, dt: float) -> None:
         """Ciclo principal de estados (INTRO -> PLAY -> OUTRO) con victoria de supervivencia a los 30s."""
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            super().update(dt)
+            return
         if hasattr(self.audio, "update"):
             self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:
@@ -1058,6 +1069,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
         self.combo += 1
         self.max_combo = max(self.max_combo, self.combo)
+        if self.lives < self.max_lives and self.combo % 5 == 0:
+            self.lives += 1
+            judgment = "¡+1 CORAZÓN!"
         self.yellow_glow_alpha = 95.0
         self.last_hit_lane = note.lane
         self.lane_hit_flash[note.lane] = 0.22
@@ -1447,27 +1461,6 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             self.heart_full_surf.set_alpha(int(240 * ratio))
             surface.blit(self.heart_full_surf, (int(hl["x"]), int(hl["y"])))
             self.heart_full_surf.set_alpha(255)
-
-        # 2. Reloj contador dinámico en la esquina superior derecha (encima del badge de voz muteada)
-        counter_x = self.screen_w - int(round(269 * s))
-        counter_y = max(8, int(round(16 * s)))
-        sec_left = max(0.0, self.time_left)
-        time_display = f"0:{int(math.ceil(sec_left)):02d}"
-        if self.spr_counter:
-            surface.blit(self.spr_counter, (counter_x, counter_y))
-            display_rect = pygame.Rect(
-                counter_x + int(round(70 * s)),
-                counter_y + int(round(34 * s)),
-                max(60, int(round(138 * s))),
-                max(22, int(round(40 * s))),
-            )
-            col = (68, 40, 32) if sec_left > 5.0 else (205, 48, 48)
-            txt_t = self.font_timer_num.render(time_display, True, col)
-            surface.blit(txt_t, txt_t.get_rect(center=display_rect.center))
-        else:
-            col = (255, 235, 95) if sec_left > 5.0 else (255, 95, 95)
-            txt_t = self.font_timer_num.render(time_display, True, col)
-            surface.blit(txt_t, (self.screen_w - int(round(160 * s)), int(round(36 * s))))
 
         # 3. Tarjeta acuarela derecha: Canción / Combo / Precisión / Paloma
         self._render_rhythm_card(surface)

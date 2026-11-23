@@ -51,7 +51,7 @@ class MicrogamePauseState(BaseState):
             self.items.append({"id": "save", "label": "GUARDAR PARTIDA", "asset": None})
         if self.calibrate_callback:
             self.items.append({"id": "calibrate", "label": "CALIBRAR CÁMARA", "asset": None})
-        if self.return_callback:
+        if self.return_callback and not getattr(self.previous, "hide_return_to_map", False):
             self.items.append({"id": "map", "label": "VOLVER AL MAPA", "asset": None})
         if self.menu_callback:
             self.items.append({"id": "menu", "label": "SALIR AL MENÚ", "asset": "boton_salir_menu_pausa.png"})
