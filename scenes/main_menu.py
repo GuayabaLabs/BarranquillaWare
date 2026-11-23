@@ -429,19 +429,19 @@ class MainMenuScene(BaseState):
         if not self.state_machine:
             return
 
+        from scenes.loading_scene import LoadingScene
         from scenes.story_map import StoryMapScene
-        story_map = StoryMapScene(
-            character_id=character_id,
-            on_back_callback=lambda: self._return_from_mode_select(self.state_machine.current_state if self.state_machine else None),
-            on_main_menu_callback=self._return_from_mode_select,
+
+        def _build():
+            return StoryMapScene(
+                character_id=character_id,
+                on_back_callback=lambda: self._return_from_mode_select(self.state_machine.current_state if self.state_machine else None),
+                on_main_menu_callback=self._return_from_mode_select,
+            )
+
+        self.state_machine.change_state(
+            LoadingScene(_build, message="Cargando partida guardada...")
         )
-        trans = SlideTransitionState(
-            from_scene=self.load_game_scene,
-            to_scene=story_map,
-            direction="left",
-            duration=0.65
-        )
-        self.state_machine.change_state(trans)
 
     def _new_story_from_load(self) -> None:
         if not self.state_machine:
