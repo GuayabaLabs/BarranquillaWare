@@ -1167,20 +1167,18 @@ class UninorteSprintMicrogame(BaseMicrogame):
             self.canalTictac.pause()
 
     def _draw_walking_feedback(self, surface: pygame.Surface) -> None:
-        if not hasattr(self, "_walk_feedback_paper"):
-            paper = self.assets.load_cropped_surface("tarjeta_slot_partida.png")
-            self._walk_feedback_paper = pygame.transform.smoothscale(paper, (540, 86))
-        surface.blit(self._walk_feedback_paper, (690, 108))
-        for idx, (x, lbl) in enumerate(((760, "ÍNDICE"), (845, "MEDIO"))):
-            active = self._last_walk_finger == idx
-            col = (113, 182, 155) if (active and self._walk_step_flash > 0) else (190, 161, 211) if active else (215, 204, 192)
-            pygame.draw.circle(surface, col, (x, 148), 22)
-            pygame.draw.circle(surface, (104, 74, 65), (x, 148), 22, 2)
-            t = self._walk_feedback_font.render(lbl, True, (78, 51, 35))
-            surface.blit(t, t.get_rect(center=(x, 180)))
-        msg = "¡Paso!" if self._walk_step_flash > 0 else "Alterna índice y medio para caminar"
-        label = self._walk_feedback_font.render(msg, True, (78, 51, 35))
-        surface.blit(label, label.get_rect(center=(1050, 150)))
+        if not hasattr(self, "_walk_title_font"):
+            self._walk_title_font = self.assets.cargarFuenteTitulo(22)
+        msg = "¡PASO!" if self._walk_step_flash > 0 else "CÁMARA: ALTERNA ÍNDICE Y MEDIO PARA AVANZAR"
+        txt = self._walk_title_font.render(msg, True, (78, 51, 35))
+        pw = txt.get_width() + 48
+        ph = 44
+        pill = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        bg_col = (218, 244, 224, 225) if self._walk_step_flash > 0 else (255, 249, 234, 220)
+        pygame.draw.rect(pill, bg_col, (0, 0, pw, ph), border_radius=22)
+        pygame.draw.rect(pill, (126, 86, 56, 230), (0, 0, pw, ph), width=2, border_radius=22)
+        pill.blit(txt, txt.get_rect(center=(pw // 2, ph // 2 + 1)))
+        surface.blit(pill, pill.get_rect(center=(self.screen_w // 2, 42)))
 
     def partirEnLineas(self, fuente, texto: str, anchoMax: int) -> list:
         lineas = []
