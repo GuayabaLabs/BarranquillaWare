@@ -1714,37 +1714,42 @@ class StoryMapScene(BaseState):
         if "character_id" in sig.parameters:
             kwargs["character_id"] = self.character_id
 
-        microgame = microgame_cls(**kwargs)
-        if getattr(microgame, "paloma_intro", None) is not None:
-            microgame.paloma_intro = None
-        if stages and idx + 1 < len(stages):
-            # Ronda intermedia del nivel: mostrar resultado breve ("¡Ganaste!" / "¡Perdiste!") y pasar rápido a la siguiente ronda
-            microgame.show_outro_banner = True
-            microgame.outro_duration = 1.25
-            microgame.skip_outro_story_card = True
-        elif stages and idx + 1 == len(stages):
-            # Última ronda que completa el nivel
-            microgame.show_outro_banner = True
-            microgame.outro_message = f"¡{poi_info.get('title', 'NIVEL')} DESPEJADO!"
+        if not (hasattr(self, "state_machine") and self.state_machine):
+            return
 
-        microgame.pause_return_callback = self._return_from_microgame_pause
-        microgame.open_pause_menu = lambda: self.state_machine.push_state(
-            __import__("core.microgame_pause", fromlist=["MicrogamePauseState"]).MicrogamePauseState(
-                previous=microgame,
-                return_callback=getattr(microgame, "pause_return_callback", None),
-                restart_callback=self._restart_microgame_from_pause
-            )
-        ) if self.state_machine else None
-        if hasattr(self, "state_machine") and self.state_machine:
-            prev_state = self.state_machine.current_state
-            if (
-                preserve_voice
-                and prev_state is not None
-                and prev_state is not self
-                and getattr(microgame, "paloma_intro", None) is None
-            ):
-                prev_state.preserve_voice_on_exit = True
-            self.state_machine.change_state(microgame)
+        from scenes.loading_scene import LoadingScene
+
+        def _build_microgame():
+            microgame = microgame_cls(**kwargs)
+            if getattr(microgame, "paloma_intro", None) is not None:
+                microgame.paloma_intro = None
+            if stages and idx + 1 < len(stages):
+                # Ronda intermedia del nivel: mostrar resultado breve ("¡Ganaste!" / "¡Perdiste!") y pasar rápido a la siguiente ronda
+                microgame.show_outro_banner = True
+                microgame.outro_duration = 1.25
+                microgame.skip_outro_story_card = True
+            elif stages and idx + 1 == len(stages):
+                # Última ronda que completa el nivel
+                microgame.show_outro_banner = True
+                microgame.outro_message = f"¡{poi_info.get('title', 'NIVEL')} DESPEJADO!"
+
+            microgame.pause_return_callback = self._return_from_microgame_pause
+            microgame.open_pause_menu = lambda: self.state_machine.push_state(
+                __import__("core.microgame_pause", fromlist=["MicrogamePauseState"]).MicrogamePauseState(
+                    previous=microgame,
+                    return_callback=getattr(microgame, "pause_return_callback", None),
+                    restart_callback=self._restart_microgame_from_pause
+                )
+            ) if self.state_machine else None
+            return microgame
+
+        prev_state = self.state_machine.current_state
+        if preserve_voice and prev_state is not None and prev_state is not self:
+            prev_state.preserve_voice_on_exit = True
+        level_title = poi_info.get("title", "minijuego")
+        self.state_machine.change_state(
+            LoadingScene(_build_microgame, message=f"Cargando {level_title}...")
+        )
 
     def _restart_microgame_from_pause(self) -> None:
         if hasattr(self, "state_machine") and self.state_machine:
