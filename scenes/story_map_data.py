@@ -11,6 +11,7 @@ from microgames.punch_alert import PunchAlertMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
 from microgames.curramgram_go import CurramGramGoMicrogame
 from microgames.heladero_metro import HeladeroMetroMicrogame
+from microgames.emoji_catch import EmojiCatchMicrogame
 
 # Progresión de los 5 Niveles Principales del Modo Historia
 STORY_CAMPAIGN_ORDER = ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
@@ -40,7 +41,13 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
             "title": "EL POST DEL ARBOLITO",
             "cls": PunchAlertMicrogame,
             "difficulty": 4,
-        }
+        },
+        {
+            "id": "emoji_catch",
+            "title": "EMOJI CATCH: BALANCE!",
+            "cls": EmojiCatchMicrogame,
+            "difficulty": 3,
+        },
     ],
     "buenavista": [
         {

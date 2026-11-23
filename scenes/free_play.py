@@ -100,17 +100,8 @@ class FreePlayScene(BaseState):
         self.font_badge = self.assets.cargarFuenteCuento(18)
         self.font_page = self.assets.cargarFuenteCuento(22)
 
-        # 2. Catálogo completo de microjuegos jugables (8 clásicos + 5 nuevos)
+        # 2. Catálogo de microjuegos reales con arte completo
         self.games_data: List[Dict[str, Any]] = [
-            {
-                "id": "mallorquin_photo",
-                "title": "FOTOGRAFÍA AL FLAMENCO",
-                "district": "ECORRESERVA MALLORQUÍN",
-                "desc": "Vive el momento real sin filtros y encuadra al flamenco caribeño.",
-                "difficulty": 2,
-                "theme_color": (224, 108, 146),
-                "cls": MallorquinPhotoMicrogame,
-            },
             {
                 "id": "uninorte_sprint",
                 "title": "CARRERA AL AULA A-203",
@@ -130,15 +121,6 @@ class FreePlayScene(BaseState):
                 "cls": UninorteConcentrateMicrogame,
             },
             {
-                "id": "ventana_colores",
-                "title": "ARMONIZA LOS CRISTALES",
-                "district": "VENTANA AL MUNDO",
-                "desc": "Verifica el color real antes de compartir información.",
-                "difficulty": 2,
-                "theme_color": (58, 148, 212),
-                "cls": VentanaColoresMicrogame,
-            },
-            {
                 "id": "buenavista_trend",
                 "title": "EL TREND EN BUENAVISTA",
                 "district": "C.C. BUENAVISTA",
@@ -146,24 +128,6 @@ class FreePlayScene(BaseState):
                 "difficulty": 3,
                 "theme_color": (162, 102, 206),
                 "cls": BuenavistaTrendMicrogame,
-            },
-            {
-                "id": "buenavista_cine",
-                "title": "¡SILENCIO, HAY FUNCIÓN!",
-                "district": "CINE BUENAVISTA",
-                "desc": "Chista (SHHH o Espacio) a quienes usan el celular en la sala.",
-                "difficulty": 3,
-                "theme_color": (182, 92, 134),
-                "cls": BuenavistaCineMicrogame,
-            },
-            {
-                "id": "malecon_rueda",
-                "title": "FRENA EN LA CIMA",
-                "district": "GRAN MALECÓN DEL RÍO",
-                "desc": "Suelta el scroll y detén la cabina VIP en lo más alto del río.",
-                "difficulty": 3,
-                "theme_color": (214, 118, 52),
-                "cls": MaleconRuedaMicrogame,
             },
             {
                 "id": "heladero_metro",
@@ -184,15 +148,6 @@ class FreePlayScene(BaseState):
                 "cls": MetropolitanoModeracionMicrogame,
             },
             {
-                "id": "metropolitano_penalty",
-                "title": "EL PENAL DEL TIBURÓN",
-                "district": "ESTADIO METROPOLITANO",
-                "desc": "Ignora la presión en vivo de las redes y clávala al ángulo.",
-                "difficulty": 3,
-                "theme_color": (212, 62, 68),
-                "cls": MetropolitanoPenaltyMicrogame,
-            },
-            {
                 "id": "punch_alert",
                 "title": "EL POST DEL ARBOLITO",
                 "district": "VENTANA AL MUNDO",
@@ -200,15 +155,6 @@ class FreePlayScene(BaseState):
                 "difficulty": 4,
                 "theme_color": (68, 148, 198),
                 "cls": PunchAlertMicrogame,
-            },
-            {
-                "id": "aeropuerto_aterrizaje",
-                "title": "ATERRIZA EN MODO AVIÓN",
-                "district": "AEROPUERTO CORTISSOZ",
-                "desc": "Ignora notificaciones distractoras y alinea el avión en pista.",
-                "difficulty": 3,
-                "theme_color": (56, 165, 108),
-                "cls": AeropuertoAterrizajeMicrogame,
             },
             {
                 "id": "fritanga_84",
@@ -220,30 +166,23 @@ class FreePlayScene(BaseState):
                 "cls": Fritanga84Microgame,
             },
             {
-                "id": "troja_baile",
-                "title": "EQUILIBRIO EN LA TROJA",
-                "district": "LA TROJA · CALLE 74",
-                "desc": "Desconéctate y baila el momento real equilibrando el vaso.",
-                "difficulty": 4,
-                "theme_color": (212, 66, 98),
-                "cls": TrojaBaileMicrogame,
-            },
-            {
                 "id": "curramgram_go",
                 "title": "CURRAMGRAM GO!",
                 "district": "AEROPUERTO CORTISSOZ",
                 "desc": "Llega a la puerta 7 sin exponer a nadie: verifica antes de publicar.",
+                "difficulty": 3,
                 "theme_color": (85, 170, 215),
-                "cls": CurramGramGoMicrogame
+                "cls": CurramGramGoMicrogame,
             },
             {
                 "id": "emoji_catch",
                 "title": "EMOJI CATCH: BALANCE!",
                 "district": "TU FEED · SALUD MENTAL",
                 "desc": "Bloquea a los haters y atrapa lo positivo sin perder el balance.",
+                "difficulty": 3,
                 "theme_color": (150, 95, 205),
-                "cls": EmojiCatchMicrogame
-            }
+                "cls": EmojiCatchMicrogame,
+            },
         ]
 
         # 3. Cargar assets acuarela de tarjetas, cintas, estrellas y sellos
@@ -409,6 +348,7 @@ class FreePlayScene(BaseState):
                 character_id=self.character_id,
                 on_complete_callback=self._on_game_complete,
             )
+            microgame.hide_return_to_map = True
             microgame.pause_restart_callback = lambda idx=game_idx: self._restart_from_pause(idx)
             microgame.pause_menu_callback = lambda: self._exit_from_pause()
             microgame.pause_return_callback = lambda: self._exit_from_pause()
