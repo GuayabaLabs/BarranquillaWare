@@ -36,6 +36,7 @@ class SocialPill:
 
         # Cargar sprite oficial
         self.sprite = self._load_sprite()
+        self.escribirEtiqueta()
 
     @property
     def rect(self) -> pygame.Rect:
@@ -61,6 +62,50 @@ class SocialPill:
         txt = font.render(self.label, True, (70, 45, 90))
         surf.blit(txt, txt.get_rect(center=(self.width // 2, self.height // 2 - 14)))
         return surf
+
+    def escribirEtiqueta(self) -> None:
+        from core.asset_manager import AssetManager
+        assets = AssetManager.get_instance()
+        self.font_val = assets.cargarFuenteTitulo(24)
+        w, h = self.sprite.get_size()
+        medidas = {
+            "seguidores": (0.395, 0.885, 0.09, 0.47, 0.425, 0.86),
+            "likes": (0.452, 0.71, 0.10, 0.42, 0.452, 0.71),
+            "logros": (0.425, 0.79, 0.10, 0.48, 0.425, 0.79),
+        }
+        if self.pill_type not in medidas:
+            return
+        izquierda, derecha, alto0, alto1, desde, hasta = medidas[self.pill_type]
+        x0, x1 = int(w * izquierda), int(w * derecha)
+        arriba, abajo = int(h * alto0), int(h * alto1)
+        fuente = abajo + int(h * 0.02)
+        if fuente + (abajo - arriba) > int(h * 0.88):
+            return
+        xDesde, xHasta = int(w * desde), int(w * hasta)
+        parche = self.sprite.subsurface((xDesde, fuente, xHasta - xDesde, abajo - arriba)).copy()
+        parche = pygame.transform.smoothscale(parche, (x1 - x0, abajo - arriba))
+        mascara = pygame.Surface(parche.get_size(), pygame.SRCALPHA)
+        borde = 3
+        for i in range(borde):
+            alfa = int(255 * (i + 1) / borde)
+            pygame.draw.rect(mascara, (255, 255, 255, alfa), mascara.get_rect().inflate(-i * 2, -i * 2), width=1)
+        mascara.fill((255, 255, 255, 255), mascara.get_rect().inflate(-borde * 2, -borde * 2))
+        parche.blit(mascara, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        original = self.sprite
+        self.sprite = self.sprite.copy()
+        self.sprite.blit(parche, (x0, arriba))
+        if self.pill_type == "seguidores":
+            raya = pygame.Rect(int(w * 0.394), int(h * 0.405), int(w * 0.026), abajo - int(h * 0.405) + 1)
+            self.sprite.blit(original, raya.topleft, raya)
+        color = {"seguidores": (74, 24, 118), "likes": (115, 18, 72), "logros": (82, 32, 95)}.get(self.pill_type, (65, 40, 85))
+        tam = 27
+        letra = assets.cargarFuenteTitulo(tam)
+        while tam > 16 and letra.size(self.label)[0] > w * 0.47:
+            tam -= 1
+            letra = assets.cargarFuenteTitulo(tam)
+        texto = letra.render(self.label, True, color)
+        self.centroTexto = int(w * 0.67)
+        self.sprite.blit(texto, texto.get_rect(center=(self.centroTexto, (arriba + abajo) // 2 + 2)))
 
     def set_value(self, new_value: Optional[str]) -> None:
         if self.value_text is not None and new_value is not None and self.value_text != new_value:
@@ -103,7 +148,7 @@ class SocialPill:
 
             # El área derecha tras la línea divisoria vertical va de x+110 a x+244;
             # la mitad inferior (debajo del título ilustrado) tiene su centro en y + 57
-            text_cx = self.x + 176
+            text_cx = self.x + getattr(self, "centroTexto", 176)
             text_cy = self.y + 57
             val_rect = val_surf.get_rect(center=(text_cx, text_cy))
             surface.blit(shadow_surf, (val_rect.x + 1, val_rect.y + 1))

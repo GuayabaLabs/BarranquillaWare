@@ -6,13 +6,14 @@ from typing import Optional, Callable, List, Tuple, Dict, Any, Set
 import pygame
 
 from core.microgame import BaseMicrogame
-from core.asset_manager import AssetManager
+from core.asset_manager import AssetManager, desenfoque_suave
 from core.camera_gestures import CameraGestureInput
-from microgames.buenavista_trend.beatmap import MusicalNoteEvent, IMITADORA_BEATMAP_DATA
+from microgames.buenavista_trend.beatmap import MusicalNoteEvent, EN_BARRANQUILLA_BEATMAP_DATA
 
 
 class BuenavistaTrendMicrogame(BaseMicrogame):
     CAMERA_POINTER = False  # Usa la cámara directamente
+    TIME_BAR_LAYOUT = (960, 1044, 724)  # Margen limpio bajo marcoCelular.bottom (1002) sin mover phone_rect
     # Carriles de izquierda a derecha con el mando: X, A, Y, B.
     GAMEPAD_BUTTON_KEYS = {2: pygame.K_d, 0: pygame.K_f, 3: pygame.K_j, 1: pygame.K_k}
     """
@@ -26,8 +27,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     LANE_KEYS: Tuple[int, int, int, int] = (pygame.K_d, pygame.K_f, pygame.K_j, pygame.K_k)
     LANE_LABELS: Tuple[str, str, str, str] = ("D", "F", "J", "K")
-    # SDL suele exponer A/B/X/Y como botones 0/1/2/3 en mandos XInput.
-    GAMEPAD_BUTTONS: Dict[int, int] = {0: 0, 1: 1, 2: 2, 3: 3}
+    # SDL expone A/B/X/Y como 0/1/2/3 en mandos XInput: X(2)->D(0), A(0)->F(1), Y(3)->J(2), B(1)->K(3).
+    GAMEPAD_BUTTONS: Dict[int, int] = {2: 0, 0: 1, 3: 2, 1: 3}
 
     # Ventanas temporales configurables (en segundos)
     DEFAULT_PERFECT_WINDOW: float = 0.080  # ±80 ms
@@ -63,6 +64,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
         # Protección anti-repeat y cooldown de fallo por pulsación incorrecta
         self.held_keys: Set[int] = set()
+        self.held_gamepad_buttons: Set[int] = set()
+        self.lane_held_states: List[bool] = [False, False, False, False]
         self.wrong_press_cooldown: float = 0.0
         self.wrong_press_protection_interval: float = 0.22  # Intervalo de protección para pulsaciones erróneas
         self.camera_wrong_press_protection_interval: float = 0.42  # Cooldown ampliado en modo cámara
@@ -73,33 +76,52 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.music_started: bool = False
         self.song_elapsed: float = 0.0
         self._last_mixer_pos_sec: float = 0.0
-        self.music_track_name: str = "imitadora_ost_piano_tiles_microjuego.ogg"
+        self.audio_offset_sec: float = 0.0
+        self._music_track_path: Optional[str] = None
+        self._music_preloaded: bool = False
+        self._music_started_own_track: bool = False
+        self.music_track_name: str = "en_barranquilla_me_quedo_piano.ogg"
+        self.spritesheet_name: str = "spritesheet_teclas_costenas_piano.png"
+
+        # Escala de diseño respecto al lienzo virtual 1920x1080
+        self._ui_scale: float = min(self.screen_w / 1920.0, self.screen_h / 1080.0)
+        s = self._ui_scale
 
         # Efectos visuales (Game Feel cozy)
         self.trauma: float = 0.0
-        self.max_shake_offset: float = 16.0
+        self.max_shake_offset: float = 16.0 * s
         self.red_flash_alpha: float = 0.0
         self.yellow_glow_alpha: float = 0.0
+        self.last_hit_lane: int = 0
+        self.lane_hit_flash: List[float] = [0.0, 0.0, 0.0, 0.0]
+        self.combo_pop_timer: float = 0.0
+        self.paloma_cheer_timer: float = 0.0
+        self.blink_timer: float = 0.0
         self.heart_loss_anims: List[Dict[str, Any]] = []
         self.like_particles: List[Dict[str, Any]] = []
         self.floating_feedbacks: List[Dict[str, Any]] = []
         self.celebration_particles: List[Dict[str, Any]] = []
         self.lane_press_timers: List[float] = [0.0, 0.0, 0.0, 0.0]
+        self._feedback_surf_cache: Dict[Tuple[str, Tuple[int, int, int]], pygame.Surface] = {}
+        self._key_label_cache: Dict[Tuple[str, bool], pygame.Surface] = {}
+        self._mando_label_cache: Dict[str, pygame.Surface] = {}
+        self._contador_cache: Dict[Tuple[Any, ...], pygame.Surface] = {}
         self.camera_input = CameraGestureInput.get_instance()
         self.camera_input.start()
 
         # Tipografías
-        self.font_keys = pygame.font.SysFont("Arial Black, Impact, sans-serif", 26)
-        self.font_hud = pygame.font.SysFont("Segoe UI, Arial, sans-serif", 20, bold=True)
-        self.font_timer_num = pygame.font.SysFont("Segoe UI Black, Arial Black, Impact, sans-serif", 28)
-        self.font_feedback = pygame.font.SysFont("Arial Black, Impact, sans-serif", 26)
-        self.font_edu = pygame.font.SysFont("Arial, Helvetica, sans-serif", 22, bold=True)
+        self.font_keys = pygame.font.SysFont("Arial Black, Impact, sans-serif", max(14, int(round(26 * s))))
+        self.font_hud = pygame.font.SysFont("Segoe UI, Arial, sans-serif", max(12, int(round(20 * s))), bold=True)
+        self.font_timer_num = self.assets.cargarFuenteTitulo(max(16, int(round(28 * s))))
+        self.font_feedback = self.assets.cargarFuenteTitulo(max(18, int(round(30 * s))))
+        self.font_edu = pygame.font.SysFont("Arial, Helvetica, sans-serif", max(14, int(round(22 * s))), bold=True)
+        self.fuenteMando = self.assets.get_font("Arial Black, Impact, sans-serif", max(13, int(round(22 * s))), bold=True)
 
         # 1. Cargar reloj contador oficial (contador_microjuegos.png) igual que en los demás minijuegos
         self.spr_counter: Optional[pygame.Surface] = None
         try:
             raw_cnt = self.assets.load_cropped_surface("contador_microjuegos.png", alpha_threshold=15)
-            cnt_h = 92
+            cnt_h = max(48, int(round(92 * s)))
             cnt_w = int(raw_cnt.get_width() * (cnt_h / float(max(1, raw_cnt.get_height()))))
             self.spr_counter = pygame.transform.smoothscale(raw_cnt, (cnt_w, cnt_h))
         except Exception:
@@ -111,17 +133,23 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         # 2. Capa 2: Celular PNG centrado ocupando ~85% de la altura disponible sin deformarse
         # y cálculo matemático proporcional de carriles y zona de impacto
         self._load_phone_and_compute_geometry()
+        self.TIME_BAR_LAYOUT = (
+            self.screen_w // 2,
+            int(round(self.screen_h * 0.9667)),
+            int(round(self.phone_rect.width * 1.012)),
+        )
 
         # 3. Capa 3: Recorte matemático uniforme 4x2 del spritesheet de teclas musicales
         self._load_and_slice_spritesheet()
 
-        # 4. Capa 4: Recursos de interfaz adicional (corazones, barra musical y reloj)
+        # 4. Capa 4: Recursos de interfaz adicional (corazones, barra musical, reloj y tarjeta Paloma)
         self._build_hud_surfaces()
 
         # 5. Construir lista de eventos musicales independientes del renderizado
         self._build_musical_events()
 
         self.iniciarPublico()
+        self._preload_music_track()
 
     def _load_background_layer(self) -> None:
         """Carga el fondo de Buenavista a resolución lógica y aplica un velo suave para destacar el celular."""
@@ -199,7 +227,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.lane_centers_x: List[int] = []
 
         play_top_y = rel_y(172.0)     # Justo debajo del encabezado oscuro REC
-        play_bottom_y = rel_y(1136.0) # Justo encima del bisel rosa inferior
+        play_bottom_y = rel_y(1062.0) # Encima de la barra frontal de teclas D/F/J/K y mando
         play_h = max(10, play_bottom_y - play_top_y)
 
         for x0_orig, x1_orig in lane_bounds_orig:
@@ -210,7 +238,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             self.lane_centers_x.append(l_rect.centerx)
 
         # Rectángulo de recorte (clipping) estricto del área jugable interior:
-        # Garantiza que las teclas NUNCA atraviesen los bordes del celular ni aparezcan sobre el encabezado REC
+        # Garantiza que las teclas NUNCA atraviesen los bordes del celular ni cubran la barra de teclas
         inner_left = self.lane_rects[0].left
         inner_right = self.lane_rects[-1].right
         self.playable_clip_rect = pygame.Rect(
@@ -220,10 +248,10 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             play_h
         )
 
-        # Línea de impacto centrada en las 4 zonas luminosas inferiores del PNG
-        self.hit_line_y: int = rel_y(1048.0)
-        self.hit_box_top_y: int = rel_y(1006.0)
-        self.hit_box_bottom_y: int = rel_y(1090.0)
+        # Línea de impacto elevada con anillos objetivo dedicados arriba de los badges de teclado/mando
+        self.hit_line_y: int = rel_y(974.0)
+        self.hit_box_top_y: int = rel_y(932.0)
+        self.hit_box_bottom_y: int = rel_y(1016.0)
 
         # Punto de aparición en la parte superior del área jugable (entrando suavemente desde el borde del clip)
         min_lane_w = min(r.width for r in self.lane_rects)
@@ -231,17 +259,56 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.spawn_y: float = float(play_top_y - self.tile_size * 0.45)
         self.fall_distance: float = float(self.hit_line_y) - self.spawn_y
 
+        # Rectángulos de dock frontal para [D][F][J][K] y (X)(A)(Y)(B), estrictamente bajo hit_line_y + sprite/2
+        s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
+        pad = max(6, int(round(10 * s)))
+        max_sprite_h = int(round(min_lane_w * 0.70)) + pad * 2
+        dock_top = max(play_bottom_y - 1, self.hit_line_y + (max_sprite_h // 2) + max(2, int(round(4 * s))))
+        dock_bottom = rel_y(1134.0)
+        dock_h = max(int(round(36 * s)), dock_bottom - dock_top)
+        self.key_badge_rects: List[pygame.Rect] = []
+        for i, l_rect in enumerate(self.lane_rects):
+            bw = int(l_rect.width * 0.86)
+            badge_r = pygame.Rect(0, 0, bw, dock_h)
+            badge_r.midtop = (self.lane_centers_x[i], dock_top)
+            self.key_badge_rects.append(badge_r)
+
+        # Superficies pre-alocadas para destello vertical de carril (yellow_glow_alpha, cero alocaciones por frame)
+        self._lane_glow_surfs: List[pygame.Surface] = []
+        for l_rect in self.lane_rects:
+            gs = pygame.Surface((l_rect.width, play_h), pygame.SRCALPHA)
+            band_step = max(4, play_h // 28)
+            for y_pos in range(0, play_h, band_step):
+                t_norm = y_pos / float(max(1, play_h - 1))
+                # Más intenso cerca de la zona inferior de impacto, suave hacia arriba
+                band_alpha = int(215 * (t_norm ** 1.65))
+                if band_alpha > 0:
+                    pygame.draw.rect(
+                        gs,
+                        (255, 228, 110, band_alpha),
+                        (0, y_pos, l_rect.width, min(band_step, play_h - y_pos)),
+                    )
+            self._lane_glow_surfs.append(gs)
+
     def _load_and_slice_spritesheet(self) -> None:
         """
-        Extrae los 8 sprites de `spritesheet_teclas_piano_tiles_microjuego.png`
+        Extrae los 8 sprites de `spritesheet_teclas_costenas_piano.png`
         mediante una cuadrícula matemática uniforme de 4 columnas × 2 filas (W/4 × H/2),
-        manteniendo las proporciones de cada celda sin estirarlas ni deformarlas.
-        - Fila 0 (índice 0): Teclas normales (Nota rosa, Fuego naranja, Tenis morado, Claqueta rosa).
-        - Fila 1 (índice 1): Teclas activadas con brillo amarillo.
+        calcula la caja envolvente unión por columna entre Fila 0 y Fila 1 (`alpha > 12`)
+        y pre-hornea sombra acuarela (Fila 0), tinte de fallo y halo dorado (Fila 1).
         """
-        try:
-            sheet = self.assets.load_surface("spritesheet_teclas_piano_tiles_microjuego.png", has_alpha=True)
-        except Exception:
+        sheet = None
+        for candidate in (
+            getattr(self, "spritesheet_name", "spritesheet_teclas_costenas_piano.png"),
+            "spritesheet_teclas_piano_tiles_microjuego.png",
+        ):
+            try:
+                sheet = self.assets.load_surface(candidate, has_alpha=True)
+                self.spritesheet_name = candidate
+                break
+            except Exception:
+                sheet = None
+        if sheet is None:
             sheet = pygame.Surface((800, 400), pygame.SRCALPHA)
             sheet.fill((255, 105, 180, 220))
 
@@ -251,6 +318,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
         self.normal_tile_sprites: List[pygame.Surface] = []
         self.active_tile_sprites: List[pygame.Surface] = []
+        self.missed_tile_sprites: List[pygame.Surface] = []
         self.raw_grid_cells: List[List[pygame.Surface]] = [[], []]
 
         for r in range(rows):
@@ -268,33 +336,224 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 cell_surf.blit(sheet, (0, 0), cell_rect)
                 self.raw_grid_cells[r].append(cell_surf)
 
-                # Escalar manteniendo proporción (1:1 uniforme respecto a la celda cuadrada W/4 x H/2)
-                aspect = cell_w / float(cell_h)
-                if aspect >= 1.0:
-                    target_w = self.tile_size
-                    target_h = max(1, int(round(self.tile_size / aspect)))
-                else:
-                    target_h = self.tile_size
-                    target_w = max(1, int(round(self.tile_size * aspect)))
+        s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
+        min_lane_w = min(r.width for r in self.lane_rects)
+        pad = max(6, int(round(10 * s)))
+        max_w = int(round(min_lane_w * 0.735))
+        max_clip_h = max(24, (self.playable_clip_rect.bottom - self.hit_line_y - pad) * 2)
+        max_h = min(int(round(min_lane_w * 0.70)), max_clip_h)
 
-                scaled_tile = pygame.transform.smoothscale(cell_surf, (target_w, target_h))
-                if r == 0:
-                    self.normal_tile_sprites.append(scaled_tile)
-                else:
-                    self.active_tile_sprites.append(scaled_tile)
+        for c in range(cols):
+            cell0 = self.raw_grid_cells[0][c]
+            cell1 = self.raw_grid_cells[1][c]
+            bbox0 = cell0.get_bounding_rect(min_alpha=12)
+            bbox1 = cell1.get_bounding_rect(min_alpha=12)
+            if bbox0.width <= 0 or bbox0.height <= 0:
+                bbox0 = cell0.get_rect()
+            if bbox1.width <= 0 or bbox1.height <= 0:
+                bbox1 = cell1.get_rect()
+            union_rect = bbox0.union(bbox1)
+
+            # Normalización por aspecto: elementos horizontales anchos (ej. sombrero vueltiao aspect > 1.3)
+            # aprovechan hasta el 86% del ancho del carril para equiparar presencia visual con raspado/marimonda
+            col_max_w = int(round(min_lane_w * 0.86)) if union_rect.width > union_rect.height * 1.3 else max_w
+            col_max_h = max_h
+            scale = min(
+                col_max_w / float(max(1, union_rect.width)),
+                col_max_h / float(max(1, union_rect.height)),
+            )
+            tw = max(8, int(round(union_rect.width * scale)))
+            th = max(8, int(round(union_rect.height * scale)))
+            cw = tw + pad * 2
+            ch = th + pad * 2
+
+            crop0 = cell0.subsurface(union_rect)
+            crop1 = cell1.subsurface(union_rect)
+            scaled_0 = pygame.transform.smoothscale(crop0, (tw, th))
+            scaled_1 = pygame.transform.smoothscale(crop1, (tw, th))
+
+            # Fila 0: sombra acuarela suave pre-horneada
+            norm_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
+            try:
+                shadow_sil = pygame.mask.from_surface(scaled_0, 32).to_surface(
+                    setcolor=(58, 32, 26, 72),
+                    unsetcolor=(0, 0, 0, 0),
+                )
+                shadow_soft = desenfoque_suave(shadow_sil)
+                norm_surf.blit(shadow_soft, (pad, pad + 4))
+            except Exception:
+                pass
+            norm_surf.blit(scaled_0, (pad, pad))
+            self.normal_tile_sprites.append(norm_surf)
+
+            # Tinte cálido pre-horneado para notas falladas (cero .copy() por frame)
+            miss_surf = norm_surf.copy()
+            miss_surf.fill((235, 130, 130, 210), special_flags=pygame.BLEND_RGBA_MULT)
+            self.missed_tile_sprites.append(miss_surf)
+
+            # Fila 1: halo radial dorado-ámbar pre-horneado
+            act_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
+            outer_r = max(tw, th) // 2 + 9
+            center_pt = (cw // 2, ch // 2)
+            for frac, alpha_val in ((1.0, 18), (0.82, 30), (0.64, 44), (0.46, 58)):
+                rad = max(4, int(round(outer_r * frac)))
+                pygame.draw.circle(act_surf, (255, 220, 95, alpha_val), center_pt, rad)
+            act_surf.blit(scaled_1, (pad, pad))
+            self.active_tile_sprites.append(act_surf)
 
     def _build_hud_surfaces(self) -> None:
-        """Prepara los corazones de vida (estilo acuarela cozy) y elementos de progreso musical."""
-        self.heart_full_surf = self._create_heart_surface(filled=True, size=56)
-        self.heart_empty_surf = self._create_heart_surface(filled=False, size=56)
-        self.mini_heart_surf = self._create_heart_surface(filled=True, size=24)
+        """Prepara los corazones de vida (estilo acuarela cozy), cachés de pulso y tarjeta de ritmo."""
+        s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
+        heart_sz = max(32, int(round(56 * s)))
+        mini_sz = max(14, int(round(24 * s)))
+        self._hearts_x = max(16, int(round(34 * s)))
+        self._hearts_y = max(12, int(round(26 * s)))
+        self._heart_pad_x = max(12, int(round(22 * s)))
+        self._heart_step = max(38, int(round(68 * s)))
+        self._heart_sz = heart_sz
+
+        self.heart_full_surf = self._create_heart_surface(filled=True, size=heart_sz)
+        self.heart_empty_surf = self._create_heart_surface(filled=False, size=heart_sz)
+        self.mini_heart_surf = self._create_heart_surface(filled=True, size=mini_sz)
 
         try:
-            self.heart_full_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), 56)
-            self.heart_empty_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonVacio.jpg"), 56)
-            self.mini_heart_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), 24)
+            self.heart_full_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), heart_sz)
+            self.heart_empty_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonVacio.jpg"), heart_sz)
+            self.mini_heart_surf = self.assets.cargarSinFondo(os.path.join("Piano", "corazonLleno.jpg"), mini_sz)
         except Exception as e:
             print(f"[BuenavistaTrend] Aviso: no se pudieron cargar los corazones pintados: {e}")
+
+        # Pre-cachear 5 escalas discretas de latido de corazón (0.96..1.04) para evitar smoothscale por frame
+        self._heart_pulse_cache: List[pygame.Surface] = []
+        bw, bh = self.heart_full_surf.get_size()
+        for scale in (0.96, 0.98, 1.00, 1.02, 1.04):
+            self._heart_pulse_cache.append(
+                pygame.transform.smoothscale(
+                    self.heart_full_surf,
+                    (max(8, int(round(bw * scale))), max(8, int(round(bh * scale)))),
+                )
+            )
+
+        # Marco de destello perimetral pre-alocado para fallos
+        self._red_flash_surf = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+        pygame.draw.rect(
+            self._red_flash_surf,
+            (255, 65, 85, 255),
+            (0, 0, self.screen_w, self.screen_h),
+            width=max(8, int(round(18 * s))),
+        )
+
+        # Tarjeta acuarela derecha: Canción / Combo / Precisión / Paloma compañera
+        self._build_rhythm_card_assets()
+
+    def _build_rhythm_card_assets(self) -> None:
+        """Pre-hornea el marco acuarela de la tarjeta derecha y carga sprites de Paloma (cero PNGs nuevos)."""
+        s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
+        gap_x = max(16, int(round(48 * s)))
+        margin_r = max(16, int(round(58 * s)))
+        avail_w = max(220, self.screen_w - (self.phone_rect.right + gap_x) - margin_r)
+        cw = min(int(round(496 * s)), avail_w)
+        cs = cw / 496.0
+        ch = int(round(485 * cs))
+        card_x = min(self.screen_w - cw - 8, self.phone_rect.right + gap_x)
+        card_y = min(
+            int(round(self.screen_h * (210.0 / 1080.0))),
+            max(8, self.screen_h - ch - 12),
+        )
+        self.rhythm_card_rect = pygame.Rect(card_x, card_y, cw, ch)
+        self._card_scale = cs
+
+        def sc(val: float) -> int:
+            return int(round(val * cs))
+
+        pad_x = max(4, sc(6))
+        pad_top = max(3, sc(4))
+        pad_shadow = max(6, sc(10))
+        rad_outer = max(14, sc(28))
+        rad_inner = max(11, sc(22))
+        rad_pill = max(10, sc(18))
+
+        card_surf = pygame.Surface((cw + pad_x * 2, ch + max(8, sc(14))), pygame.SRCALPHA)
+        # Sombra cálida suave
+        pygame.draw.rect(card_surf, (56, 30, 24, 58), (pad_x, pad_shadow, cw, ch), border_radius=rad_outer)
+        # Cuerpo pergamino crema
+        body_rect = pygame.Rect(pad_x, pad_top, cw, ch)
+        pygame.draw.rect(card_surf, (255, 247, 232, 236), body_rect, border_radius=rad_outer)
+
+        # Franja superior coral-dorado acuarela recortada al radio superior
+        banner_h = max(48, sc(112))
+        banner = pygame.Surface((cw, ch), pygame.SRCALPHA)
+        pygame.draw.rect(banner, (248, 210, 150, 128), (0, 0, cw, banner_h))
+        mask_s = pygame.Surface((cw, ch), pygame.SRCALPHA)
+        pygame.draw.rect(mask_s, (255, 255, 255, 255), (0, 0, cw, ch), border_radius=rad_outer)
+        banner.blit(mask_s, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        card_surf.blit(banner, (pad_x, pad_top))
+
+        # Doble borde tinta acuarela
+        pygame.draw.rect(card_surf, (112, 62, 46, 235), body_rect, width=max(2, sc(4)), border_radius=rad_outer)
+        pygame.draw.rect(
+            card_surf,
+            (224, 164, 78, 225),
+            body_rect.inflate(-max(6, sc(12)), -max(6, sc(12))),
+            width=max(1, sc(2)),
+            border_radius=rad_inner,
+        )
+
+        # Línea divisoria entre encabezado de canción y métricas
+        div1_y = sc(118)
+        div2_y = sc(294)
+        line_x0 = pad_x + sc(24)
+        line_x1 = pad_x + cw - sc(24)
+        pygame.draw.line(card_surf, (190, 138, 96, 145), (line_x0, div1_y), (line_x1, div1_y), max(1, sc(2)))
+        # Línea divisoria sutil sobre la franja de Paloma
+        pygame.draw.line(card_surf, (190, 138, 96, 120), (line_x0, div2_y), (line_x1, div2_y), max(1, sc(2)))
+
+        # Pastillas crema suaves para Combo y Precisión
+        pill_l = pygame.Rect(pad_x + sc(22), sc(132), sc(212), sc(118))
+        pill_r = pygame.Rect(pad_x + sc(262), sc(132), sc(212), sc(118))
+        for pr in (pill_l, pill_r):
+            pygame.draw.rect(card_surf, (255, 252, 244, 215), pr, border_radius=rad_pill)
+            pygame.draw.rect(card_surf, (214, 168, 116, 190), pr, width=max(1, sc(2)), border_radius=rad_pill)
+
+        # Tipografías de la tarjeta
+        self.font_card_tag = self.assets.cargarFuenteCuento(max(13, sc(22)))
+        self.font_card_title = self.assets.cargarFuenteTitulo(max(15, sc(26)))
+        self.font_card_metric = self.assets.cargarFuenteTitulo(max(22, sc(42)))
+        self.font_card_sub = self.assets.cargarFuenteCuento(max(13, sc(22)))
+        self.font_card_paloma = self.assets.cargarFuenteCuento(max(13, sc(23)))
+
+        tag_s = self.font_card_tag.render("SONANDO EN BUENAVISTA", True, (166, 72, 54))
+        card_surf.blit(tag_s, tag_s.get_rect(midtop=(pad_x + cw // 2, sc(18))))
+
+        song_s = self.font_card_title.render("En Barranquilla Me Quedo", True, (82, 42, 34))
+        max_song_w = cw - sc(74)
+        if song_s.get_width() > max_song_w:
+            sr = max_song_w / float(max(1, song_s.get_width()))
+            song_s = pygame.transform.smoothscale(song_s, (max_song_w, max(10, int(round(song_s.get_height() * sr)))))
+        card_surf.blit(song_s, song_s.get_rect(midleft=(pad_x + sc(56), sc(78))))
+
+        lbl_combo = self.font_card_tag.render("COMBO", True, (148, 86, 64))
+        lbl_prec = self.font_card_tag.render("PRECISIÓN", True, (58, 112, 92))
+        card_surf.blit(lbl_combo, lbl_combo.get_rect(midtop=(pill_l.centerx, pill_l.top + sc(12))))
+        card_surf.blit(lbl_prec, lbl_prec.get_rect(midtop=(pill_r.centerx, pill_r.top + sc(12))))
+
+        self._card_pad = (pad_x, pad_top)
+        self.rhythm_card_bg: pygame.Surface = card_surf
+
+        # Sprites de Paloma pre-escalados proporcionalmente (reutilizando assets existentes)
+        self.paloma_card_sprites: Dict[str, pygame.Surface] = {}
+        for key, fname in (
+            ("idle", "paloma_dialog.png"),
+            ("cheer", "paloma_dialog_habla_0.png"),
+            ("blink", "paloma_dialog_pestaneo.png"),
+        ):
+            try:
+                raw_p = self.assets.load_cropped_surface(fname, alpha_threshold=15)
+                target_h = max(72, sc(148))
+                target_w = max(16, int(round(raw_p.get_width() * (target_h / float(max(1, raw_p.get_height()))))))
+                self.paloma_card_sprites[key] = pygame.transform.smoothscale(raw_p, (target_w, target_h))
+            except Exception:
+                pass
 
     def _create_heart_surface(self, filled: bool, size: int = 56) -> pygame.Surface:
         """Genera un corazón estilizado con borde acogedor coherente con la paleta de BarranquillaWare."""
@@ -361,7 +620,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         calculando el `spawn_time` exacto según la distancia real de recorrido y la velocidad de caída.
         """
         self.musical_events: List[MusicalNoteEvent] = []
-        for impact_t, lane_idx, spr_type, speed in IMITADORA_BEATMAP_DATA:
+        for impact_t, lane_idx, spr_type, speed in EN_BARRANQUILLA_BEATMAP_DATA:
             travel_time = self.fall_distance / max(1.0, speed)
             spawn_t = max(0.0, impact_t - travel_time)
             ev = MusicalNoteEvent(
@@ -374,18 +633,44 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             )
             self.musical_events.append(ev)
 
+    def _resolve_music_track_path(self) -> Optional[str]:
+        """Resuelve la ruta de la pista musical (.ogg prioritario, con fallback automático a .mp3)."""
+        track_path = os.path.join("assets", self.music_track_name)
+        if os.path.exists(track_path):
+            return track_path
+        if self.music_track_name.lower().endswith(".ogg"):
+            mp3_candidate = os.path.splitext(track_path)[0] + ".mp3"
+            if os.path.exists(mp3_candidate):
+                return mp3_candidate
+        return None
+
+    def _preload_music_track(self) -> None:
+        """Precarga la pista musical en `setup_game()` para evitar tirones de I/O al iniciar PLAY."""
+        self._music_track_path = self._resolve_music_track_path()
+        self._music_preloaded = False
+        if pygame.mixer.get_init() and self._music_track_path:
+            try:
+                pygame.mixer.music.load(self._music_track_path)
+                self._music_preloaded = True
+            except Exception:
+                self._music_preloaded = False
+
     def _start_music_if_needed(self) -> None:
-        """Inicia la pista instrumental 'Imitadora' al comenzar la fase de juego."""
+        """Inicia la pista 'En Barranquilla Me Quedo' al comenzar la fase de juego (con fallback .mp3 o silencio seguro)."""
         if self.music_started:
             return
         self.music_started = True
         self.song_elapsed = 0.0
         self._last_mixer_pos_sec = 0.0
+        self._music_started_own_track = False
 
-        track_path = os.path.join("assets", self.music_track_name)
-        if pygame.mixer.get_init() and os.path.exists(track_path):
+        track_path = self._music_track_path if (self._music_preloaded and self._music_track_path and os.path.exists(self._music_track_path)) else self._resolve_music_track_path()
+        if pygame.mixer.get_init() and track_path and os.path.exists(track_path):
             try:
-                pygame.mixer.music.load(track_path)
+                if not self._music_preloaded or track_path != self._music_track_path:
+                    pygame.mixer.music.load(track_path)
+                    self._music_track_path = track_path
+                    self._music_preloaded = True
                 self.audio._bgm_volume_scale = 1.0
                 if hasattr(self.audio, "sync_music_volume"):
                     self.audio.sync_music_volume()
@@ -395,11 +680,28 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 if getattr(self.audio, "music_enabled", True):
                     pygame.mixer.music.play(loops=0, start=0.0)
                 self.audio.current_track = self.music_track_name
+                self._music_started_own_track = True
+                return
+            except Exception:
+                self._music_started_own_track = False
+
+        # Sin pista propia disponible: detener cualquier BGM previa del menú/mapa para evitar desincronía
+        if hasattr(self.audio, "stop_music"):
+            try:
+                self.audio.stop_music()
             except Exception:
                 pass
+        elif pygame.mixer.get_init():
+            try:
+                pygame.mixer.music.stop()
+            except Exception:
+                pass
+        if hasattr(self.audio, "current_track"):
+            self.audio.current_track = None
 
     def _stop_or_fade_music(self) -> None:
         """Detiene o atenúa suavemente la música al finalizar el microjuego."""
+        self._music_started_own_track = False
         if pygame.mixer.get_init():
             try:
                 pygame.mixer.music.fadeout(450)
@@ -415,6 +717,10 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         """Limpia recursos activos y detiene la pista musical al salir."""
         self._stop_or_fade_music()
         self.held_keys.clear()
+        if hasattr(self, "held_gamepad_buttons"):
+            self.held_gamepad_buttons.clear()
+        if hasattr(self, "lane_held_states"):
+            self.lane_held_states = [False, False, False, False]
 
     def exit(self) -> None:
         self.cleanup()
@@ -436,29 +742,41 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         super().finish_game(won=won)
 
         if getattr(self, "letreroResultado", None) is not None:
-            self.finLetrero = 3.0
-            self.inicioTendencias = 13.0
-            self.outro_duration = max(self.outro_duration, 17.0 if won else 13.0)
+            if self.time_limit < 20.0:
+                # Modo Arcade (rondas rápidas de 5.5–8.5s): mantener outro ágil sin revelación larga
+                self.finLetrero = None
+                self.outro_duration = 1.8
+            else:
+                self.finLetrero = 3.0
+                self.inicioTendencias = 13.0
+                self.outro_duration = max(self.outro_duration, 17.0 if won else 13.0)
 
     def _sync_audio_clock(self, dt: float) -> None:
         """
         Sincroniza el reloj musical (`self.song_elapsed`) con el tiempo real de reproducción
-        de `pygame.mixer.music.get_pos()`, manteniendo continuidad con `dt` cuando el mixer
-        opera en modo headless o entre actualizaciones de buffer.
+        de `pygame.mixer.music.get_pos()`, aplicando `self.audio_offset_sec` y manteniendo
+        continuidad con `dt` cuando el mixer opera en modo headless o entre buffers.
+        Solo lee `get_pos()` si se inició la pista propia de este minijuego.
         """
         self.song_elapsed += dt
-        if pygame.mixer.get_init() and getattr(self.audio, "music_enabled", True):
+        if (
+            self._music_started_own_track
+            and getattr(self.audio, "current_track", None) == self.music_track_name
+            and pygame.mixer.get_init()
+            and getattr(self.audio, "music_enabled", True)
+        ):
             try:
                 if pygame.mixer.music.get_busy():
                     pos_ms = pygame.mixer.music.get_pos()
                     if pos_ms >= 0:
                         mixer_sec = pos_ms / 1000.0
+                        target_sec = mixer_sec + self.audio_offset_sec
                         # Si el reloj de hardware avanzó de forma continua respecto al último sample,
                         # anclar suavemente para evitar drift sin pisar saltos manuales en tests.
                         if mixer_sec > self._last_mixer_pos_sec:
                             self._last_mixer_pos_sec = mixer_sec
-                            if abs(mixer_sec - self.song_elapsed) < 0.35:
-                                self.song_elapsed = 0.7 * self.song_elapsed + 0.3 * mixer_sec
+                            if abs(target_sec - self.song_elapsed) < 0.35:
+                                self.song_elapsed = 0.7 * self.song_elapsed + 0.3 * target_sec
             except Exception:
                 pass
 
@@ -508,6 +826,14 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         for i in range(4):
             if self.lane_press_timers[i] > 0.0:
                 self.lane_press_timers[i] = max(0.0, self.lane_press_timers[i] - dt)
+            if self.lane_hit_flash[i] > 0.0:
+                self.lane_hit_flash[i] = max(0.0, self.lane_hit_flash[i] - dt)
+
+        if self.combo_pop_timer > 0.0:
+            self.combo_pop_timer = max(0.0, self.combo_pop_timer - dt)
+        if self.paloma_cheer_timer > 0.0:
+            self.paloma_cheer_timer = max(0.0, self.paloma_cheer_timer - dt)
+        self.blink_timer = (self.blink_timer + dt) % 3.4
 
         if self.trauma > 0.0:
             self.trauma = max(0.0, self.trauma - dt * 2.4)
@@ -575,13 +901,33 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             if cp["life"] <= 0.0:
                 self.celebration_particles.remove(cp)
 
+    def handles_raw_gamepad(self, event: pygame.event.Event) -> bool:
+        """Evita doble despacho en Engine: los botones X/A/Y/B de carril se manejan directo."""
+        return (
+            event.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP)
+            and getattr(event, "button", None) in self.GAMEPAD_BUTTONS
+        )
+
     def handle_Event_key_up(self, key: int) -> None:
         self.held_keys.discard(key)
+        if key in self.LANE_KEYS:
+            lane_idx = self.LANE_KEYS.index(key)
+            self.lane_held_states[lane_idx] = any(
+                btn for btn, l_idx in self.GAMEPAD_BUTTONS.items()
+                if l_idx == lane_idx and btn in self.held_gamepad_buttons
+            )
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYUP:
-            self.held_keys.discard(event.key)
+            self.handle_Event_key_up(event.key)
             return
+        if event.type == pygame.JOYBUTTONUP:
+            btn = getattr(event, "button", None)
+            if btn in self.GAMEPAD_BUTTONS:
+                self.held_gamepad_buttons.discard(btn)
+                lane_idx = self.GAMEPAD_BUTTONS[btn]
+                self.lane_held_states[lane_idx] = (self.LANE_KEYS[lane_idx] in self.held_keys)
+                return
         if self.phase == self.PHASE_PLAY:
             self.handle_game_event(event)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -591,14 +937,24 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     def handle_game_event(self, event: pygame.event.Event) -> None:
         """
-        Procesa pulsaciones individuales en los 4 carriles (D, F, J, K).
-        Impide que mantener una tecla pulsada produzca aciertos o fallos repetidos.
+        Procesa pulsaciones individuales en los 4 carriles (D, F, J, K) y mando (X, A, Y, B).
+        Impide que mantener una tecla o botón pulsado produzca aciertos o fallos repetidos.
         """
         if self.is_finished:
             return
 
         if event.type == pygame.KEYUP:
-            self.held_keys.discard(event.key)
+            self.handle_Event_key_up(event.key)
+            return
+
+        if event.type == pygame.JOYBUTTONUP:
+            btn = getattr(event, "button", None)
+            lane_idx = self.GAMEPAD_BUTTONS.get(btn)
+            if lane_idx is not None:
+                from core import input_state
+                input_state.set_input_device("gamepad")
+                self.held_gamepad_buttons.discard(btn)
+                self.lane_held_states[lane_idx] = (self.LANE_KEYS[lane_idx] in self.held_keys)
             return
 
         if event.type == pygame.KEYDOWN:
@@ -609,10 +965,18 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
             if event.key in self.LANE_KEYS:
                 lane_idx = self.LANE_KEYS.index(event.key)
+                self.lane_held_states[lane_idx] = True
                 self._process_lane_press(lane_idx)
         elif event.type == pygame.JOYBUTTONDOWN:
-            lane_idx = self.GAMEPAD_BUTTONS.get(event.button)
+            btn = getattr(event, "button", None)
+            lane_idx = self.GAMEPAD_BUTTONS.get(btn)
             if lane_idx is not None:
+                from core import input_state
+                input_state.set_input_device("gamepad")
+                if btn in self.held_gamepad_buttons:
+                    return
+                self.held_gamepad_buttons.add(btn)
+                self.lane_held_states[lane_idx] = True
                 self._process_lane_press(lane_idx)
 
     def _process_lane_press(self, lane_idx: int) -> None:
@@ -691,9 +1055,15 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.combo += 1
         self.max_combo = max(self.max_combo, self.combo)
         self.yellow_glow_alpha = 95.0
+        self.last_hit_lane = note.lane
+        self.lane_hit_flash[note.lane] = 0.22
+        self.combo_pop_timer = 0.18
+        self.paloma_cheer_timer = 0.65
 
-        if hasattr(self.audio, "play_click"):
-            self.audio.play_click()
+        if hasattr(self.audio, "play_drum"):
+            self.audio.play_drum()
+        elif hasattr(self.audio, "play_hit"):
+            self.audio.play_hit()
 
         cx = float(self.lane_centers_x[note.lane])
         cy = float(self.hit_line_y)
@@ -702,9 +1072,14 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self._spawn_like_and_heart_particles(cx, cy)
 
         col = (255, 235, 75) if "PERFECTO" in judgment else (120, 245, 165)
+        fb_surf = self._get_feedback_surface(judgment, col)
+        half_w = fb_surf.get_width() // 2
+        min_x = float(self.playable_clip_rect.left + half_w + 6)
+        max_x = float(self.playable_clip_rect.right - half_w - 6)
+        clamped_x = max(min_x, min(cx, max_x)) if min_x <= max_x else cx
         self.floating_feedbacks.append({
             "text": judgment,
-            "x": cx,
+            "x": clamped_x,
             "y": cy - 42.0,
             "color": col,
             "life": 0.50,
@@ -781,11 +1156,17 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.red_flash_alpha = 135.0
         self.trauma = min(1.0, self.trauma + 0.55)
 
-        if hasattr(self.audio, "play_pigeon"):
-            self.audio.play_pigeon()
+        if hasattr(self.audio, "play_miss"):
+            self.audio.play_miss()
+        elif hasattr(self.audio, "play_lose"):
+            self.audio.play_lose()
 
-        hx = 48 + lost_heart_idx * 68
-        hy = 38
+        hearts_x = getattr(self, "_hearts_x", 34)
+        hearts_y = getattr(self, "_hearts_y", 26)
+        heart_pad_x = getattr(self, "_heart_pad_x", 22)
+        heart_step = getattr(self, "_heart_step", 68)
+        hx = hearts_x + heart_pad_x + lost_heart_idx * heart_step
+        hy = hearts_y + max(6, int(round(12 * getattr(self, "_ui_scale", 1.0))))
         self.heart_loss_anims.append({
             "x": float(hx),
             "y": float(hy),
@@ -794,11 +1175,17 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             "max_life": 0.55,
         })
 
+        fb_col = (255, 95, 105)
+        fb_surf = self._get_feedback_surface(feedback_text, fb_col)
+        half_w = fb_surf.get_width() // 2
+        min_x = float(self.playable_clip_rect.left + half_w + 6)
+        max_x = float(self.playable_clip_rect.right - half_w - 6)
+        clamped_x = max(min_x, min(float(pos[0]), max_x)) if min_x <= max_x else float(pos[0])
         self.floating_feedbacks.append({
             "text": feedback_text,
-            "x": pos[0],
+            "x": clamped_x,
             "y": pos[1] - 36.0,
-            "color": (255, 95, 105),
+            "color": fb_col,
             "life": 0.55,
             "max_life": 0.55,
         })
@@ -849,10 +1236,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         """
         Renderiza las 4 capas del microjuego en orden estricto:
         - Capa 1: Fondo de Buenavista con ligero oscurecimiento.
-        - Capa 2: Celular centrado ocupando el 85% de la altura sin deformarse.
-        - Capa 3: Teclas descendentes recortadas al área interior del celular + efectos suaves.
-        - Capa 4: Interfaz exterior (3 corazones arriba a la izquierda, barra de progreso musical
-          y tiempo restante dinámico arriba a la derecha).
+        - Capa 2: Pantalla acuarela en vivo + línea/anillos receptores (o celular fallback).
+        - Capa 3: Teclas descendentes recortadas al área jugable + dock frontal D/F/J/K + marco celular.
+        - Capa 4: Interfaz exterior (5 corazones arriba izquierda, reloj arriba derecha, tarjeta Paloma).
         """
         # Vibración visual breve y sutil cuando ocurre un fallo (el fondo y el celular permanecen estables)
         shake_mag = (self.trauma ** 2) * self.max_shake_offset
@@ -865,15 +1251,15 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         surface.blit(self.bg_surface, (0, 0))
 
         # ---------------------------------------------------------------------
-        # CAPA 2 — Celular PNG centrado (85% de la altura, proporción intacta)
+        # CAPA 2 — Pantalla interior acuarela y receptores (o fallback sin assets)
         # ---------------------------------------------------------------------
-        phone_draw_rect = self.phone_rect.move(shake_x, shake_y)
-        surface.blit(self.phone_surface, phone_draw_rect)
-
-        # Etiquetas discretas de controles [D] [F] [J] [K] en las 4 zonas de pulsación inferiores
-        self._render_lane_key_indicators(surface, shake_x, shake_y)
-
-        self.dibujarPantallaVivo(surface, shake_x, shake_y)
+        has_watercolor_phone = bool(getattr(self, "avatares", None) and self.prepararPantallaVivo())
+        if not has_watercolor_phone:
+            phone_draw_rect = self.phone_rect.move(shake_x, shake_y)
+            surface.blit(self.phone_surface, phone_draw_rect)
+            self._render_fallback_receptors(surface, shake_x, shake_y)
+        else:
+            self.dibujarPantallaVivo(surface, shake_x, shake_y)
 
         # ---------------------------------------------------------------------
         # CAPA 3 — Teclas descendentes con clipping estricto al interior del celular
@@ -895,38 +1281,49 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 surface.blit(spr, rect)
 
             elif ev.state == "hit":
-                # 1. Cambia a su versión iluminada (Fila 2) con ligera expansión
+                # 1. Squash & stretch con overshoot en 2 etapas guiado por dt + anillo expansivo dorado
                 active_spr = self.active_tile_sprites[ev.sprite_type]
-                progress = 1.0 - max(0.0, ev.hit_anim_timer / 0.16)
-                scale = 1.0 + math.sin(progress * math.pi) * 0.16
-                tw = max(4, int(round(active_spr.get_width() * scale)))
-                th = max(4, int(round(active_spr.get_height() * scale)))
-                expanded = pygame.transform.smoothscale(active_spr, (tw, th))
+                p = 1.0 - max(0.0, ev.hit_anim_timer / 0.16)
+                p = max(0.0, min(1.0, p))
+                if p < 0.35:
+                    u = p / 0.35
+                    sx = 1.0 + 0.24 * math.sin(u * math.pi * 0.5)
+                    sy = 1.0 - 0.22 * math.sin(u * math.pi * 0.5)
+                else:
+                    u = (p - 0.35) / 0.65
+                    sx = 1.24 - 0.32 * u
+                    sy = 0.78 + 0.34 * math.sin(u * math.pi * 0.65)
 
-                # Brillo amarillo suave detrás del sprite activado
-                glow_r = int(max(tw, th) * 0.62)
-                glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-                pygame.draw.circle(
-                    glow_surf,
-                    (255, 240, 110, int(115 * (1.0 - progress))),
-                    (glow_r, glow_r),
-                    glow_r
-                )
-                surface.blit(glow_surf, (cx - glow_r, cy - glow_r))
+                tw = max(4, int(round(active_spr.get_width() * sx)))
+                th = max(4, int(round(active_spr.get_height() * sy)))
+                expanded = pygame.transform.smoothscale(active_spr, (tw, th))
+                if p > 0.60:
+                    fade = max(0.0, 1.0 - (p - 0.60) / 0.40)
+                    expanded.set_alpha(int(255 * fade))
+
+                # Anillo dorado expansivo directo en surface (cero alocación de Surface)
+                ring_r = max(12, int(round(self.tile_size * (0.42 + 0.42 * p))))
+                ring_col = (255, 224, 96) if p < 0.5 else (255, 240, 160)
+                ring_w = max(1, int(round(4 * (1.0 - p * 0.65))))
+                pygame.draw.circle(surface, ring_col, (cx, cy), ring_r, width=ring_w)
 
                 rect = expanded.get_rect(center=(cx, cy))
                 surface.blit(expanded, rect)
 
             elif ev.state == "missed":
-                # Se desvanece rápidamente con tinte rojizo suave al fallar
-                spr = self.normal_tile_sprites[ev.sprite_type].copy()
+                # Sprite pre-horneado con tinte cálido rojizo (cero .copy() por frame)
+                spr = self.missed_tile_sprites[ev.sprite_type]
                 alpha = int(180 * max(0.0, ev.miss_anim_timer / 0.18))
                 spr.set_alpha(alpha)
                 rect = spr.get_rect(center=(cx, cy))
                 surface.blit(spr, rect)
+                spr.set_alpha(255)
 
-        # Restaurar clip de pantalla completa
+        # Restaurar clip de pantalla completa antes de dibujar dock frontal y marco
         surface.set_clip(prev_clip)
+
+        # Capa 3B — Dock frontal [D][F][J][K] y (X)(A)(Y)(B) nunca tapado por las notas
+        self._render_key_dock_badges(surface, shake_x, shake_y)
 
         self.dibujarMarcoCelular(surface, shake_x, shake_y)
 
@@ -934,131 +1331,222 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self._render_vfx_and_particles(surface, shake_x, shake_y)
 
         # ---------------------------------------------------------------------
-        # CAPA 4 — Interfaz adicional fuera del celular (Corazones y Barra Musical)
+        # CAPA 4 — Interfaz adicional fuera del celular (Corazones, Reloj, Tarjeta Paloma)
         # ---------------------------------------------------------------------
         self._render_outer_hud(surface)
 
         self.dibujarPublico(surface)
 
-    def _render_lane_key_indicators(self, surface: pygame.Surface, ox: int, oy: int) -> None:
-        """Muestra la referencia de teclas D, F, J, K en las zonas de pulsación inferiores."""
-        for idx, label in enumerate(self.LANE_LABELS):
-            cx = self.lane_centers_x[idx] + ox
-            cy = self.hit_line_y + oy
-            is_pressed = self.lane_press_timers[idx] > 0.0
-
-            if is_pressed:
-                # Pulso luminoso suave dentro de la cápsula de impacto al presionar la tecla
-                pw = int(self.lane_rects[idx].width * 0.84)
-                ph = max(24, self.hit_box_bottom_y - self.hit_box_top_y)
-                press_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
-                pygame.draw.rect(press_surf, (255, 235, 130, 75), (0, 0, pw, ph), border_radius=ph // 2)
-                surface.blit(press_surf, press_surf.get_rect(center=(cx, cy)))
-
-            col = (255, 245, 150) if is_pressed else (235, 210, 255)
-            txt = self.font_keys.render(label, True, col)
-            txt_bg = self.font_keys.render(label, True, (35, 15, 60))
-            surface.blit(txt_bg, txt_bg.get_rect(center=(cx + 2, cy + 2)))
-            surface.blit(txt, txt.get_rect(center=(cx, cy)))
+    def _get_feedback_surface(self, text: str, color: Tuple[int, int, int]) -> pygame.Surface:
+        """Cachea los textos de feedback con borde acuarela (textoConBorde) para cero renders por frame."""
+        key = (text, color)
+        if key not in self._feedback_surf_cache:
+            self._feedback_surf_cache[key] = self.textoConBorde(
+                self.font_feedback,
+                text,
+                color,
+                (48, 22, 34),
+                3,
+            )
+        return self._feedback_surf_cache[key]
 
     def _render_vfx_and_particles(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         """Dibuja corazones pequeños, likes flotantes y destellos sutiles de acierto/fallo."""
-        # Destello perimetral suave en fallo o acierto sin tapar las notas
-        if self.red_flash_alpha > 1.0:
-            flash_s = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
-            pygame.draw.rect(
-                flash_s,
-                (255, 65, 85, int(min(110.0, self.red_flash_alpha))),
-                (0, 0, self.screen_w, self.screen_h),
-                width=18
-            )
-            surface.blit(flash_s, (0, 0))
+        # Destello perimetral suave en fallo sin tapar las notas (superficie pre-alocada)
+        if self.red_flash_alpha > 1.0 and getattr(self, "_red_flash_surf", None) is not None:
+            self._red_flash_surf.set_alpha(int(min(110.0, self.red_flash_alpha)))
+            surface.blit(self._red_flash_surf, (0, 0))
 
         for p in self.like_particles:
             ratio = max(0.0, p["life"] / p["max_life"])
             px = int(p["x"]) + ox
             py = int(p["y"]) + oy
             if p["is_heart"]:
-                hs = self.mini_heart_surf.copy()
-                hs.set_alpha(int(235 * ratio))
-                surface.blit(hs, hs.get_rect(center=(px, py)))
+                self.mini_heart_surf.set_alpha(int(235 * ratio))
+                surface.blit(self.mini_heart_surf, self.mini_heart_surf.get_rect(center=(px, py)))
+                self.mini_heart_surf.set_alpha(255)
             else:
                 r = max(2, int(p["size"] * ratio))
-                ps = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
-                pygame.draw.circle(ps, (*p["color"], int(220 * ratio)), (r + 2, r + 2), r)
-                surface.blit(ps, (px - r - 2, py - r - 2))
+                pygame.draw.circle(surface, p["color"], (px, py), r)
 
         for fb in self.floating_feedbacks:
             ratio = max(0.0, fb["life"] / fb["max_life"])
-            txt = self.font_feedback.render(fb["text"], True, fb["color"])
-            shd = self.font_feedback.render(fb["text"], True, (25, 12, 40))
-            txt.set_alpha(int(255 * ratio))
-            shd.set_alpha(int(255 * ratio))
+            base_surf = self._get_feedback_surface(fb["text"], fb["color"])
+            elapsed_frac = 1.0 - ratio
+            if elapsed_frac < 0.25:
+                pop_scale = 1.18 - 0.18 * (elapsed_frac / 0.25)
+                sw = max(4, int(round(base_surf.get_width() * pop_scale)))
+                sh = max(4, int(round(base_surf.get_height() * pop_scale)))
+                draw_surf = pygame.transform.smoothscale(base_surf, (sw, sh))
+            else:
+                draw_surf = base_surf
+            draw_surf.set_alpha(int(255 * min(1.0, ratio * 1.25)))
+            half_w = draw_surf.get_width() // 2
+            min_fx = self.playable_clip_rect.left + half_w + 6 + ox
+            max_fx = self.playable_clip_rect.right - half_w - 6 + ox
             fx = int(fb["x"]) + ox
+            if min_fx <= max_fx:
+                fx = max(min_fx, min(fx, max_fx))
             fy = int(fb["y"]) + oy
-            surface.blit(shd, shd.get_rect(center=(fx + 2, fy + 2)))
-            surface.blit(txt, txt.get_rect(center=(fx, fy)))
+            surface.blit(draw_surf, draw_surf.get_rect(center=(fx, fy)))
+            draw_surf.set_alpha(255)
 
         for cp in self.celebration_particles:
             ratio = max(0.0, cp["life"] / cp["max_life"])
             r = max(2, int(cp["size"] * ratio))
-            cs = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
-            pygame.draw.circle(cs, (*cp["color"], int(245 * ratio)), (r + 2, r + 2), r)
-            surface.blit(cs, (int(cp["x"]) - r, int(cp["y"]) - r))
+            pygame.draw.circle(surface, cp["color"], (int(cp["x"]), int(cp["y"])), r)
 
     def _render_outer_hud(self, surface: pygame.Surface) -> None:
         """
         Capa 4 — Interfaz adicional fuera del celular:
-        1. Tres corazones en la esquina superior izquierda (con pérdida animada al fallar).
-        2. Reloj contador dinámico en la esquina superior derecha (sin el recuadro de progreso del trend).
+        1. Cinco corazones en la esquina superior izquierda (con latido al ritmo 1.9 Hz y pérdida animada).
+        2. Reloj contador dinámico oficial (`contador_microjuegos.png`) arriba a la derecha.
+        3. Tarjeta acuarela derecha de Canción / Combo / Precisión / Paloma compañera.
         """
-        # 1. Tres corazones en la esquina superior izquierda
-        hearts_panel_w = 44 + (self.max_lives - 1) * 68 + 56
-        hearts_panel_h = 80
-        hearts_x = 34
-        hearts_y = 26
+        s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
+        hearts_x = getattr(self, "_hearts_x", max(16, int(round(34 * s))))
+        hearts_y = getattr(self, "_hearts_y", max(12, int(round(26 * s))))
+        heart_pad_x = getattr(self, "_heart_pad_x", max(12, int(round(22 * s))))
+        heart_step = getattr(self, "_heart_step", max(38, int(round(68 * s))))
+        heart_sz = getattr(self, "_heart_sz", max(32, int(round(56 * s))))
 
-        panel_surf = pygame.Surface((hearts_panel_w, hearts_panel_h), pygame.SRCALPHA)
-        pygame.draw.rect(panel_surf, (32, 18, 52, 210), (0, 0, hearts_panel_w, hearts_panel_h), border_radius=24)
-        pygame.draw.rect(panel_surf, (235, 145, 210, 220), (0, 0, hearts_panel_w, hearts_panel_h), width=3, border_radius=24)
+        # 1. Cinco corazones en la esquina superior izquierda
+        hearts_panel_w = heart_pad_x * 2 + (self.max_lives - 1) * heart_step + heart_sz
+        hearts_panel_h = max(46, int(round(80 * s)))
+
         if not self.dibujarPanelCorazones(surface, pygame.Rect(hearts_x, hearts_y, hearts_panel_w, hearts_panel_h)):
+            panel_surf = pygame.Surface((hearts_panel_w, hearts_panel_h), pygame.SRCALPHA)
+            rad = max(14, int(round(24 * s)))
+            pygame.draw.rect(panel_surf, (32, 18, 52, 210), (0, 0, hearts_panel_w, hearts_panel_h), border_radius=rad)
+            pygame.draw.rect(panel_surf, (235, 145, 210, 220), (0, 0, hearts_panel_w, hearts_panel_h), width=max(2, int(round(3 * s))), border_radius=rad)
             surface.blit(panel_surf, (hearts_x, hearts_y))
 
+        omega_114 = 2.0 * math.pi * 1.9  # 114 BPM = 1.9 Hz
+        cache = getattr(self, "_heart_pulse_cache", None)
+        hy_off = max(6, int(round(12 * s)))
         for i in range(self.max_lives):
-            hx = hearts_x + 22 + i * 68
-            hy = hearts_y + 12
+            hx = hearts_x + heart_pad_x + i * heart_step
+            hy = hearts_y + hy_off
             if i < self.lives:
-                beat_pulse = 1.0 + math.sin(self.song_elapsed * 6.5 + i) * 0.04
-                hw = int(self.heart_full_surf.get_width() * beat_pulse)
-                hh = int(self.heart_full_surf.get_height() * beat_pulse)
-                h_surf = pygame.transform.smoothscale(self.heart_full_surf, (hw, hh))
-                surface.blit(h_surf, h_surf.get_rect(center=(hx + 28, hy + 28)))
+                pulse_norm = 0.5 + 0.5 * math.sin(self.song_elapsed * omega_114 + i * 0.6)
+                if cache:
+                    idx = min(len(cache) - 1, max(0, int(round(pulse_norm * (len(cache) - 1)))))
+                    h_surf = cache[idx]
+                else:
+                    h_surf = self.heart_full_surf
+                surface.blit(h_surf, h_surf.get_rect(center=(hx + heart_sz // 2, hy + heart_sz // 2)))
             else:
                 surface.blit(self.heart_empty_surf, (hx, hy))
 
         for hl in self.heart_loss_anims:
             ratio = max(0.0, hl["life"] / hl["max_life"])
-            falling_h = self.heart_full_surf.copy()
-            falling_h.set_alpha(int(240 * ratio))
-            surface.blit(falling_h, (int(hl["x"]), int(hl["y"])))
+            self.heart_full_surf.set_alpha(int(240 * ratio))
+            surface.blit(self.heart_full_surf, (int(hl["x"]), int(hl["y"])))
+            self.heart_full_surf.set_alpha(255)
 
-        return
-
-        # 2. Reloj contador dinámico en la esquina superior derecha
-        counter_x = self.screen_w - 310
-        counter_y = 20
+        # 2. Reloj contador dinámico en la esquina superior derecha (encima del badge de voz muteada)
+        counter_x = self.screen_w - int(round(269 * s))
+        counter_y = max(8, int(round(16 * s)))
         sec_left = max(0.0, self.time_left)
         time_display = f"0:{int(math.ceil(sec_left)):02d}"
         if self.spr_counter:
             surface.blit(self.spr_counter, (counter_x, counter_y))
-            display_rect = pygame.Rect(counter_x + 77, counter_y + 18, 138, 70)
-            col = (45, 45, 45) if sec_left > 5.0 else (225, 40, 40)
+            display_rect = pygame.Rect(
+                counter_x + int(round(70 * s)),
+                counter_y + int(round(34 * s)),
+                max(60, int(round(138 * s))),
+                max(22, int(round(40 * s))),
+            )
+            col = (68, 40, 32) if sec_left > 5.0 else (205, 48, 48)
             txt_t = self.font_timer_num.render(time_display, True, col)
             surface.blit(txt_t, txt_t.get_rect(center=display_rect.center))
         else:
             col = (255, 235, 95) if sec_left > 5.0 else (255, 95, 95)
             txt_t = self.font_timer_num.render(time_display, True, col)
-            surface.blit(txt_t, (self.screen_w - 160, 36))
+            surface.blit(txt_t, (self.screen_w - int(round(160 * s)), int(round(36 * s))))
+
+        # 3. Tarjeta acuarela derecha: Canción / Combo / Precisión / Paloma
+        self._render_rhythm_card(surface)
+
+    def _render_rhythm_card(self, surface: pygame.Surface) -> None:
+        """Dibuja la tarjeta derecha estilo acuarela caribeña con estado rítmico y Paloma al compás."""
+        if getattr(self, "rhythm_card_bg", None) is None:
+            return
+        card_r = self.rhythm_card_rect
+        cs = getattr(self, "_card_scale", 1.0)
+        pad_x, pad_top = getattr(self, "_card_pad", (6, 4))
+
+        def sc(val: float) -> int:
+            return int(round(val * cs))
+
+        surface.blit(self.rhythm_card_bg, (card_r.x - pad_x, card_r.y - pad_top))
+
+        omega_114 = 2.0 * math.pi * 1.9
+        beat_pulse = 0.5 + 0.5 * math.sin(self.song_elapsed * omega_114)
+
+        # Punto musical dorado pulsante junto al título "En Barranquilla Me Quedo"
+        dot_cx = card_r.x + sc(36)
+        dot_cy = card_r.y + sc(74)
+        dot_r = max(4, int(round((7 + 3 * beat_pulse) * cs)))
+        pygame.draw.circle(surface, (230, 126, 48), (dot_cx, dot_cy), dot_r + max(2, sc(3)))
+        pygame.draw.circle(surface, (255, 224, 102), (dot_cx, dot_cy), dot_r)
+
+        # COMBO con pop de overshoot
+        combo_cx = card_r.x + sc(128)
+        combo_cy = card_r.y + sc(194)
+        combo_col = (212, 84, 52) if self.combo >= 5 else (92, 46, 118)
+        combo_txt = self.font_card_metric.render(f"x{self.combo}", True, combo_col)
+        if self.combo_pop_timer > 0.0:
+            p = 1.0 - self.combo_pop_timer / 0.18
+            pop_s = 1.0 + 0.22 * math.sin(p * math.pi)
+            cw = max(8, int(round(combo_txt.get_width() * pop_s)))
+            ch = max(8, int(round(combo_txt.get_height() * pop_s)))
+            combo_txt = pygame.transform.smoothscale(combo_txt, (cw, ch))
+        surface.blit(combo_txt, combo_txt.get_rect(center=(combo_cx, combo_cy)))
+
+        # PRECISIÓN
+        total_judged = self.hits_perfect + self.hits_good + self.misses_count
+        acc = 100 if total_judged == 0 else int(round(100.0 * (self.hits_perfect + 0.65 * self.hits_good) / total_judged))
+        prec_cx = card_r.x + sc(368)
+        prec_cy = card_r.y + sc(194)
+        prec_txt = self.font_card_metric.render(f"{acc}%", True, (42, 132, 98))
+        surface.blit(prec_txt, prec_txt.get_rect(center=(prec_cx, prec_cy)))
+
+        # Sub-línea de desglose Perfecto / Bien (limpiamente debajo de las pastillas y sobre el divisor)
+        sub_txt = self.font_card_sub.render(f"Perfecto: {self.hits_perfect}   ·   Bien: {self.hits_good}", True, (108, 68, 58))
+        surface.blit(sub_txt, sub_txt.get_rect(midtop=(card_r.centerx, card_r.y + sc(254))))
+
+        # Franja inferior de Paloma con baile suave a 1.9 Hz y globo contextual
+        bob_y = int(round(math.sin(self.song_elapsed * omega_114) * 4.5 * cs))
+        paloma_key = "idle"
+        if self.paloma_cheer_timer > 0.0 or self.combo >= 3:
+            paloma_key = "cheer"
+        elif 3.22 <= self.blink_timer < 3.36:
+            paloma_key = "blink"
+        pal_spr = self.paloma_card_sprites.get(paloma_key) or self.paloma_card_sprites.get("idle")
+        if pal_spr is not None:
+            pal_rect = pal_spr.get_rect(midbottom=(card_r.x + sc(104), card_r.bottom - sc(14) + bob_y))
+            surface.blit(pal_spr, pal_rect)
+
+        if self.combo >= 8:
+            pal_msg = "¡Cipote sabor, sigue así!"
+        elif self.combo >= 3:
+            pal_msg = "¡Al compás de Curramba!"
+        elif self.misses_count > 0 and self.combo == 0:
+            pal_msg = "¡Tranqui, coge el paso!"
+        else:
+            pal_msg = "¡D F J K al ritmo!"
+
+        bubble_rect = pygame.Rect(card_r.x + sc(186), card_r.y + sc(332), sc(282), sc(86))
+        rad_b = max(10, sc(18))
+        pygame.draw.rect(surface, (255, 253, 248, 240), bubble_rect, border_radius=rad_b)
+        pygame.draw.rect(surface, (182, 120, 86, 210), bubble_rect, width=max(1, sc(2)), border_radius=rad_b)
+        msg_s = self.font_card_paloma.render(pal_msg, True, (84, 46, 36))
+        max_msg_w = max(40, bubble_rect.width - sc(20))
+        if msg_s.get_width() > max_msg_w:
+            ratio_s = max_msg_w / float(msg_s.get_width())
+            msg_s = pygame.transform.smoothscale(msg_s, (max_msg_w, max(10, int(round(msg_s.get_height() * ratio_s)))))
+        surface.blit(msg_s, msg_s.get_rect(center=bubble_rect.center))
 
     def _render_outro_banner(self, surface: pygame.Surface) -> None:
         """
@@ -1097,9 +1585,11 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
     def dibujarPanelCorazones(self, surface: pygame.Surface, caja: pygame.Rect) -> bool:
         if getattr(self, "panelCorazones", None) is None:
             try:
+                s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
                 panel = self.assets.cargarSinFondo(os.path.join("Piano", "panelCorazones.jpg"), 600)
-                panel = pygame.transform.smoothscale_by(panel, 100 / float(panel.get_height()))
-                self.panelCorazones = self.estirarCentro(panel, caja.width + 30)
+                target_h = max(56, int(round(100 * s)))
+                panel = pygame.transform.smoothscale_by(panel, target_h / float(panel.get_height()))
+                self.panelCorazones = self.estirarCentro(panel, caja.width + max(16, int(round(30 * s))))
             except Exception as e:
                 print(f"[BuenavistaTrend] Aviso: no se pudo cargar el recuadro de los corazones: {e}")
                 self.panelCorazones = False
@@ -1129,16 +1619,36 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.vieronDeVerdad = random.randint(1, 3)
         self.comentarios = []
         self.comentariosEnFila = []
-        self.esperaComentario = 2.0
-        self.burlas = [
-            "jajaja", "¿Qué fue eso?", "Se le fue el paso jaja", "Clip de eso",
-            "Nooo jajaja", "Pena ajena", "Ese paso no era", "jajaja la cara",
+        self.esperaComentario = 0.8
+        self.hype_costeno = [
+            "¡Cipote flow!",
+            "¡Pura salsa!",
+            "¡Así es en Curramba!",
+            "¡Qué sabrosura!",
+            "¡Con raspado y todo!",
+            "¡En Barranquilla me quedo!",
         ]
-        self.tibios = ["Ok", "Normal", "Meh", "Siguiente", "Ah, bueno", "Todos hacen ese trend"]
-        self.fuenteComentario = self.assets.cargarFuenteCuento(38)
-        self.fuenteEnVivo = self.assets.cargarFuenteCuento(40)
-        self.fuenteRevelacion = self.assets.cargarFuenteCuento(64)
-        self.fuenteSello = self.assets.cargarFuenteCuento(58)
+        self.burlas = [
+            "¡Se cayó el raspado!",
+            "¡Epa, el compás!",
+            "¡Cuidado el tambor!",
+            "¡Jajaja ese paso!",
+            "¡Agua, se enredó!",
+            "¡Casi casi!",
+        ]
+        self.tibios = [
+            "¿En Buenavista?",
+            "¡Pónganle salsa!",
+            "Ahí coge ritmo",
+            "¡Dale con sabor!",
+            "¡Sube el volumen!",
+            "¡Qué buen parche!",
+        ]
+        s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
+        self.fuenteComentario = self.assets.cargarFuenteCuento(max(16, int(round(30 * s))))
+        self.fuenteEnVivo = self.assets.cargarFuenteCuento(max(22, int(round(40 * s))))
+        self.fuenteRevelacion = self.assets.cargarFuenteCuento(max(36, int(round(64 * s))))
+        self.fuenteSello = self.assets.cargarFuenteCuento(max(32, int(round(58 * s))))
         self.avatares = self.cargarAvatares()
         self.globosHechos = {}
         self.bannerPublico = None
@@ -1147,14 +1657,17 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.sonoSello = False
 
     def cargarAvatares(self) -> list:
+        s = getattr(self, "_ui_scale", min(self.screen_w / 1920.0, self.screen_h / 1080.0))
         try:
             hoja = self.assets.cargarSinFondo(os.path.join("Piano", "avataresPublico.jpg"), 1200)
             globo = self.assets.cargarSinFondo(os.path.join("Piano", "globoComentario.jpg"), 900)
-            self.globoComentario = pygame.transform.smoothscale_by(globo, 80 / float(globo.get_height()))
+            globo_h = max(44, int(round(80 * s)))
+            self.globoComentario = pygame.transform.smoothscale_by(globo, globo_h / float(globo.get_height()))
         except Exception as e:
             print(f"[BuenavistaTrend] Aviso: faltan las imágenes del chat en vivo: {e}")
             return []
         avatares = []
+        av_sz = max(44, int(round(84 * s)))
         anchoCelda = hoja.get_width() // 4
         altoCelda = hoja.get_height() // 2
         for fila in range(2):
@@ -1163,7 +1676,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 cajas = pygame.mask.from_surface(parte, 60).get_bounding_rects()
                 if cajas:
                     parte = parte.subsurface(cajas[0].unionall(cajas[1:]))
-                avatares.append(pygame.transform.smoothscale(parte, (84, 84)))
+                avatares.append(pygame.transform.smoothscale(parte, (av_sz, av_sz)))
         return avatares
 
     def actualizarPublico(self, dt: float) -> None:
@@ -1177,8 +1690,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 self.agregarComentario(self.comentariosEnFila.pop(0)[0])
         self.esperaComentario -= dt
         if self.esperaComentario <= 0.0:
-            self.esperaComentario = random.uniform(2.5, 4.0)
-            self.agregarComentario(random.choice(self.tibios))
+            self.esperaComentario = random.uniform(2.2, 3.6)
+            pool = self.hype_costeno if getattr(self, "combo", 0) >= 3 else self.tibios
+            self.agregarComentario(random.choice(pool))
 
     def agregarComentario(self, texto: str) -> None:
         if not self.avatares:
@@ -1197,8 +1711,16 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
     def globoConTexto(self, texto: str) -> pygame.Surface:
         if texto not in self.globosHechos:
             letras = self.fuenteComentario.render(texto, True, (80, 46, 92))
-            ancho = letras.get_width() + 124
-            globo = self.estirarCentro(self.globoComentario, max(ancho, self.globoComentario.get_height() * 2))
+            max_bubble_w = max(200, self.phone_rect.left - 108)
+            if letras.get_width() + 116 > max_bubble_w:
+                target_tw = max(40, max_bubble_w - 116)
+                scale_r = target_tw / float(max(1, letras.get_width()))
+                letras = pygame.transform.smoothscale(
+                    letras,
+                    (target_tw, max(12, int(round(letras.get_height() * scale_r)))),
+                )
+            ancho = min(max_bubble_w, max(letras.get_width() + 116, self.globoComentario.get_height() * 2))
+            globo = self.estirarCentro(self.globoComentario, ancho)
             globo.blit(letras, letras.get_rect(midleft=(80, globo.get_height() // 2)))
             self.globosHechos[texto] = globo
         return self.globosHechos[texto]
@@ -1229,64 +1751,136 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
             self.pantallaVivo = False
             return False
         w, h = fondo.get_size()
-        fondo = fondo.subsurface((int(w * 0.07), int(h * 0.055), int(w * 0.86), int(h * 0.89)))
-        self.cajaPantalla = self.phone_rect.inflate(-36, -36)
+        fondo = fondo.subsurface((int(w * 0.095), int(h * 0.085), int(w * 0.81), int(h * 0.83)))
+        self.cajaPantalla = self.phone_rect.inflate(-32, -32)
         pantalla = pygame.transform.smoothscale(fondo, self.cajaPantalla.size).convert()
-        alto = self.playable_clip_rect.top - self.cajaPantalla.top
-        pantalla.fill((228, 212, 200), (0, 0, pantalla.get_width(), alto), special_flags=pygame.BLEND_RGB_MULT)
-        linea = pygame.Surface((3, self.playable_clip_rect.height), pygame.SRCALPHA)
-        linea.fill((255, 246, 230, 150))
+        alto_hdr = self.playable_clip_rect.top - self.cajaPantalla.top
+        pantalla.fill((228, 212, 200), (0, 0, pantalla.get_width(), alto_hdr), special_flags=pygame.BLEND_RGB_MULT)
+
+        # Tinte sutil alternado en carriles 1 y 3 para lectura instantánea
+        lane_wash = pygame.Surface((1, 1), pygame.SRCALPHA)
+        for idx in (1, 3):
+            lr = self.lane_rects[idx].move(-self.cajaPantalla.left, -self.cajaPantalla.top)
+            wash = pygame.Surface(lr.size, pygame.SRCALPHA)
+            wash.fill((140, 88, 66, 14))
+            pantalla.blit(wash, lr.topleft)
+
+        # Divisores acuarela nítidos (tinta sepia 2px + brillo pergamino 1px)
+        linea_tinta = pygame.Surface((2, self.playable_clip_rect.height), pygame.SRCALPHA)
+        linea_tinta.fill((118, 72, 56, 115))
+        linea_luz = pygame.Surface((1, self.playable_clip_rect.height), pygame.SRCALPHA)
+        linea_luz.fill((255, 248, 235, 110))
         for i in range(3):
             x = (self.lane_rects[i].right + self.lane_rects[i + 1].left) // 2 - self.cajaPantalla.left
-            pantalla.blit(linea, (x - 1, alto))
+            pantalla.blit(linea_tinta, (x - 1, alto_hdr))
+            pantalla.blit(linea_luz, (x + 1, alto_hdr))
+
         pantalla = pantalla.convert_alpha()
         molde = pygame.Surface(pantalla.get_size(), pygame.SRCALPHA)
-        pygame.draw.rect(molde, (255, 255, 255, 255), molde.get_rect(), border_radius=70)
+        pygame.draw.rect(molde, (255, 255, 255, 255), molde.get_rect(), border_radius=58)
         pantalla.blit(molde, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         self.pantallaVivo = pantalla
-        alto = max(24, self.hit_box_bottom_y - self.hit_box_top_y)
-        ancho = int(self.lane_rects[0].width * 0.86)
-        globo = pygame.transform.smoothscale_by(self.globoComentario, alto / float(self.globoComentario.get_height()))
-        mitad = globo.subsurface((0, 0, ancho // 2, alto))
-        capsula = pygame.Surface((ancho // 2 * 2, alto), pygame.SRCALPHA)
+
+        # Pre-hornear anillos objetivo de impacto (normal y encendido) para evitar alocaciones por frame
+        min_lane_w = min(r.width for r in self.lane_rects)
+        rw = int(round(min_lane_w * 0.74))
+        rh = int(round(min_lane_w * 0.56))
+        self._receptor_ring_idle = pygame.Surface((rw, rh), pygame.SRCALPHA)
+        pygame.draw.rect(self._receptor_ring_idle, (255, 246, 228, 92), (0, 0, rw, rh), border_radius=26)
+        pygame.draw.rect(self._receptor_ring_idle, (128, 74, 52, 190), (0, 0, rw, rh), width=3, border_radius=26)
+        pygame.draw.rect(self._receptor_ring_idle, (255, 252, 242, 130), (4, 4, rw - 8, rh - 8), width=1, border_radius=22)
+
+        self._receptor_ring_active = pygame.Surface((rw, rh), pygame.SRCALPHA)
+        pygame.draw.rect(self._receptor_ring_active, (255, 232, 130, 165), (0, 0, rw, rh), border_radius=26)
+        pygame.draw.rect(self._receptor_ring_active, (196, 98, 42, 230), (0, 0, rw, rh), width=3, border_radius=26)
+        pygame.draw.rect(self._receptor_ring_active, (255, 250, 220, 195), (4, 4, rw - 8, rh - 8), width=2, border_radius=22)
+
+        # Pre-hornear franja translúcida de dock frontal inferior para teclas y mando
+        dock_top = self.key_badge_rects[0].top - 6
+        dock_h = max(48, (self.cajaPantalla.bottom - 4) - dock_top)
+        self._dock_strip_surf = pygame.Surface((self.playable_clip_rect.width, dock_h), pygame.SRCALPHA)
+        pygame.draw.rect(
+            self._dock_strip_surf,
+            (252, 240, 222, 195),
+            (0, 0, self.playable_clip_rect.width, dock_h),
+            border_radius=18,
+        )
+        pygame.draw.line(
+            self._dock_strip_surf,
+            (132, 82, 60, 150),
+            (8, 1),
+            (self.playable_clip_rect.width - 8, 1),
+            2,
+        )
+
+        # Cápsulas compactas de tecla (altura 40 px dentro del dock frontal)
+        alto_cap = 40
+        ancho_cap = int(self.lane_rects[0].width * 0.80)
+        globo = pygame.transform.smoothscale_by(self.globoComentario, alto_cap / float(self.globoComentario.get_height()))
+        half_w = min(globo.get_width(), ancho_cap // 2)
+        mitad = globo.subsurface((0, 0, half_w, alto_cap))
+        capsula = pygame.Surface((half_w * 2, alto_cap), pygame.SRCALPHA)
         capsula.blit(mitad, (0, 0))
-        capsula.blit(pygame.transform.flip(mitad, True, False), (ancho // 2, 0))
+        capsula.blit(pygame.transform.flip(mitad, True, False), (half_w, 0))
         self.capsulaTecla = capsula
         self.capsulaPrendida = capsula.copy()
-        self.capsulaPrendida.fill((40, 34, 0), special_flags=pygame.BLEND_RGB_ADD)
-        self.fuenteTecla = self.assets.cargarFuenteCuento(54)
+        self.capsulaPrendida.fill((48, 38, 0), special_flags=pygame.BLEND_RGB_ADD)
+        self.fuenteTecla = self.assets.cargarFuenteCuento(36)
         return True
+
+    def _render_fallback_receptors(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        """Dibuja divisores de carril y línea de impacto cuando falta pantallaVivo.jpg."""
+        clip_r = self.playable_clip_rect.move(ox, oy)
+        hy = self.hit_line_y + oy
+        pygame.draw.line(surface, (118, 66, 48), (clip_r.left, hy), (clip_r.right, hy), 3)
+        for i in range(4):
+            cx = self.lane_centers_x[i] + ox
+            pygame.draw.circle(surface, (255, 232, 130) if self.lane_press_timers[i] > 0.0 else (235, 210, 255), (cx, hy), 36, width=3)
 
     def dibujarPantallaVivo(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         if not getattr(self, "avatares", None) or not self.prepararPantallaVivo():
             return
         surface.blit(self.pantallaVivo, self.cajaPantalla.move(ox, oy))
 
-        gamepad_badges = (
-            ("X", (64, 152, 232)),
-            ("A", (74, 186, 108)),
-            ("Y", (234, 192, 54)),
-            ("B", (224, 78, 86)),
-        )
-        if getattr(self, "fuenteMando", None) is None:
-            self.fuenteMando = self.assets.get_font("Arial Black, Impact, sans-serif", 22, bold=True)
+        omega_114 = 2.0 * math.pi * 1.9
+        beat_phase = 0.5 + 0.5 * math.sin(self.song_elapsed * omega_114)
 
-        for i, letra in enumerate(self.LANE_LABELS):
-            centro = (self.lane_centers_x[i] + ox, self.hit_line_y + oy)
-            prendida = self.lane_press_timers[i] > 0.0
-            capsula = self.capsulaPrendida if prendida else self.capsulaTecla
-            surface.blit(capsula, capsula.get_rect(center=centro))
-            color = (190, 70, 40) if prendida else (92, 46, 118)
-            texto = self.textoConBorde(self.fuenteTecla, letra, color, color, 2)
-            surface.blit(texto, texto.get_rect(center=(centro[0], centro[1] - 2)))
+        # Destello vertical de carril al acertar (yellow_glow_alpha) bajo las notas
+        if self.yellow_glow_alpha > 1.0 and 0 <= self.last_hit_lane < len(self._lane_glow_surfs):
+            glow_s = self._lane_glow_surfs[self.last_hit_lane]
+            glow_s.set_alpha(int(min(255.0, self.yellow_glow_alpha * 1.35)))
+            surface.blit(glow_s, self.lane_rects[self.last_hit_lane].move(ox, oy))
 
-            btn_lbl, btn_col = gamepad_badges[i]
-            bx, by = centro[0], centro[1] + 44
-            r = 17 if prendida else 15
-            pygame.draw.circle(surface, (255, 248, 236), (bx, by), r + 3)
-            pygame.draw.circle(surface, btn_col, (bx, by), r)
-            btn_txt = self.fuenteMando.render(btn_lbl, True, (255, 255, 255))
-            surface.blit(btn_txt, btn_txt.get_rect(center=(bx, by - 1)))
+        # Línea horizontal de impacto acuarela
+        clip_r = self.playable_clip_rect.move(ox, oy)
+        hy = self.hit_line_y + oy
+        pygame.draw.line(surface, (118, 66, 48), (clip_r.left + 4, hy), (clip_r.right - 4, hy), 3)
+        pygame.draw.line(surface, (255, 248, 232), (clip_r.left + 4, hy), (clip_r.right - 4, hy), 1)
+
+        # Anillos objetivo de impacto (debajo de CAPA 3) con squash & stretch por dt y pulso 1.9 Hz
+        for i in range(4):
+            centro = (self.lane_centers_x[i] + ox, hy)
+            t_rem = self.lane_press_timers[i]
+            hit_rem = self.lane_hit_flash[i]
+            is_active = t_rem > 0.0 or hit_rem > 0.0
+            base_ring = self._receptor_ring_active if is_active else self._receptor_ring_idle
+
+            if t_rem > 0.0:
+                p = 1.0 - max(0.0, min(1.0, t_rem / 0.14))
+                sx = 1.0 + 0.18 * math.sin(p * math.pi) - 0.06 * math.sin(p * math.pi * 2.0)
+                sy = 1.0 - 0.16 * math.sin(p * math.pi) + 0.06 * math.sin(p * math.pi * 2.0)
+                rw = max(12, int(round(base_ring.get_width() * sx)))
+                rh = max(12, int(round(base_ring.get_height() * sy)))
+                ring_draw = pygame.transform.smoothscale(base_ring, (rw, rh))
+            else:
+                pulse_s = 1.0 + 0.02 * beat_phase
+                if abs(pulse_s - 1.0) > 0.012:
+                    rw = int(round(base_ring.get_width() * pulse_s))
+                    rh = int(round(base_ring.get_height() * pulse_s))
+                    ring_draw = pygame.transform.smoothscale(base_ring, (rw, rh))
+                else:
+                    ring_draw = base_ring
+            surface.blit(ring_draw, ring_draw.get_rect(center=centro))
 
         arriba = (self.cajaPantalla.top + self.playable_clip_rect.top) // 2 + oy + 6
         if self.cargarPastillasVivo():
@@ -1294,6 +1888,13 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 self.etiquetaPintada = self.armarEtiquetaEnVivo(58)
             etiqueta = self.etiquetaPintada.get_rect(midleft=(self.cajaPantalla.left + 62 + ox, arriba))
             surface.blit(self.etiquetaPintada, etiqueta)
+            # Punto coral pulsante de transmisión en vivo al compás de 1.9 Hz
+            dot_x = etiqueta.left + int(etiqueta.height * 0.42)
+            dot_y = arriba - 1
+            dot_r = int(round(3 + 1.8 * beat_phase))
+            pygame.draw.circle(surface, (255, 225, 220), (dot_x, dot_y), dot_r + 1)
+            pygame.draw.circle(surface, (224, 54, 64), (dot_x, dot_y), dot_r)
+
             cifra = f"{int(self.espectadores):,}".replace(",", ".")
             temblor = int(math.sin(self.song_elapsed * 60.0) * 6 * (self.temblorContador / 0.4)) if self.temblorContador > 0 else 0
             color = (200, 50, 60) if self.temblorContador > 0.0 else (80, 46, 92)
@@ -1310,6 +1911,67 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         viendo = self.armarPastilla(f"{cifra} viendo", color, self.fuenteEnVivo)
         surface.blit(viendo, viendo.get_rect(midleft=(etiqueta.right + 14 + temblor, arriba)))
 
+    def _render_key_dock_badges(self, surface: pygame.Surface, ox: int, oy: int) -> None:
+        """
+        Capa 3B (después de CAPA 3 y antes de marcoCelular):
+        Dibuja el dock frontal con [D][F][J][K] y (X)(A)(Y)(B) debajo de hit_line_y
+        para que ninguna nota descendente tape jamás los controles.
+        """
+        if getattr(self, "fuenteMando", None) is None:
+            self.fuenteMando = self.assets.get_font("Arial Black, Impact, sans-serif", 22, bold=True)
+
+        if getattr(self, "_dock_strip_surf", None) is not None and self.key_badge_rects:
+            strip_pos = (self.playable_clip_rect.left + ox, self.key_badge_rects[0].top - 6 + oy)
+            surface.blit(self._dock_strip_surf, strip_pos)
+
+        gamepad_badges = (
+            ("X", (64, 152, 232)),
+            ("A", (74, 186, 108)),
+            ("Y", (234, 192, 54)),
+            ("B", (224, 78, 86)),
+        )
+        has_capsules = getattr(self, "capsulaTecla", None) is not None and getattr(self, "fuenteTecla", None) is not None
+
+        for i, letra in enumerate(self.LANE_LABELS):
+            badge_r = self.key_badge_rects[i].move(ox, oy)
+            t_rem = self.lane_press_timers[i]
+            prendida = t_rem > 0.0
+
+            if t_rem > 0.0:
+                p = 1.0 - max(0.0, min(1.0, t_rem / 0.14))
+                sx = 1.0 + 0.14 * math.sin(p * math.pi)
+                sy = 1.0 - 0.12 * math.sin(p * math.pi)
+            else:
+                sx, sy = 1.0, 1.0
+
+            cy_key = badge_r.top + 19
+            if has_capsules:
+                capsula = self.capsulaPrendida if prendida else self.capsulaTecla
+                if abs(sx - 1.0) > 0.01 or abs(sy - 1.0) > 0.01:
+                    cw = max(8, int(round(capsula.get_width() * sx)))
+                    ch = max(8, int(round(capsula.get_height() * sy)))
+                    capsula = pygame.transform.smoothscale(capsula, (cw, ch))
+                surface.blit(capsula, capsula.get_rect(center=(badge_r.centerx, cy_key)))
+                color = (190, 70, 40) if prendida else (92, 46, 118)
+                texto = self.textoConBorde(self.fuenteTecla, letra, color, (255, 248, 236), 2)
+                surface.blit(texto, texto.get_rect(center=(badge_r.centerx, cy_key - 1)))
+            else:
+                pill_r = pygame.Rect(0, 0, badge_r.width, 34)
+                pill_r.center = (badge_r.centerx, cy_key)
+                pygame.draw.rect(surface, (255, 235, 130) if prendida else (245, 230, 215), pill_r, border_radius=14)
+                pygame.draw.rect(surface, (112, 62, 46), pill_r, width=2, border_radius=14)
+                col = (190, 70, 40) if prendida else (92, 46, 118)
+                txt = self.font_keys.render(letra, True, col)
+                surface.blit(txt, txt.get_rect(center=pill_r.center))
+
+            btn_lbl, btn_col = gamepad_badges[i]
+            bx, by = badge_r.centerx, badge_r.bottom - 12
+            r = 14 if prendida else 12
+            pygame.draw.circle(surface, (255, 248, 236), (bx, by), r + 2)
+            pygame.draw.circle(surface, btn_col, (bx, by), r)
+            btn_txt = self.fuenteMando.render(btn_lbl, True, (255, 255, 255))
+            surface.blit(btn_txt, btn_txt.get_rect(center=(bx, by - 1)))
+
     def dibujarMarcoCelular(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         if getattr(self, "marcoCelular", None) is None:
             try:
@@ -1321,7 +1983,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
                 self.marcoCelular = False
         if not self.marcoCelular:
             return
-        surface.blit(self.marcoCelular, self.marcoCelular.get_rect(center=(self.phone_rect.centerx + ox + 4, self.phone_rect.centery + oy)))
+        surface.blit(self.marcoCelular, self.marcoCelular.get_rect(center=(self.phone_rect.centerx + ox + 2, self.phone_rect.centery + oy)))
 
     def armarMarco(self, imagen: pygame.Surface, ancho: int, alto: int, grosor: float) -> pygame.Surface:
         imagen = pygame.transform.smoothscale_by(imagen, grosor)

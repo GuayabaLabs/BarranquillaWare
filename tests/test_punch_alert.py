@@ -20,7 +20,7 @@ def test_punch_alert_standalone():
     surface = pygame.Surface((1920, 1080))
 
     assert game.total_wave_count == len(game.wave_queue) == 6
-    assert len(game.safe_sprites) == 8
+    assert len(game.safe_sprites) == 12  # 8 originales + nieve, foto antigua, hashtag y comentario
     assert len(game.trash_sprites) == 8
     assert game.wave_queue[0]["is_safe"] is False
     assert len(game.punch_voices) == 4

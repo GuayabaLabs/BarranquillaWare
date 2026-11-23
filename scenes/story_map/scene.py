@@ -11,6 +11,10 @@ from core.audio_manager import AudioManager
 from core.settings import SettingsManager, CHARACTER_DISPLAY_NAMES
 from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
+from scenes.story_map.ciclo_dia import CicloDia, HORA_DE_CLIMA, HORAS_POR_NIVEL, NOMBRE_FASE
+from scenes.story_map.rio import RioAnimado
+from scenes.story_map.luces_lugares import LucesLugares
+from scenes.story_map.faroles import Faroles, _halo as halo_aditivo
 from core.camera import Camera2D
 from ui.button import UIButton
 from ui.focus_nav import FocusNavigator
@@ -57,7 +61,7 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "metropolitano": MetropolitanoModeracionMicrogame,
     "metropolitano_moderacion": MetropolitanoModeracionMicrogame,
     "metropolitano_penalty": MetropolitanoPenaltyMicrogame,
-    "aeropuerto": PunchAlertMicrogame,
+    "aeropuerto": __import__("microgames.curramgram_go", fromlist=["CurramGramGoMicrogame"]).CurramGramGoMicrogame,
     "punch_alert": PunchAlertMicrogame,
     "aeropuerto_aterrizaje": AeropuertoAterrizajeMicrogame,
     "fritanga_84": Fritanga84Microgame,
@@ -102,12 +106,12 @@ class StoryMapScene(BaseState):
         "malecon": 63,
         "aleta": 59,
     }
-    # Centro exacto del disco crema interno del sello festoneado en recuadro_mision_nivel.png (649.5/725, 103.5/965)
-    QUEST_CLOSE_NORM_X: float = 0.8959
-    QUEST_CLOSE_NORM_Y: float = 0.1073
+    # Centro exacto del disco crema interno del sello festoneado en recuadro_mision_nivel.png (591/660, 94/878)
+    QUEST_CLOSE_NORM_X: float = 0.8955
+    QUEST_CLOSE_NORM_Y: float = 0.1071
     QUEST_PLAY_NORM_Y: float = 0.746
     QUEST_BODY_FONT_SIZE: int = 20
-    QUEST_PLAY_FONT_SIZE: int = 30
+    QUEST_PLAY_FONT_SIZE: int = 32
     def __init__(
         self,
         character_id: str = "westcol",
@@ -137,11 +141,31 @@ class StoryMapScene(BaseState):
         # 1. Ensamblar mapa mundial base y estampar POIs
         self._build_world_map()
 
-        # 2. Inicializar sistema de Clima y Atmósfera (Día, Atardecer, Noche, Lluvia)
+        # 2. Paso del tiempo (reloj del mapa) y clima. El clima día/atardecer/noche sale de la hora;
+        #    la lluvia es aparte. Ver scenes/story_map/ciclo_dia.py.
         self.weather_modes = ["day", "sunset", "night", "rain"]
-        saved_weather = str(self.settings.get_story_progress().get("weather", "day")).lower()
-        self.current_weather = saved_weather if saved_weather in self.weather_modes else "day"
+        progreso = self.settings.get_story_progress()
+        saved_weather = str(progreso.get("weather", "day")).lower()
+        if saved_weather not in self.weather_modes:
+            saved_weather = "day"
+        hora_guardada = progreso.get("hora_mapa")
+        if isinstance(hora_guardada, (int, float)):
+            self.ciclo = CicloDia(float(hora_guardada), lluvia=saved_weather == "rain")
+        else:
+            self.ciclo = CicloDia(HORA_DE_CLIMA.get(saved_weather, 11.0) if saved_weather != "day" else 9.0,
+                                  lluvia=saved_weather == "rain")
+        self.night_mix: float = 1.0 if self.current_weather == "night" else 0.0
+        self._weather_weights: Dict[str, float] = {
+            m: (1.0 if m == self.current_weather else 0.0) for m in self.weather_modes
+        }
         self._init_weather_shaders()
+        # Río y ciénaga animados (se preparan en segundo plano) y faroles que alumbran de noche.
+        self.rio = RioAnimado(self.world_map, en_segundo_plano=True)
+        self.faroles = Faroles()
+        # Halos de luz precalculados en 12 intensidades (teñir cada frame es caro)
+        self.halos_cami = [halo_aditivo(300, 210, (190, 160, 110), 0.85 * (i + 1) / 12, 1.6) for i in range(12)]
+        # Lugares emblemáticos iluminados de noche (silueta de cada edificio) y luces del aeropuerto
+        self.luces_lugares = LucesLugares(self._siluetas_lugares())
 
         # 3. Inicializar sistema de Nubes Algodonosas Caribeñas Chiquitas (Cozy Clouds)
         self._init_cozy_clouds()
@@ -161,7 +185,7 @@ class StoryMapScene(BaseState):
         self.timer: float = 0.0
         self.toast_msg: Optional[str] = None
         self.toast_timer: float = 0.0
-        self.font_toast = self.assets.cargarFuenteCuento(26)
+        self.font_toast = self.assets.cargarFuenteTitulo(24)
         self._init_rain_particles()
 
         # 7. Sistema de Punto de Interés Clave (Uninorte Key Location Effects)
@@ -314,6 +338,11 @@ class StoryMapScene(BaseState):
                 "completada": malecon_done,
             },
         ]
+        misiones.append({
+            "id": "aeropuerto", "titulo": "Aeropuerto Cortissoz",
+            "desc": "Llega a la puerta 7 sin publicar chismes ni fotos privadas.",
+            "completada": "aeropuerto" in unlocked_locations or "curramgram_go" in completed_microgames,
+        })
         self.side_drawer.ponerMisiones(misiones)
 
         # Mensajes narrativos y alertas de redes
@@ -672,6 +701,16 @@ class StoryMapScene(BaseState):
         ("aeropuerto", "aeropuerto_ernesto_cortissoz_mapa.png", 2611, 1311, 540, 353, (20, 30, 50, 48), (10, 14)),
     ]
 
+    def _siluetas_lugares(self) -> Dict[str, Tuple[pygame.Surface, pygame.Rect]]:
+        """Sprite y posición de cada lugar emblemático, tal como está estampado en el mapa."""
+        siluetas = {}
+        for key, asset, dx, dy, dw, dh, scol, soff in self.POI_SPECS:
+            try:
+                siluetas[key] = self._prepare_poi_transform(asset, key, dx, dy, dw)
+            except Exception:
+                pass
+        return siluetas
+
     def _stamp_all_pois(self) -> None:
         """Estampa todos los POIs configurables sobre el mapa mundial actual."""
         for key, asset, dx, dy, dw, dh, scol, soff in self.POI_SPECS:
@@ -790,8 +829,8 @@ class StoryMapScene(BaseState):
                 "microgame_id": "buenavista_trend",
                 "microgame_title": "EL TREND EN BUENAVISTA",
                 "desc": [
-                    "Sigue el ritmo de la bachata viral con las teclas D, F, J y K.",
-                    "Baila con alegría y conserva tus 3 corazones sin presión por los likes."
+                    "Sigue el sabor costeño de 'En Barranquilla Me Quedo' con D, F, J y K.",
+                    "Baila con alegría y conserva tus corazones sin presión por los likes."
                 ],
                 "rect": self.buenavista_rect
             },
@@ -810,11 +849,11 @@ class StoryMapScene(BaseState):
             "aeropuerto": {
                 "title": "AEROPUERTO CORTISSOZ",
                 "district": "DISTRITO AÉREO",
-                "microgame_id": "",
-                "microgame_title": "",
+                "microgame_id": "curramgram_go",
+                "microgame_title": "CURRAMGRAM GO!",
                 "desc": [
-                    "Antes de despegar, limpia tu pantalla de ventanas emergentes y spam.",
-                    "Viaja ligero de equipaje digital para cerrar tu aventura en calma."
+                    "Llega a la puerta 7 junto a Cami sin exponer a nadie en redes.",
+                    "Confirma antes de publicar y respeta la privacidad de los demás."
                 ],
                 "rect": self.aeropuerto_rect
             }
@@ -853,12 +892,13 @@ class StoryMapScene(BaseState):
         self.cargarEstrellaPintada()
 
         # 2C. Sistema de camino iluminado en acuarela (Dijkstra + pincelada IA + destello)
-        self.path_glow_renderer = WatercolorRouteRenderer(self.world_w, self.world_h, brush_h=44)
+        self.path_glow_renderer = WatercolorRouteRenderer(self.world_w, self.world_h, brush_h=32)
         self._poi_occluders_cache: Optional[List[Tuple[pygame.Surface, pygame.Rect]]] = None
         self._unlocked_path_pairs: List[Tuple[str, str]] = []
         self._pending_path_reveal: Optional[Tuple[str, str]] = None
         self.active_path_reveal: Optional[Dict[str, Any]] = None
         self._sync_unlocked_paths_from_progress()
+        self._init_map_holiday_decor()
 
         # 3. Chispitas doradas flotantes para cada locación
         self._sp_surf = pygame.Surface((16, 16), pygame.SRCALPHA)
@@ -1033,6 +1073,17 @@ class StoryMapScene(BaseState):
             {"surf": make_cloud(0.52), "x": 2560.0, "y": 1510.0, "vx": 12.0, "parallax": 1.13, "bob": 3.8},
             {"surf": make_cloud(0.40), "x": 480.0, "y": 1370.0, "vx": 8.0, "parallax": 1.08, "bob": 1.1},
         ]
+        # Pre-calcular versión nocturna de cada nube para dibujarlas sobre el brillo de rutas sin perder tinte nocturno
+        import numpy as np
+        night_tint = np.array([16.0, 26.0, 66.0], dtype=np.float32)
+        tint_mix = 122.0 / 255.0
+        for c in self.clouds:
+            ns = c["surf"].copy()
+            c_rgb = pygame.surfarray.pixels3d(ns)
+            blended = np.clip(c_rgb.astype(np.float32) * (1.0 - tint_mix) + night_tint * tint_mix, 0.0, 255.0)
+            c_rgb[:] = blended.astype(np.uint8)
+            del c_rgb
+            c["night_surf"] = ns
 
     def _init_drawer_menu(self) -> None:
         """Inicializa el menú desplegable (Drawer lateral) de pausa, ajustes y guardado."""
@@ -1443,8 +1494,8 @@ class StoryMapScene(BaseState):
             play_surf = pygame.Surface((btn_play_w, 93), pygame.SRCALPHA)
 
         self.quest_play_font_size = self.QUEST_PLAY_FONT_SIZE
-        f_play = self.assets.cargarFuenteCuento(self.quest_play_font_size)
-        play_label = f_play.render("Jugar", True, (74, 41, 109))
+        f_play = self.assets.cargarFuenteTitulo(self.quest_play_font_size)
+        play_label = f_play.render("JUGAR", True, (70, 30, 110))
         pill_bbox = play_surf.get_bounding_rect()
         pill_center = pill_bbox.center if pill_bbox.width > 0 and pill_bbox.height > 0 else (play_surf.get_width() // 2, play_surf.get_height() // 2)
         self.quest_play_text_local_rect = play_label.get_rect(center=(pill_center[0], pill_center[1] - 1))
@@ -1664,6 +1715,8 @@ class StoryMapScene(BaseState):
             kwargs["character_id"] = self.character_id
 
         microgame = microgame_cls(**kwargs)
+        if getattr(microgame, "paloma_intro", None) is not None:
+            microgame.paloma_intro = None
         if stages and idx + 1 < len(stages):
             # Ronda intermedia del nivel: mostrar resultado breve ("¡Ganaste!" / "¡Perdiste!") y pasar rápido a la siguiente ronda
             microgame.show_outro_banner = True
@@ -1748,6 +1801,8 @@ class StoryMapScene(BaseState):
                 unlocked.append(self.active_poi)
 
             self.current_level_stage_idx = 0
+            # Cada nivel completado hace avanzar el tiempo del mapa (con animación corta).
+            self.ciclo.adelantar(HORAS_POR_NIVEL)
             new_score = int(progress.get("high_score", 0)) + 100
             self.settings.update_story_progress(
                 has_active_save=True,
@@ -1756,6 +1811,7 @@ class StoryMapScene(BaseState):
                 unlocked_locations=unlocked,
                 high_score=new_score,
                 weather=self.current_weather,
+                hora_mapa=round(self.ciclo.hora_destino(), 3),
                 save_source="auto",
             )
             metrics = self._sync_social_hud()
@@ -1901,17 +1957,36 @@ class StoryMapScene(BaseState):
         if hasattr(self, "audio") and hasattr(self.audio, "play_hover"):
             self.audio.play_hover()
 
-    def set_weather(self, weather_name: str) -> None:
-        """Cambia el clima actual del mapa ('day', 'sunset', 'night', 'rain')."""
+    @property
+    def current_weather(self) -> str:
+        """'day', 'sunset' o 'night' según la hora del mapa, o 'rain' si llueve."""
+        ciclo = self.__dict__.get("ciclo")
+        return ciclo.clima() if ciclo is not None else self.__dict__.get("_clima_fijo", "day")
+
+    @current_weather.setter
+    def current_weather(self, valor: str) -> None:
+        ciclo = self.__dict__.get("ciclo")
+        if ciclo is not None:
+            ciclo.poner_clima(valor)
+        else:
+            self.__dict__["_clima_fijo"] = valor
+
+    def set_weather(self, weather_name: str, instant: bool = True) -> None:
+        """Cambia el clima ('day', 'sunset', 'night' llevan el reloj a esa hora; 'rain' activa lluvia)."""
         if weather_name in self.weather_modes:
             self.current_weather = weather_name
+            if instant:
+                self.night_mix = 1.0 if weather_name == "night" else 0.0
+                self._weather_weights = {
+                    m: (1.0 if m == weather_name else 0.0) for m in self.weather_modes
+                }
             self._apply_weather_feedback()
 
-    def cycle_weather(self) -> str:
-        """Rota de forma cíclica entre los climas disponibles."""
+    def cycle_weather(self, instant: bool = False) -> str:
+        """Rota de forma cíclica entre los climas disponibles con transición suave."""
         idx = (self.weather_modes.index(self.current_weather) + 1) % len(self.weather_modes)
-        self.current_weather = self.weather_modes[idx]
-        self._apply_weather_feedback()
+        target = self.weather_modes[idx]
+        self.set_weather(target, instant=instant)
         return self.current_weather
 
     def save_current_state(self, source: str = "auto") -> None:
@@ -1924,6 +1999,7 @@ class StoryMapScene(BaseState):
             "last_camera_x": float(self.camera.x),
             "last_camera_y": float(self.camera.y),
             "weather": self.current_weather,
+            "hora_mapa": round(self.ciclo.hora_destino(), 3),
             "save_source": source,
         }
         if metrics:
@@ -1977,6 +2053,45 @@ class StoryMapScene(BaseState):
         self._build_player_token()
         self._load_player_chibi()
 
+    def _make_night_shaded_surface(
+        self,
+        surf: pygame.Surface,
+        y_cut_frac: float = 1.0,
+        preserve_emissive: bool = False,
+    ) -> pygame.Surface:
+        """Aplica tinte nocturno (16, 26, 66, 122/255) protegiendo opcionalmente luces emisivas superiores."""
+        import numpy as np
+
+        w, h = surf.get_size()
+        out = pygame.Surface((w, h), pygame.SRCALPHA)
+        rgb = pygame.surfarray.array3d(surf).astype(np.float32)
+        alpha = pygame.surfarray.array_alpha(surf)
+
+        night_rgb = np.array([16.0, 26.0, 66.0], dtype=np.float32)[None, None, :]
+        base_mix = 122.0 / 255.0
+
+        if preserve_emissive:
+            mx = rgb.max(axis=2)
+            mn = rgb.min(axis=2)
+            sat = mx - mn
+            lum = 0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]
+            ys = (np.arange(h, dtype=np.float32) / float(max(1, h - 1)))[None, :]
+            em = np.maximum(
+                np.clip((mx - 195.0) / 45.0, 0.0, 1.0) * np.clip((sat - 55.0) / 55.0, 0.0, 1.0),
+                np.clip((lum - 210.0) / 35.0, 0.0, 1.0),
+            ) * (ys < y_cut_frac)
+            mix = base_mix * (1.0 - 0.85 * em[:, :, None])
+        else:
+            mix = base_mix
+
+        shaded = np.clip(rgb * (1.0 - mix) + night_rgb * mix, 0.0, 255.0).astype(np.uint8)
+        o_rgb = pygame.surfarray.pixels3d(out)
+        o_a = pygame.surfarray.pixels_alpha(out)
+        o_rgb[:] = shaded
+        o_a[:] = alpha
+        del o_rgb, o_a
+        return out
+
     def _load_player_chibi(self) -> None:
         """Carga y procesa el sprite chibi del personaje para renderizado en mapa."""
         chibi_filename = f"{self.character_id}_chibi.png"
@@ -2005,6 +2120,7 @@ class StoryMapScene(BaseState):
             except Exception:
                 self.player_chibi_surf = pygame.Surface((46, 70), pygame.SRCALPHA)
                 pygame.draw.ellipse(self.player_chibi_surf, (245, 195, 65), (4, 4, 38, 62))
+        self.player_chibi_night_surf = self._make_night_shaded_surface(self.player_chibi_surf, preserve_emissive=False)
 
     def _build_player_token(self) -> None:
         """
@@ -2060,6 +2176,7 @@ class StoryMapScene(BaseState):
         pygame.draw.arc(surf, (255, 255, 255, 180), (cx - r + 3, cy - r + 3, (r - 3) * 2, (r - 3) * 2), 0.7, 2.4, 2)
 
         self.player_token_surf = surf
+        self.player_token_night_surf = self._make_night_shaded_surface(surf, preserve_emissive=False)
 
         # Sombra de contacto suave para el suelo
         sw, sh = 46, 16
@@ -2454,6 +2571,51 @@ class StoryMapScene(BaseState):
                 if hasattr(self, "level_preview"):
                     self.level_preview.clear_last_callout()
 
+    def cargarPuntito(self):
+        if hasattr(self, "puntitoBase"):
+            return self.puntitoBase
+        self.puntitoBase = None
+        self.puntitosHechos = {}
+        guardado = getattr(StoryMapScene, "puntitoGuardado", None)
+        if guardado is not None:
+            self.puntitoBase = guardado
+            return guardado
+        try:
+            import numpy as np
+            crudo = self.assets.load_surface("puntito.png", has_alpha=True)
+            rgb = pygame.surfarray.array3d(crudo).astype(np.float32)
+            alfa = rgb.max(axis=2)
+            color = np.clip(rgb * 255.0 / np.maximum(alfa, 1.0)[..., None], 0, 255)
+            peso = (alfa / 255.0)[..., None]
+            color = color * peso + np.array([255.0, 214.0, 110.0]) * (1.0 - peso)
+            luz = pygame.Surface(crudo.get_size(), pygame.SRCALPHA)
+            pygame.surfarray.pixels3d(luz)[...] = color.astype(np.uint8)
+            canal = pygame.surfarray.pixels_alpha(luz)
+            canal[...] = np.clip((alfa - 14.0) * 255.0 / 241.0, 0, 255).astype(np.uint8)
+            del canal
+            caja = luz.get_bounding_rect(min_alpha=6)
+            lado = max(caja.w, caja.h)
+            cuadro = pygame.Rect(0, 0, lado, lado)
+            cuadro.center = caja.center
+            cuadro = cuadro.clip(luz.get_rect())
+            self.puntitoBase = pygame.transform.smoothscale(luz.subsurface(cuadro), (256, 256))
+            StoryMapScene.puntitoGuardado = self.puntitoBase
+        except Exception as e:
+            print(f"[StoryMap] Aviso: no se pudo cargar el puntito: {e}")
+        return self.puntitoBase
+
+    def dibujarPuntito(self, surface: pygame.Surface, sx: int, sy: int, encima: bool, pulso: float) -> bool:
+        base = self.cargarPuntito()
+        if base is None:
+            return False
+        lado = int((76 if encima else 58) * (1.0 + 0.08 * pulso))
+        imagen = self.puntitosHechos.get(lado)
+        if imagen is None:
+            imagen = pygame.transform.smoothscale(base, (lado, lado))
+            self.puntitosHechos[lado] = imagen
+        surface.blit(imagen, imagen.get_rect(center=(int(sx), int(sy))))
+        return True
+
     def _render_level_stops(self, surface: pygame.Surface, cam_x: int, cam_y: int) -> None:
         """Renderiza todos los nodos, destacando en amarillo solo los POI."""
         nodes, _, node_map, _, _ = self._get_street_graph()
@@ -2473,6 +2635,8 @@ class StoryMapScene(BaseState):
                     is_node_hover = (n["id"] == hovered_node_id) or (
                         poi_key is not None and getattr(self, f"{poi_key}_hover", False)
                     )
+                    if self.dibujarPuntito(surface, sx, sy, is_node_hover, pulse):
+                        continue
                     glow_r = int((19 if is_node_hover else 14) + 4 * pulse)
                     glow_alpha = min(220, int((125 if is_node_hover else 70) + 50 * pulse))
                     g_key = (glow_r, (glow_alpha // 16) * 16)
@@ -2493,7 +2657,7 @@ class StoryMapScene(BaseState):
                     pygame.draw.circle(surface, (115, 137, 153), (sx, sy), 4)
                     pygame.draw.circle(surface, (225, 235, 225), (sx, sy), 2)
 
-    def _render_player_avatar(self, surface: pygame.Surface, cam_x: int, cam_y: int) -> None:
+    def _render_player_avatar(self, surface: pygame.Surface, cam_x: int, cam_y: int, night_mix: float = 0.0) -> None:
         """Renderiza el avatar del jugador: sombra de contacto, cuerpo chibi con bamboleo/waddle al caminar y desvanecimiento en túneles."""
         if not hasattr(self, "player_pos") or self.player_alpha <= 0.01:
             return
@@ -2525,48 +2689,71 @@ class StoryMapScene(BaseState):
             else:
                 surface.blit(self.player_shadow_surf, (px - sw // 2, py - sh // 2 + 2))
 
+        def _orient_surf(base_surf: pygame.Surface) -> Tuple[pygame.Surface, int, int]:
+            oriented = base_surf
+            if not getattr(self, "player_facing_right", True):
+                oriented = pygame.transform.flip(oriented, True, False)
+            ch_base = oriented.get_height()
+            if abs(tilt_angle) > 0.05:
+                actual_tilt = tilt_angle if getattr(self, "player_facing_right", True) else -tilt_angle
+                oriented = pygame.transform.rotozoom(oriented, actual_tilt, 1.0)
+            return oriented, oriented.get_width(), oriented.get_height() - ch_base
+
+        def _blit_day_night(
+            day_s: pygame.Surface,
+            night_s: Optional[pygame.Surface],
+            dx: int,
+            dy: int,
+        ) -> None:
+            nm = max(0.0, min(1.0, float(night_mix)))
+            if nm <= 0.02 or night_s is None:
+                if self.player_alpha < 0.99:
+                    c_copy = day_s.copy()
+                    c_copy.set_alpha(int(255 * self.player_alpha))
+                    surface.blit(c_copy, (dx, dy))
+                else:
+                    surface.blit(day_s, (dx, dy))
+            elif nm >= 0.98:
+                if self.player_alpha < 0.99:
+                    c_copy = night_s.copy()
+                    c_copy.set_alpha(int(255 * self.player_alpha))
+                    surface.blit(c_copy, (dx, dy))
+                else:
+                    surface.blit(night_s, (dx, dy))
+            else:
+                a_day = int(round(255 * ((1.0 - nm) ** 0.7) * self.player_alpha))
+                a_night = int(round(255 * (nm ** 0.7) * self.player_alpha))
+                if a_day > 3:
+                    day_s.set_alpha(a_day)
+                    surface.blit(day_s, (dx, dy))
+                    day_s.set_alpha(255)
+                if a_night > 3:
+                    night_s.set_alpha(a_night)
+                    surface.blit(night_s, (dx, dy))
+                    night_s.set_alpha(255)
+
         # 2. Renderizado del sprite Chibi del personaje seleccionado
         if getattr(self, "player_chibi_surf", None) is not None:
-            chibi_to_draw = self.player_chibi_surf
-            # Voltear horizontalmente según la dirección en que mira
-            if not getattr(self, "player_facing_right", True):
-                chibi_to_draw = pygame.transform.flip(chibi_to_draw, True, False)
+            if getattr(self, "_cached_chibi_src", None) is not self.player_chibi_surf:
+                self._cached_chibi_src = self.player_chibi_surf
+                self.player_chibi_night_surf = self._make_night_shaded_surface(self.player_chibi_surf, preserve_emissive=False)
 
-            # Aplicar rotación de paso (waddle)
-            if abs(tilt_angle) > 0.05:
-                # Invertir tilt si mira a la izquierda para mantener la sincronía del paso
-                actual_tilt = tilt_angle if getattr(self, "player_facing_right", True) else -tilt_angle
-                rotated_surf = pygame.transform.rotozoom(chibi_to_draw, actual_tilt, 1.0)
-            else:
-                rotated_surf = chibi_to_draw
-
-            rw, rh = rotated_surf.get_size()
-            cw = chibi_to_draw.get_width()
-            ch = chibi_to_draw.get_height()
+            rotated_day, rw, dh = _orient_surf(self.player_chibi_surf)
+            night_src = getattr(self, "player_chibi_night_surf", None)
+            rotated_night = _orient_surf(night_src)[0] if night_src is not None else None
+            ch = self.player_chibi_surf.get_height()
 
             # Posicionar los pies del chibi en (px, py)
             draw_x = px - rw // 2
-            draw_y = int(py - ch + 2 + bob_y - (rh - ch) // 2)
-
-            if self.player_alpha < 0.99:
-                c_copy = rotated_surf.copy()
-                c_copy.set_alpha(int(255 * self.player_alpha))
-                surface.blit(c_copy, (draw_x, draw_y))
-            else:
-                surface.blit(rotated_surf, (draw_x, draw_y))
+            draw_y = int(py - ch + 2 + bob_y - dh // 2)
+            _blit_day_night(rotated_day, rotated_night, draw_x, draw_y)
 
         elif hasattr(self, "player_token_surf"):
             # Fallback a token badge circular si no hubiera sprite chibi
             tw, th = self.player_token_surf.get_size()
             token_x = px - tw // 2
             token_y = int(py - th + 8 + bob_y)
-
-            if self.player_alpha < 0.99:
-                tk_copy = self.player_token_surf.copy()
-                tk_copy.set_alpha(int(255 * self.player_alpha))
-                surface.blit(tk_copy, (token_x, token_y))
-            else:
-                surface.blit(self.player_token_surf, (token_x, token_y))
+            _blit_day_night(self.player_token_surf, getattr(self, "player_token_night_surf", None), token_x, token_y)
 
     def focus_camera_on_player(self, instant: bool = True) -> None:
         """Centra la cámara exactamente sobre la posición actual del personaje en el mapa."""
@@ -2771,15 +2958,15 @@ class StoryMapScene(BaseState):
         # Conmutadores interactivos de Clima, Acción de Misión y Navegación D-Pad
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_1:
-                self.set_weather("day")
+                self.set_weather("day", instant=False)
             elif event.key == pygame.K_2:
-                self.set_weather("sunset")
+                self.set_weather("sunset", instant=False)
             elif event.key == pygame.K_3:
-                self.set_weather("night")
+                self.set_weather("night", instant=False)
             elif event.key == pygame.K_4:
-                self.set_weather("rain")
+                self.set_weather("rain", instant=False)
             elif event.key == pygame.K_c:
-                self.cycle_weather()
+                self.cycle_weather(instant=False)
             elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
                 active_poi = self._get_active_entry_poi()
                 if active_poi:
@@ -2931,6 +3118,10 @@ class StoryMapScene(BaseState):
         self.timer += dt
         if hasattr(self.audio, "update"):
             self.audio.update(dt)
+        # Reloj del mapa y río: siempre corren, también detrás de diálogos y modales
+        # (así se ve anochecer mientras la Paloma felicita al pasar un nivel).
+        self.ciclo.update(dt)
+        self.rio.update(dt)
         if self.toast_timer > 0.0:
             self.toast_timer = max(0.0, self.toast_timer - dt)
             if self.toast_timer == 0.0:
@@ -2952,6 +3143,15 @@ class StoryMapScene(BaseState):
 
         if self.save_feedback_timer > 0.0:
             self.save_feedback_timer -= dt
+
+        # Interpolación suave con dt de clima y mezcla día/noche
+        w_blend = min(1.0, dt * 4.2)
+        for m in self.weather_modes:
+            target_w = 1.0 if m == self.current_weather else 0.0
+            cur_w = self._weather_weights.get(m, 0.0)
+            nxt_w = cur_w + (target_w - cur_w) * w_blend
+            self._weather_weights[m] = target_w if abs(target_w - nxt_w) < 0.003 else nxt_w
+        self.night_mix = self._weather_weights.get("night", 0.0)
 
         # Si el menú está desplegándose, actualizar botones del drawer
         if self.menu_anim_t > 0.01:
@@ -3168,8 +3368,8 @@ class StoryMapScene(BaseState):
             if cloud["x"] > self.world_w + 250:
                 cloud["x"] = -350.0
 
-        # Partículas ambientales según el clima activo
-        if self.current_weather == "rain":
+        # Partículas ambientales según los pesos interpolados del clima activo
+        if self._weather_weights.get("rain", 0.0) > 0.02 or self.ciclo.lluvia:
             for drop in self.rain_drops:
                 drop["y"] += drop["speed"] * dt
                 drop["x"] -= 160.0 * dt
@@ -3182,7 +3382,7 @@ class StoryMapScene(BaseState):
                     rip["life"] = 0.0
                     rip["x"] = (rip["x"] + 317.0) % (self.screen_w - 80) + 40
                     rip["y"] = (rip["y"] + 193.0) % (self.screen_h - 160) + 120
-        elif self.current_weather in ("day", "sunset"):
+        if (self._weather_weights.get("day", 0.0) + self._weather_weights.get("sunset", 0.0)) > 0.02:
             for mote in getattr(self, "breeze_motes", []):
                 mote["x"] = (mote["x"] + mote["vx"] * dt) % self.screen_w
                 mote["y"] = (mote["y"] + (mote["vy"] + math.sin(self.timer * 1.4 + mote["phase"]) * 8.0) * dt) % self.screen_h
@@ -3348,9 +3548,12 @@ class StoryMapScene(BaseState):
                     self._unlocked_path_pairs.append(pair)
                 self.active_path_reveal = None
 
-    def _render_unlocked_paths(self, surface: pygame.Surface, cam_x: int, cam_y: int) -> None:
+    def _render_unlocked_paths(self, surface: pygame.Surface, cam_x: int, cam_y: int, alpha_scale: float = 1.0) -> None:
         """Renderiza los caminos previos persistentes y la animación activa del camino iluminado."""
         if not hasattr(self, "path_glow_renderer"):
+            return
+        alpha_scale = max(0.0, min(1.0, float(alpha_scale)))
+        if alpha_scale <= 0.01:
             return
         reveal = getattr(self, "active_path_reveal", None)
         active_pair = reveal["pair"] if reveal is not None else None
@@ -3359,8 +3562,15 @@ class StoryMapScene(BaseState):
                 continue
             route_data = self._build_campaign_route(src, dst)
             if route_data is not None:
-                self.path_glow_renderer.render_persistent_route(surface, route_data, cam_x, cam_y, self.timer)
-        if reveal is not None:
+                self.path_glow_renderer.render_persistent_route(
+                    surface,
+                    route_data,
+                    cam_x,
+                    cam_y,
+                    self.timer,
+                    alpha_scale=alpha_scale,
+                )
+        if reveal is not None and alpha_scale >= 0.5:
             self.path_glow_renderer.render_animated_route(
                 surface,
                 reveal["route"],
@@ -3368,7 +3578,416 @@ class StoryMapScene(BaseState):
                 cam_x,
                 cam_y,
                 self.timer,
+                night_mix=1.0 - alpha_scale,
             )
+
+    # Coordenadas normalizadas medidas en pixel sobre arbolito_navidad_noche.png (relative a midbottom)
+    _TREE_BULBS: Tuple[Tuple[float, float, int, bool, float, float], ...] = (
+        (0.007, -0.926, 0, True, 2.4, 0.0),    # Estrella superior
+        (-0.083, -0.761, 0, False, 3.1, 0.4),
+        (0.056, -0.751, 3, False, 3.6, 1.1),
+        (0.153, -0.642, 0, False, 2.9, 1.9),
+        (0.052, -0.585, 1, False, 3.8, 2.6),
+        (-0.100, -0.556, 3, False, 3.3, 3.2),
+        (-0.233, -0.533, 0, False, 2.7, 3.9),
+        (-0.168, -0.469, 4, False, 4.0, 4.5),
+        (-0.071, -0.412, 2, False, 3.4, 5.1),
+        (0.089, -0.390, 0, False, 3.0, 0.8),
+        (0.232, -0.415, 4, False, 3.7, 1.5),
+        (-0.338, -0.320, 0, False, 3.2, 2.2),
+        (-0.242, -0.262, 3, False, 3.9, 2.9),
+        (-0.068, -0.254, 4, False, 2.8, 3.6),
+        (0.092, -0.240, 2, False, 3.5, 4.3),
+        (0.236, -0.254, 1, False, 4.1, 5.0),
+        (0.334, -0.310, 2, False, 3.1, 5.7),
+    )
+
+    # Lucecitas de guirnalda medidas sobre alumbrado_poste_noche.png (0.33..0.85 desde arriba)
+    _LAMP_FAIRY_LIGHTS: Tuple[Tuple[float, float, int, float, float], ...] = (
+        (0.180, -0.683, 4, 3.2, 0.5),
+        (0.146, -0.529, 3, 3.7, 1.8),
+        (0.116, -0.350, 2, 3.4, 3.1),
+        (-0.156, -0.289, 0, 4.0, 4.4),
+    )
+
+    def _init_map_holiday_decor(self) -> None:
+        """Carga arbolito navideño y alumbrados acuarela (escala diorama), sombras, tinte nocturno y cubetas aditivas."""
+        import numpy as np
+
+        def _load_scaled(rel_path: str, target_h: int) -> Optional[pygame.Surface]:
+            try:
+                raw = self.assets.load_surface(rel_path, has_alpha=True)
+                rw, rh = raw.get_size()
+                tw = max(12, int(round(rw * (target_h / float(max(1, rh))))))
+                return pygame.transform.smoothscale(raw, (tw, target_h))
+            except Exception as exc:
+                print(f"[HolidayDecor] Aviso cargando {rel_path}: {exc}")
+                return None
+
+        self.holiday_tree_pos: Tuple[int, int] = (1250, 1225)
+        self.holiday_tree_day = _load_scaled("arbolito_navidad_dia.png", 150)
+        self.holiday_tree_night = _load_scaled("arbolito_navidad_noche.png", 150)
+        self.holiday_tree_night_shaded = (
+            self._make_night_shaded_surface(self.holiday_tree_night, y_cut_frac=0.82, preserve_emissive=True)
+            if self.holiday_tree_night is not None
+            else None
+        )
+
+        self.street_lamp_positions: List[Tuple[int, int]] = [
+            (1059, 351),
+            (1617, 545),
+            (2287, 839),
+            (2110, 723),
+            (1831, 1164),
+            (994, 1559),
+            (1459, 1673),
+            (454, 1547),
+        ]
+        self.street_lamp_day = _load_scaled("alumbrado_poste_dia.png", 82)
+        self.street_lamp_night = _load_scaled("alumbrado_poste_noche.png", 82)
+        self.street_lamp_night_shaded = (
+            self._make_night_shaded_surface(self.street_lamp_night, y_cut_frac=0.92, preserve_emissive=True)
+            if self.street_lamp_night is not None
+            else None
+        )
+
+        def _make_contact_shadow(w: int, h: int, max_alpha: int = 72) -> pygame.Surface:
+            sh = pygame.Surface((w, h), pygame.SRCALPHA)
+            for step in range(8, 0, -1):
+                frac = step / 8.0
+                ew = max(4, int(w * frac))
+                eh = max(2, int(h * frac))
+                a = int(max_alpha * ((1.0 - frac * 0.72) ** 1.4))
+                rect = pygame.Rect((w - ew) // 2, (h - eh) // 2, ew, eh)
+                pygame.draw.ellipse(sh, (18, 28, 22, a), rect)
+            return sh
+
+        def _make_cast_shadow(w: int, h: int, angle_deg: float = -24.0, max_alpha: int = 46) -> pygame.Surface:
+            base = pygame.Surface((w, h), pygame.SRCALPHA)
+            for step in range(6, 0, -1):
+                frac = step / 6.0
+                ew = max(4, int(w * frac))
+                eh = max(2, int(h * frac))
+                a = int(max_alpha * ((1.0 - frac * 0.65) ** 1.3))
+                pygame.draw.ellipse(base, (20, 32, 48, a), ((w - ew) // 2, (h - eh) // 2, ew, eh))
+            return pygame.transform.rotate(base, angle_deg)
+
+        self._tree_contact_shadow = _make_contact_shadow(56, 18, max_alpha=84)
+        self._tree_cast_shadow = _make_cast_shadow(64, 18, angle_deg=-24.0, max_alpha=46)
+        self._lamp_contact_shadow = _make_contact_shadow(28, 10, max_alpha=72)
+        self._lamp_cast_shadow = _make_cast_shadow(34, 8, angle_deg=-24.0, max_alpha=42)
+
+        def _make_halo_buckets(size: int, rgb: Tuple[int, int, int], peak: float, exponent: float) -> List[pygame.Surface]:
+            hc = size * 0.5
+            yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+            dist = np.sqrt((xx + 0.5 - hc) ** 2 + (yy + 0.5 - hc) ** 2) / max(1.0, hc)
+            falloff = np.clip(1.0 - dist, 0.0, 1.0) ** exponent
+            col = np.array(rgb, dtype=np.float32)[None, None, :]
+            buckets: List[pygame.Surface] = []
+            for q in range(1, 11):
+                level = q / 10.0
+                halo = pygame.Surface((size, size))
+                halo.fill((0, 0, 0))
+                arr = pygame.surfarray.pixels3d(halo)
+                arr[:] = np.clip(falloff[:, :, None] * (peak * level) * col, 0.0, 255.0).astype(np.uint8).transpose(1, 0, 2)
+                del arr
+                buckets.append(halo)
+            return buckets
+
+        def _make_ellipse_pool_buckets(w: int, h: int, rgb: Tuple[int, int, int], peak: float) -> List[pygame.Surface]:
+            rx, ry = max(1.0, w * 0.5), max(1.0, h * 0.5)
+            yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+            d2 = ((xx + 0.5 - rx) / rx) ** 2 + ((yy + 0.5 - ry) / ry) ** 2
+            falloff = np.clip(1.0 - d2, 0.0, 1.0) ** 2.0
+            col = np.array(rgb, dtype=np.float32)[None, None, :]
+            buckets: List[pygame.Surface] = []
+            for q in range(1, 11):
+                level = q / 10.0
+                pool = pygame.Surface((w, h))
+                pool.fill((0, 0, 0))
+                arr = pygame.surfarray.pixels3d(pool)
+                arr[:] = np.clip(falloff[:, :, None] * (peak * level) * col, 0.0, 255.0).astype(np.uint8).transpose(1, 0, 2)
+                del arr
+                buckets.append(pool)
+            return buckets
+
+        palette = {
+            0: (255, 218, 110),  # Gold
+            1: (255, 110, 145),  # Coral / Pink
+            2: (85, 242, 150),   # Emerald Green
+            3: (90, 232, 255),   # Caribbean Cyan
+            4: (248, 115, 225),  # Carnival Magenta
+            5: (255, 198, 88),   # Amber Lantern
+        }
+        self._tree_star_halos: List[pygame.Surface] = _make_halo_buckets(48, palette[0], peak=0.62, exponent=2.1)
+        self._tree_bulb_halos: Dict[int, List[pygame.Surface]] = {
+            c: _make_halo_buckets(32, palette[c], peak=0.50, exponent=2.35) for c in range(5)
+        }
+        self._lamp_flame_halos: List[pygame.Surface] = _make_halo_buckets(58, palette[5], peak=0.68, exponent=2.1)
+        self._lamp_fairy_halos: Dict[int, List[pygame.Surface]] = {
+            c: _make_halo_buckets(18, palette[c], peak=0.50, exponent=2.2) for c in range(5)
+        }
+        self._tree_ground_pools: List[pygame.Surface] = _make_ellipse_pool_buckets(132, 46, (255, 205, 125), peak=0.22)
+        self._lamp_ground_pools: List[pygame.Surface] = _make_ellipse_pool_buckets(82, 34, (255, 195, 95), peak=0.24)
+
+    def _render_night_campaign_paths(self, surface: pygame.Surface, cam_x: int, cam_y: int, intensity: float = 1.0) -> None:
+        """Ilumina los tramos de campaña en modo noche por jerarquía (active/completed/locked) respetando POI_SPECS."""
+        if not hasattr(self, "path_glow_renderer"):
+            return
+        intensity = max(0.0, min(1.0, float(intensity)))
+        if intensity <= 0.01:
+            return
+
+        unlocked_set = set(getattr(self, "_unlocked_path_pairs", []))
+        reveal = getattr(self, "active_path_reveal", None)
+        active_reveal_pair = reveal["pair"] if reveal is not None else None
+
+        raw_progress = self.settings.data.get("story_progress")
+        completed_games = raw_progress.get("completed_microgames", []) if isinstance(raw_progress, dict) else []
+        all_campaign_cleared = self._count_completed_campaign_levels(completed_games) >= len(STORY_CAMPAIGN_ORDER)
+        next_target_poi = None if all_campaign_cleared else self.get_current_campaign_poi()
+
+        campaign_pairs = list(zip(STORY_CAMPAIGN_ORDER, STORY_CAMPAIGN_ORDER[1:]))
+        last_unlocked_idx = max((i for i, pair in enumerate(campaign_pairs) if pair in unlocked_set), default=-1)
+
+        for idx, (src, dst) in enumerate(campaign_pairs):
+            if (src, dst) == active_reveal_pair and reveal is not None:
+                self.path_glow_renderer.render_animated_route(
+                    surface,
+                    reveal["route"],
+                    reveal["progress"],
+                    cam_x,
+                    cam_y,
+                    self.timer,
+                    night_mix=intensity,
+                )
+                continue
+
+            route_data = self._build_campaign_route(src, dst)
+            if route_data is None:
+                continue
+
+            if (src, dst) not in unlocked_set:
+                tier = "locked"
+            elif (not all_campaign_cleared) and (
+                dst == next_target_poi or (idx == last_unlocked_idx and not self._is_poi_cleared(dst, completed_games))
+            ):
+                tier = "active"
+            else:
+                tier = "completed"
+
+            self.path_glow_renderer.render_night_glow_route(
+                surface,
+                route_data,
+                cam_x,
+                cam_y,
+                self.timer,
+                unlocked=(src, dst) in unlocked_set,
+                tier=tier,
+                intensity=intensity,
+            )
+
+    def _blit_decor_sprite_crossfade(
+        self,
+        surface: pygame.Surface,
+        day_spr: Optional[pygame.Surface],
+        night_spr: Optional[pygame.Surface],
+        midbottom: Tuple[int, int],
+        night_mix: float,
+    ) -> None:
+        if day_spr is None and night_spr is None:
+            return
+        if night_mix <= 0.02 or night_spr is None:
+            if day_spr is not None:
+                surface.blit(day_spr, day_spr.get_rect(midbottom=midbottom))
+            return
+        if night_mix >= 0.98 or day_spr is None:
+            surface.blit(night_spr, night_spr.get_rect(midbottom=midbottom))
+            return
+        a_day = int(round(255 * ((1.0 - night_mix) ** 0.7)))
+        a_night = int(round(255 * (night_mix ** 0.7)))
+        if a_day > 3:
+            day_spr.set_alpha(a_day)
+            surface.blit(day_spr, day_spr.get_rect(midbottom=midbottom))
+            day_spr.set_alpha(255)
+        if a_night > 3:
+            night_spr.set_alpha(a_night)
+            surface.blit(night_spr, night_spr.get_rect(midbottom=midbottom))
+            night_spr.set_alpha(255)
+
+    def _render_holiday_ground_pools(self, surface: pygame.Surface, cam_x: int, cam_y: int, night_mix: float) -> None:
+        """Dibuja charcos cálidos de luz en el suelo bajo el arbolito y alumbrados durante la noche."""
+        if night_mix <= 0.04:
+            return
+        tree_pools = getattr(self, "_tree_ground_pools", None)
+        if tree_pools:
+            tx, ty = getattr(self, "holiday_tree_pos", (1250, 1225))
+            sx, sy = tx - cam_x, ty - cam_y
+            if -240 < sx < self.screen_w + 240 and -240 < sy < self.screen_h + 240:
+                pulse = 0.88 + 0.12 * math.sin(self.timer * 2.2)
+                b_idx = min(9, int(round(night_mix * pulse * 10.0)) - 1)
+                if b_idx >= 0:
+                    pool = tree_pools[b_idx]
+                    surface.blit(pool, pool.get_rect(center=(sx, sy + 2)), special_flags=pygame.BLEND_RGB_ADD)
+
+        lamp_pools = getattr(self, "_lamp_ground_pools", None)
+        if lamp_pools:
+            for idx, (lx, ly) in enumerate(getattr(self, "street_lamp_positions", [])):
+                sx, sy = lx - cam_x, ly - cam_y
+                if -140 < sx < self.screen_w + 140 and -140 < sy < self.screen_h + 140:
+                    flicker = 0.80 + 0.14 * math.sin(self.timer * 5.2 + idx * 1.7) + 0.06 * math.sin(self.timer * 11.3 + idx * 3.1)
+                    b_idx = min(9, int(round(night_mix * flicker * 10.0)) - 1)
+                    if b_idx >= 0:
+                        pool = lamp_pools[b_idx]
+                        surface.blit(pool, pool.get_rect(center=(sx, sy + 1)), special_flags=pygame.BLEND_RGB_ADD)
+
+    def _render_single_lamp(
+        self,
+        surface: pygame.Surface,
+        cam_x: int,
+        cam_y: int,
+        idx: int,
+        lx: int,
+        ly: int,
+        night_mix: float,
+    ) -> None:
+        sx = lx - cam_x
+        sy = ly - cam_y
+        if not (-140 < sx < self.screen_w + 140 and -160 < sy < self.screen_h + 160):
+            return
+
+        cast_alpha = int(round(255 * max(0.0, 1.0 - night_mix * 0.85)))
+        if cast_alpha > 4 and hasattr(self, "_lamp_cast_shadow"):
+            self._lamp_cast_shadow.set_alpha(cast_alpha)
+            surface.blit(self._lamp_cast_shadow, self._lamp_cast_shadow.get_rect(center=(sx + 10, sy + 3)))
+            self._lamp_cast_shadow.set_alpha(255)
+        if hasattr(self, "_lamp_contact_shadow"):
+            surface.blit(self._lamp_contact_shadow, self._lamp_contact_shadow.get_rect(center=(sx, sy - 1)))
+
+        day_spr = getattr(self, "street_lamp_day", None)
+        night_spr = getattr(self, "street_lamp_night_shaded", None) or getattr(self, "street_lamp_night", None)
+        ref_spr = night_spr or day_spr
+        if ref_spr is None:
+            return
+        self._blit_decor_sprite_crossfade(surface, day_spr, night_spr, (sx, sy), night_mix)
+
+        if night_mix > 0.04:
+            lw, lh = ref_spr.get_size()
+            flame_halos = getattr(self, "_lamp_flame_halos", None)
+            if flame_halos:
+                flicker = 0.80 + 0.14 * math.sin(self.timer * 5.2 + idx * 1.7) + 0.06 * math.sin(self.timer * 11.3 + idx * 3.1)
+                f_idx = min(9, int(round(flicker * night_mix * 10.0)) - 1)
+                if f_idx >= 0:
+                    halo = flame_halos[f_idx]
+                    fx = sx + int(round(lw * -0.008))
+                    fy = sy + int(round(lh * -0.780))
+                    surface.blit(halo, halo.get_rect(center=(fx, fy)), special_flags=pygame.BLEND_RGB_ADD)
+
+            fairy_halos = getattr(self, "_lamp_fairy_halos", None)
+            if fairy_halos:
+                for ox_f, oy_f, c_idx, freq, phase in self._LAMP_FAIRY_LIGHTS:
+                    twinkle = 0.58 + 0.42 * math.sin(self.timer * freq + phase + idx * 1.3)
+                    b_idx = min(9, int(round(twinkle * night_mix * 10.0)) - 1)
+                    if b_idx >= 0:
+                        halo = fairy_halos[c_idx][b_idx]
+                        bx = sx + int(round(lw * ox_f))
+                        by = sy + int(round(lh * oy_f))
+                        surface.blit(halo, halo.get_rect(center=(bx, by)), special_flags=pygame.BLEND_RGB_ADD)
+
+    def _render_single_tree(
+        self,
+        surface: pygame.Surface,
+        cam_x: int,
+        cam_y: int,
+        tx: int,
+        ty: int,
+        night_mix: float,
+    ) -> None:
+        sx = tx - cam_x
+        sy = ty - cam_y
+        if not (-240 < sx < self.screen_w + 240 and -280 < sy < self.screen_h + 280):
+            return
+
+        cast_alpha = int(round(255 * max(0.0, 1.0 - night_mix * 0.85)))
+        if cast_alpha > 4 and hasattr(self, "_tree_cast_shadow"):
+            self._tree_cast_shadow.set_alpha(cast_alpha)
+            surface.blit(self._tree_cast_shadow, self._tree_cast_shadow.get_rect(center=(sx + 16, sy + 5)))
+            self._tree_cast_shadow.set_alpha(255)
+        if hasattr(self, "_tree_contact_shadow"):
+            surface.blit(self._tree_contact_shadow, self._tree_contact_shadow.get_rect(center=(sx, sy - 2)))
+
+        day_spr = getattr(self, "holiday_tree_day", None)
+        night_spr = getattr(self, "holiday_tree_night_shaded", None) or getattr(self, "holiday_tree_night", None)
+        ref_spr = night_spr or day_spr
+        if ref_spr is None:
+            return
+        self._blit_decor_sprite_crossfade(surface, day_spr, night_spr, (sx, sy), night_mix)
+
+        if night_mix > 0.04:
+            tw, th = ref_spr.get_size()
+            star_halos = getattr(self, "_tree_star_halos", None)
+            bulb_halos = getattr(self, "_tree_bulb_halos", None)
+            for ox_f, oy_f, c_idx, is_star, freq, phase in self._TREE_BULBS:
+                if is_star:
+                    if not star_halos:
+                        continue
+                    twinkle = 0.78 + 0.22 * math.sin(self.timer * freq + phase)
+                    b_idx = min(9, int(round(twinkle * night_mix * 10.0)) - 1)
+                    if b_idx >= 0:
+                        halo = star_halos[b_idx]
+                        bx = sx + int(round(tw * ox_f))
+                        by = sy + int(round(th * oy_f))
+                        surface.blit(halo, halo.get_rect(center=(bx, by)), special_flags=pygame.BLEND_RGB_ADD)
+                else:
+                    if not bulb_halos:
+                        continue
+                    twinkle = 0.62 + 0.38 * math.sin(self.timer * freq + phase)
+                    b_idx = min(9, int(round(twinkle * night_mix * 10.0)) - 1)
+                    if b_idx >= 0:
+                        halo = bulb_halos[c_idx][b_idx]
+                        bx = sx + int(round(tw * ox_f))
+                        by = sy + int(round(th * oy_f))
+                        surface.blit(halo, halo.get_rect(center=(bx, by)), special_flags=pygame.BLEND_RGB_ADD)
+
+    def _render_ysorted_entities(self, surface: pygame.Surface, cam_x: int, cam_y: int, night_mix: float) -> None:
+        """Ordena avatar del jugador, arbolito y alumbrados por foot_y ascendente en día y noche."""
+        entities: List[Tuple[float, int, str, Any]] = []
+        if hasattr(self, "player_pos"):
+            entities.append((float(self.player_pos[1]), 0, "player", None))
+
+        tx, ty = getattr(self, "holiday_tree_pos", (1250, 1225))
+        if -240 < (tx - cam_x) < self.screen_w + 240 and -280 < (ty - cam_y) < self.screen_h + 280:
+            entities.append((float(ty), 1, "tree", (tx, ty)))
+
+        for idx, (lx, ly) in enumerate(getattr(self, "street_lamp_positions", [])):
+            if -140 < (lx - cam_x) < self.screen_w + 140 and -160 < (ly - cam_y) < self.screen_h + 160:
+                entities.append((float(ly), 2 + idx, "lamp", (idx, lx, ly)))
+
+        entities.sort(key=lambda item: (item[0], item[1]))
+        for _fy, _ord, kind, payload in entities:
+            if kind == "player":
+                self._render_player_avatar(surface, cam_x, cam_y, night_mix=night_mix)
+            elif kind == "tree":
+                self._render_single_tree(surface, cam_x, cam_y, payload[0], payload[1], night_mix)
+            elif kind == "lamp":
+                self._render_single_lamp(surface, cam_x, cam_y, payload[0], payload[1], payload[2], night_mix)
+
+    def _render_holiday_decor(
+        self,
+        surface: pygame.Surface,
+        cam_x: int,
+        cam_y: int,
+        is_night: bool,
+        night_mix: Optional[float] = None,
+    ) -> None:
+        """Dibuja alumbrados y arbolito navideño anclados al suelo con sombra (y luces dt en noche)."""
+        nm = float(night_mix) if night_mix is not None else (1.0 if is_night else 0.0)
+        if nm > 0.04:
+            self._render_holiday_ground_pools(surface, cam_x, cam_y, nm)
+        for idx, (lx, ly) in enumerate(getattr(self, "street_lamp_positions", [])):
+            self._render_single_lamp(surface, cam_x, cam_y, idx, lx, ly, nm)
+        tx, ty = getattr(self, "holiday_tree_pos", (1250, 1225))
+        self._render_single_tree(surface, cam_x, cam_y, tx, ty, nm)
 
     def render(self, surface: pygame.Surface) -> None:
         # 1. Renderizar el mapa mundial continuo con offset de cámara cinética
@@ -3376,14 +3995,41 @@ class StoryMapScene(BaseState):
         cam_y = int(self.camera.y)
         surface.blit(self.world_map, (-cam_x, -cam_y))
 
-        # 1B. Caminos iluminados en acuarela (sobre calles, bajo POIs/nubes/avatares)
-        self._render_unlocked_paths(surface, cam_x, cam_y)
+        night_mix = max(
+            0.0,
+            min(1.0, float(getattr(self, "night_mix", 1.0 if self.current_weather == "night" else 0.0))),
+        )
+        weather_weights = getattr(self, "_weather_weights", None)
+        if not isinstance(weather_weights, dict):
+            weather_weights = {m: (1.0 if m == self.current_weather else 0.0) for m in self.weather_modes}
+        # 1B. Río y ciénaga en movimiento (solo dentro del agua; el resto del mapa no cambia)
+        self.rio.render(surface, cam_x, cam_y, self.timer, self.ciclo.luz())
 
-        # 2. Hitos de parada en las calles (is_stop)
-        self._render_level_stops(surface, cam_x, cam_y)
+        # 1B. Caminos diurnos en acuarela (se atenúan al entrar la noche para evitar doble dibujo)
+        if night_mix < 0.99:
+            self._render_unlocked_paths(surface, cam_x, cam_y, alpha_scale=1.0 - night_mix)
 
-        # 3. Avatar del jugador (sombra, token con rostro, rebote y túnel)
-        self._render_player_avatar(surface, cam_x, cam_y)
+        # 2. Hitos de parada en día/atardecer/lluvia (en noche se dibujan sobre el brillo de rutas)
+        if night_mix <= 0.01:
+            self._render_level_stops(surface, cam_x, cam_y)
+
+        # 2B. Tinte nocturno -> caminos nocturnos -> paradas -> charcos de luz en el suelo
+        if night_mix > 0.01:
+            night_overlay = self.weather_overlays.get("night")
+            if night_overlay is not None:
+                if night_mix < 0.99:
+                    night_overlay.set_alpha(int(round(255 * night_mix)))
+                    surface.blit(night_overlay, (0, 0))
+                    night_overlay.set_alpha(255)
+                else:
+                    surface.blit(night_overlay, (0, 0))
+
+            self._render_night_campaign_paths(surface, cam_x, cam_y, intensity=night_mix)
+            self._render_level_stops(surface, cam_x, cam_y)
+            self._render_holiday_ground_pools(surface, cam_x, cam_y, night_mix)
+
+        # 3. Entidades ordenadas por foot_y (avatar del jugador, arbolito y alumbrados)
+        self._render_ysorted_entities(surface, cam_x, cam_y, night_mix)
 
         # 4. Renderizar efectos dinámicos de niveles principales y secretos.
         raw_progress = self.settings.data.get("story_progress")
@@ -3395,6 +4041,7 @@ class StoryMapScene(BaseState):
         if not hasattr(self, "_night_halo_cache"):
             self._night_halo_cache = {}
 
+        pines = []  # (x, y, completado) de cada estrella/pin visible, para su luz nocturna
         for p_key in STORY_PLAYABLE_POIS:
             p_info = self.poi_registry.get(p_key)
             if not p_info:
@@ -3445,25 +4092,50 @@ class StoryMapScene(BaseState):
                     vuelta = (self.timer * 0.45 + (sum(map(ord, p_key)) % 100) / 100.0) % 1.0
                     pin_to_draw = self.estrellaConBrillo(vuelta * 2.4)
                 surface.blit(pin_to_draw, pin_to_draw.get_rect(center=(pin_center_x, pin_center_y)))
+                pines.append((int(pin_center_x), int(pin_center_y), is_cleared))
 
-        # 3. Renderizar nubes algodonosas caribeñas con profundidad parallax
+        # 5. Renderizar nubes algodonosas caribeñas (siempre sobre rutas y entidades, con crossfade día/noche)
         for cloud in self.clouds:
             cloud_screen_x = int(cloud["x"] - cam_x * cloud["parallax"])
             cloud_screen_y = int(cloud["y"] - cam_y * cloud["parallax"] + math.sin(self.timer * 1.5 + cloud["bob"]) * 2.5)
-
-            cw, ch = cloud["surf"].get_size()
+            day_c = cloud["surf"]
+            night_c = cloud.get("night_surf", day_c)
+            cw, ch = day_c.get_size()
             if -cw < cloud_screen_x < self.screen_w + cw and -ch < cloud_screen_y < self.screen_h + ch:
-                surface.blit(cloud["surf"], (cloud_screen_x, cloud_screen_y))
+                if night_mix <= 0.01:
+                    surface.blit(day_c, (cloud_screen_x, cloud_screen_y))
+                elif night_mix >= 0.99:
+                    surface.blit(night_c, (cloud_screen_x, cloud_screen_y))
+                else:
+                    surface.blit(day_c, (cloud_screen_x, cloud_screen_y))
+                    night_c.set_alpha(int(round(255 * night_mix)))
+                    surface.blit(night_c, (cloud_screen_x, cloud_screen_y))
+                    night_c.set_alpha(255)
 
-        # 4. Shader de atmósfera para Clima y Ciclo Día / Atardecer / Noche / Lluvia
-        overlay = self.weather_overlays.get(self.current_weather)
-        if overlay is not None:
-            surface.blit(overlay, (0, 0))
+        # 6. Overlays atmosféricos no nocturnos (Atardecer / Lluvia) interpolados
+        for mode in ("sunset", "rain"):
+            w_mode = max(0.0, min(1.0, float(weather_weights.get(mode, 0.0))))
+            if w_mode > 0.01:
+                ov = self.weather_overlays.get(mode)
+                if ov is not None:
+                    if w_mode < 0.99:
+                        ov.set_alpha(int(round(255 * w_mode)))
+                        surface.blit(ov, (0, 0))
+                        ov.set_alpha(255)
+                    else:
+                        surface.blit(ov, (0, 0))
 
-        # 5. Efectos atmosféricos útiles y reactivos según el clima activo
-        if self.current_weather == "night":
-            # Halos de farol cálido sobre los POIs jugables (guía visual nocturna) y el avatar
+        # 7. Halos de farol nocturnos y partículas ambientales según pesos del clima
+        oscuridad = self.ciclo.oscuridad()
+        if oscuridad > 0.28:
+            self.faroles.render(surface, cam_x, cam_y, oscuridad, self.timer)
+        aero = self.poi_registry.get("aeropuerto")
+        if aero:
+            self.luces_lugares.luces_aeropuerto(surface, aero["rect"], cam_x, cam_y, oscuridad, self.timer)
+
+        if night_mix > 0.02:
             if hasattr(self, "night_lamp_halo"):
+                halo_base = self.night_lamp_halo
                 for p_key in STORY_PLAYABLE_POIS:
                     p_info = self.poi_registry.get(p_key)
                     if not p_info:
@@ -3473,50 +4145,62 @@ class StoryMapScene(BaseState):
                     hy = pr.centery - cam_y
                     if -200 < hx < self.screen_w + 200 and -200 < hy < self.screen_h + 200:
                         is_done = self._is_poi_cleared(p_key, completed_games)
-                        halo = self.night_lamp_halo.copy()
                         pulse = 0.82 + 0.18 * math.sin(self.timer * 2.2 + pr.x * 0.01)
-                        halo.set_alpha(int((135 if is_done else 215) * pulse))
-                        surface.blit(halo, halo.get_rect(center=(hx, hy)))
+                        h_alpha = int(round((135 if is_done else 215) * pulse * night_mix))
+                        if h_alpha > 2:
+                            halo_base.set_alpha(h_alpha)
+                            surface.blit(halo_base, halo_base.get_rect(center=(hx, hy)))
+                            halo_base.set_alpha(255)
 
                 px = int(self.player_pos[0] - cam_x)
                 py = int(self.player_pos[1] - cam_y)
                 if -180 < px < self.screen_w + 180 and -180 < py < self.screen_h + 180:
-                    p_halo = self.night_lamp_halo.copy()
-                    p_halo.set_alpha(150)
-                    surface.blit(p_halo, p_halo.get_rect(center=(px, py)))
+                    p_alpha = int(round(150 * night_mix))
+                    if p_alpha > 2:
+                        halo_base.set_alpha(p_alpha)
+                        surface.blit(halo_base, halo_base.get_rect(center=(px, py)))
+                        halo_base.set_alpha(255)
 
-            # Luciérnagas suaves sobre el mapa nocturno
             for ff in getattr(self, "fireflies", []):
                 fx = int(ff["x"] + math.sin(self.timer * ff["speed"] + ff["phase"]) * ff["radius"] - cam_x)
                 fy = int(ff["y"] + math.cos(self.timer * ff["speed"] * 0.8 + ff["phase"]) * (ff["radius"] * 0.65) - cam_y)
                 if -20 < fx < self.screen_w + 20 and -20 < fy < self.screen_h + 20:
-                    glow_a = int(120 + 115 * (0.5 + 0.5 * math.sin(self.timer * 3.2 + ff["phase"])))
-                    self._sp_surf.fill((0, 0, 0, 0))
-                    pygame.draw.circle(self._sp_surf, (255, 240, 140, glow_a // 2), (8, 8), 6)
-                    pygame.draw.circle(self._sp_surf, (255, 250, 190, glow_a), (8, 8), 2)
-                    surface.blit(self._sp_surf, (fx - 8, fy - 8))
-        elif self.current_weather == "rain":
+                    glow_a = int(round((120 + 115 * (0.5 + 0.5 * math.sin(self.timer * 3.2 + ff["phase"]))) * night_mix))
+                    if glow_a > 4:
+                        self._sp_surf.fill((0, 0, 0, 0))
+                        pygame.draw.circle(self._sp_surf, (255, 240, 140, glow_a // 2), (8, 8), 6)
+                        pygame.draw.circle(self._sp_surf, (255, 250, 190, glow_a), (8, 8), 2)
+                        surface.blit(self._sp_surf, (fx - 8, fy - 8))
+
+        w_rain = max(0.0, min(1.0, float(weather_weights.get("rain", 0.0))))
+        if w_rain > 0.02:
             for drop in self.rain_drops:
                 dx1, dy1 = int(drop["x"]), int(drop["y"])
                 dx2 = dx1 - int(drop["length"] * 0.45)
                 dy2 = dy1 + int(drop["length"])
-                color = (205, 230, 255, drop["alpha"])
-                pygame.draw.line(surface, color, (dx1, dy1), (dx2, dy2), 1)
+                d_alpha = int(round(drop["alpha"] * w_rain))
+                if d_alpha > 2:
+                    color = (205, 230, 255, d_alpha)
+                    pygame.draw.line(surface, color, (dx1, dy1), (dx2, dy2), 1)
             for rip in getattr(self, "rain_ripples", []):
                 life = rip["life"]
                 rad = int(4 + 14 * life)
-                alpha_r = int(110 * (1.0 - life))
+                alpha_r = int(round(110 * (1.0 - life) * w_rain))
                 if alpha_r > 4:
                     rip_surf = pygame.Surface((rad * 2 + 4, rad + 4), pygame.SRCALPHA)
                     pygame.draw.ellipse(rip_surf, (215, 238, 255, alpha_r), (2, 2, rad * 2, rad), 1)
                     surface.blit(rip_surf, (int(rip["x"]) - rad - 2, int(rip["y"]) - rad // 2 - 2))
-        elif self.current_weather in ("day", "sunset"):
-            mote_col = (255, 224, 145) if self.current_weather == "sunset" else (255, 246, 195)
+        w_day = max(0.0, float(weather_weights.get("day", 0.0)))
+        w_sunset = max(0.0, float(weather_weights.get("sunset", 0.0)))
+        w_breeze = min(1.0, w_day + w_sunset)
+        if w_breeze > 0.02:
+            mote_col = (255, 224, 145) if w_sunset > w_day else (255, 246, 195)
             for mote in getattr(self, "breeze_motes", []):
-                alpha_m = int(75 + 55 * (0.5 + 0.5 * math.sin(self.timer * 2.0 + mote["phase"])))
-                self._sp_surf.fill((0, 0, 0, 0))
-                pygame.draw.circle(self._sp_surf, (*mote_col, alpha_m), (8, 8), mote["size"])
-                surface.blit(self._sp_surf, (int(mote["x"]) - 8, int(mote["y"]) - 8))
+                alpha_m = int(round((75 + 55 * (0.5 + 0.5 * math.sin(self.timer * 2.0 + mote["phase"]))) * w_breeze))
+                if alpha_m > 3:
+                    self._sp_surf.fill((0, 0, 0, 0))
+                    pygame.draw.circle(self._sp_surf, (*mote_col, alpha_m), (8, 8), mote["size"])
+                    surface.blit(self._sp_surf, (int(mote["x"]) - 8, int(mote["y"]) - 8))
 
         # 5C. Callout flotante de previsualización estilo Mario Wonder (antes de los HUDs superiores)
         self._render_level_preview_callout(surface, int(self.camera.x), int(self.camera.y))
@@ -3582,7 +4266,7 @@ class StoryMapScene(BaseState):
         if self.dibujarLetrero(surface):
             return
         alpha = min(255, int(255 * (self.toast_timer / 0.5))) if self.toast_timer < 0.5 else 255
-        font_toast = self.assets.cargarFuenteCuento(24)
+        font_toast = self.assets.cargarFuenteTitulo(22)
         txt_surf = font_toast.render(self.toast_msg, True, (76, 48, 102))
         bw = max(460, txt_surf.get_width() + 92)
         bh = 60
@@ -3710,6 +4394,22 @@ class StoryMapScene(BaseState):
         conContorno.blit(imagen, (grosor, grosor))
         return conContorno
 
+    def volverAzul(self, imagen: pygame.Surface, grados: float = 80.0) -> pygame.Surface:
+        import numpy as np
+        rgb = pygame.surfarray.array3d(imagen).astype(np.float32)
+        y = rgb @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+        i = rgb @ np.array([0.596, -0.274, -0.322], dtype=np.float32)
+        q = rgb @ np.array([0.211, -0.523, 0.312], dtype=np.float32)
+        angulo = math.radians(grados)
+        i2 = i * math.cos(angulo) - q * math.sin(angulo)
+        q2 = i * math.sin(angulo) + q * math.cos(angulo)
+        r = y + 0.956 * i2 + 0.621 * q2
+        g = y - 0.272 * i2 - 0.647 * q2
+        b = y - 1.106 * i2 + 1.703 * q2
+        azul = imagen.copy()
+        pygame.surfarray.pixels3d(azul)[...] = np.clip(np.stack([r, g, b], axis=2), 0, 255).astype(np.uint8)
+        return azul
+
     def ensancharVentanaMenu(self, ventana: pygame.Surface, extra: int) -> pygame.Surface:
         ancho, alto = ventana.get_size()
         resultado = pygame.Surface((ancho + extra, alto), pygame.SRCALPHA)
@@ -3745,6 +4445,7 @@ class StoryMapScene(BaseState):
             morado = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 268)
             rojo = pygame.transform.smoothscale(
                 self.assets.cargarSinFondo(os.path.join("Interfaz", "botonRojo.jpg"), 268), morado.get_size())
+            azul = self.volverAzul(morado)
             self.fuenteTituloMenu = self.assets.cargarFuenteTitulo(44)
             self.fuenteTextoMenu = self.assets.cargarFuenteCuento(22)
             self.fuenteEstadoMenu = self.assets.cargarFuenteCuento(17)
@@ -3770,7 +4471,7 @@ class StoryMapScene(BaseState):
                 fuenteBoton = self.assets.cargarFuenteTitulo(tam)
             for boton, texto, y in botones:
                 versiones = []
-                for fondo, contorno in ((morado, (70, 30, 110)), (rojo, (120, 26, 34))):
+                for fondo, contorno in ((azul, (28, 58, 120)), (rojo, (120, 26, 34))):
                     imagen = fondo.copy()
                     letras = self.textoConContorno(fuenteBoton, texto, (255, 248, 236), contorno)
                     imagen.blit(letras, letras.get_rect(center=(imagen.get_width() // 2, imagen.get_height() // 2 - 3)))
@@ -4207,7 +4908,8 @@ class StoryMapScene(BaseState):
         if icon is not None:
             pill.blit(icon, icon.get_rect(center=(28, rect.height // 2)))
 
-        txt_surf = self.weather_font.render(label, True, txt_col)
+        etiqueta = f"{self.ciclo.reloj()}  {NOMBRE_FASE.get(self.current_weather, label).upper()}"
+        txt_surf = self.weather_font.render(etiqueta, True, txt_col)
         avail_w = rect.width - text_left - 14
         if txt_surf.get_width() > avail_w:
             sc = avail_w / float(max(1, txt_surf.get_width()))
