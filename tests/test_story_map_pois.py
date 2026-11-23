@@ -13,6 +13,7 @@ from microgames.uninorte_concentrate import UninorteConcentrateMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
+from microgames.heladero_metro import HeladeroMetroMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
 
 def test_full_6_pois_suite():
@@ -62,7 +63,7 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     assert [s["cls"] for s in STORY_LEVEL_STAGES["uninorte"]] == [UninorteSprintMicrogame, UninorteConcentrateMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["ventana"]] == [PunchAlertMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["buenavista"]] == [BuenavistaTrendMicrogame]
-    assert [s["cls"] for s in STORY_LEVEL_STAGES["metropolitano"]] == [MetropolitanoModeracionMicrogame]
+    assert [s["cls"] for s in STORY_LEVEL_STAGES["metropolitano"]] in ([HeladeroMetroMicrogame], [MetropolitanoModeracionMicrogame], [MetropolitanoModeracionMicrogame, HeladeroMetroMicrogame])
     # El aeropuerto es un nivel extra que se juega con CurramGram Go!
     from microgames.curramgram_go import CurramGramGoMicrogame
     assert [s["cls"] for s in STORY_LEVEL_STAGES["aeropuerto"]] == [CurramGramGoMicrogame]

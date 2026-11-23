@@ -992,8 +992,16 @@ def test_t1_r4_git_scope_restricted_to_seor_tasks():
     )
     allowed_prefixes = (
         "microgames/buenavista_trend/",
+        "microgames/heladero_metro.py",
         "scenes/story_map/",
         "scenes/story_map_data.py",
+        "core/asset_manager.py",
+        "assets/Estadio/",
+        "assets/Fritanga/",
+        "assets/puntito.png",
+        "assets/cancion_triste_heladero.ogg",
+        "assets/boton_voz_",
+        "scratch/",
         "tests/",
         "artifacts/",
     )

@@ -82,6 +82,42 @@ dialogosHinchas = [
         "sabor": "Compadre, yo le pedí de {a}...",
         "espera": "Compadre, me voy, que no alcanzo a entrar",
     },
+    {
+        "una": ["¡Veci, una de {a}, porfa!", "¡Ay, veci, me regala una bolita de {a} bien fría?"],
+        "dos": ["¡Veci, una de {a} y otra de {b}!", "Una de {a} y una de {b}, veci, pa' compartir"],
+        "iguales": ["¡Veci, dos de {a}, que tengo tremenda sed!"],
+        "perfecto": ["¡Ay, qué delicia, veci! ¡Le quedó espectacular!",
+                     "¡El mejor raspao helado de Barranquilla, veci!",
+                     "¡Con esto revivo del calor, gracias veci!"],
+        "bien": ["¡Gracias, veci!", "¡Qué rico, veci!"],
+        "mal": ["Ay, veci... pero me echó fue muy poquito..."],
+        "sabor": "Veci, yo le pedí de {a}...",
+        "espera": "¡Veci, me voy que me coge la tarde pa' la clase!",
+    },
+    {
+        "una": ["¡Erda, cuadro, tírame una de {a}!", "¡Tírate una bola de {a}, cuadro, pa' cantar los goles!"],
+        "dos": ["¡Una de {a} y una de {b}, cuadro!", "¡Póngale {a} y {b}, que hoy gana papá Junior!"],
+        "iguales": ["¡Doble de {a}, cuadro, que hoy juega el Tiburón!"],
+        "perfecto": ["¡Erda, cuadro, qué golazo de helado!",
+                     "¡Pa' que lo celebre toda la hinchada rojiblanca!",
+                     "¡Tú eres el goleador del estadio, cuadro!"],
+        "bien": ["¡Vale, cuadro, todo bien!", "¡Firme ahí, cuadro!"],
+        "mal": ["No joda, cuadro, me escatimaste el helado"],
+        "sabor": "Cuadro, yo te pedí de {a}, pilas ahí...",
+        "espera": "¡No joda, ya salió el Junior a la cancha, me fui!",
+    },
+    {
+        "una": ["Maestro, una de {a} bien puesta", "Ajá, maestro, regáleme una bolita de {a}"],
+        "dos": ["Maestro, una de {a} y otra de {b}", "Póngame una de {a} y una de {b}, maestro"],
+        "iguales": ["Dos de {a}, maestro, que el sol de La Arenosa está picante"],
+        "perfecto": ["¡Carajo, maestro, qué elegancia de raspao!",
+                     "¡Esto sí es tradición caribeña de la buena!",
+                     "¡Con este frescor aguanto hasta el alargue, maestro!"],
+        "bien": ["Muchas gracias, maestro", "Firme y elegante, maestro"],
+        "mal": ["Carajo, maestro, ¿y esa bolita tan flaca?"],
+        "sabor": "Maestro, la bola era de {a}...",
+        "espera": "¡Me voy, maestro, que me están guardando puesto en sombra!",
+    },
 ]
 finalCompanero = [
     "¿Tú eres el del colegio? ¡Ajá, mano, cuánto tiempo!",
@@ -93,7 +129,15 @@ escenaIntro = [("", "Hoy se cumplen diez años vendiendo helado aquí, afuera de
                ("", "Diez años de sol, de partidos del Junior... y de gente que se va contenta."),
                ("", "¡Heladooo! ¡Helado de coco y de corozo, pa'l calor del Metro!")]
 ordenCombos = [[0], [1], [0, 0], [1, 1], [0, 1]]
-archivosClientes = ["clienteNino.jpg", "clienteSenora.jpg", "clienteJoven.jpg", "clienteAbuelo.jpg"]
+archivosClientes = [
+    "clienteNino.jpg",
+    "clienteSenora.jpg",
+    "clienteJoven.jpg",
+    "clienteAbuelo.jpg",
+    "clienteMuchacha.jpg",
+    "clienteHincha.jpg",
+    "clienteCosteno.jpg",
+]
 escenaReconoce = [("Tú, el heladero", "Espérate... ¿ese no es Andrés Felipe, el del colegio?"),
                   ("Tú, el heladero", "¡El mismo de las fotos en Miami que me sale en el celular!")]
 escenaConfesion = [("Andrés Felipe", "¿Tú eres el del colegio? ¡Ajá, mano, cuánto tiempo!"),
@@ -233,7 +277,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
 
         self.cliente = None
         self.esperaCliente = 1.2
-        self.ordenClientes = [0, 1, 2, 3, 1, 0, 2]
+        self.ordenClientes = [0, 1, 2, 3, 4, 5, 6]
         self.cuantosClientes = 0
         self.llegaCompanero = 105.0
 
@@ -476,11 +520,29 @@ class HeladeroMetroMicrogame(BaseMicrogame):
 
     def igualarTamanos(self) -> None:
         if self.pedidosClientes is not None and self.hinchas is not None:
+            num_h = len(self.hinchas["espera"])
             for tipo, figuras in enumerate(self.pedidosClientes):
-                modelo = self.hinchas["espera"][tipo % 4]
-                self.pedidosClientes[tipo] = [self.igualarA(f, modelo) for f in figuras]
+                idx = tipo if tipo < num_h else (tipo % num_h)
+                modelo = self.hinchas["espera"][idx]
+                target_h = modelo.get_height()
+                normalizadas = []
+                for f in figuras:
+                    fh = f.get_height()
+                    if fh > 0 and fh != target_h:
+                        escala = target_h / float(fh)
+                        nuevo_w = max(1, int(round(f.get_width() * escala)))
+                        normalizadas.append(pygame.transform.smoothscale(f, (nuevo_w, target_h)))
+                    else:
+                        normalizadas.append(f)
+                self.pedidosClientes[tipo] = normalizadas
         if self.companeroHelado is not None and self.companeroImg is not None:
-            self.companeroHelado = self.igualarA(self.companeroHelado, self.companeroImg["cliente"])
+            modelo = self.companeroImg["cliente"]
+            target_h = modelo.get_height()
+            fh = self.companeroHelado.get_height()
+            if fh > 0 and fh != target_h:
+                escala = target_h / float(fh)
+                nuevo_w = max(1, int(round(self.companeroHelado.get_width() * escala)))
+                self.companeroHelado = pygame.transform.smoothscale(self.companeroHelado, (nuevo_w, target_h))
 
     def cargarCruda(self, archivo: str, ancho: int):
         ruta = os.path.join(carpetaHelado, archivo)
@@ -585,6 +647,24 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         if hoja is not None:
             piezas = [self.aAncho(self.recortarFigura(p), 420) for p in self.separarCrudo(hoja, 4, 2, 0.03)]
             self.hinchas = {"espera": piezas[:4], "feliz": piezas[4:]}
+
+        extras = [
+            ("clienteMuchacha_espera.png", "clienteMuchacha_feliz.png"),
+            ("clienteHincha_espera.png", "clienteHincha_feliz.png"),
+            ("clienteCosteno_espera.png", "clienteCosteno_feliz.png"),
+        ]
+        if self.hinchas is not None:
+            for f_esp, f_fel in extras:
+                esp_img = self.cargarOpcional(f_esp, 600)
+                fel_img = self.cargarOpcional(f_fel, 600)
+                if esp_img is not None:
+                    caja = esp_img.get_bounding_rect(min_alpha=100)
+                    esp_crop = self.aAncho(esp_img.subsurface(caja).copy(), 420)
+                    self.hinchas["espera"].append(esp_crop)
+                if fel_img is not None:
+                    caja = fel_img.get_bounding_rect(min_alpha=100)
+                    fel_crop = self.aAncho(fel_img.subsurface(caja).copy(), 420)
+                    self.hinchas["feliz"].append(fel_crop)
 
         self.companeroImg = None
         verde = self.cargarVerde("companero.jpg")
@@ -783,7 +863,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         self.mensajes.append({"texto": texto, "x": x, "y": y, "vida": 1.6, "color": color, "borde": borde})
 
     def nuevoCliente(self) -> None:
-        esCompanero = self.tiempoJuego >= self.llegaCompanero
+        esCompanero = self.tiempoJuego >= self.llegaCompanero or self.cuantosClientes >= len(self.ordenClientes)
         if esCompanero:
             pedido = [0, 1]
             frase = "Una de coco y una de corozo, como en el recreo del colegio"
@@ -966,12 +1046,24 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         self.cambiarAnimo(1)
         self.destaqueAnimo = {"t": 0.0, "sube": True, "indice": self.animo - 1}
         self.pensamiento = {"lineas": ["¡Eso! A lo mío.", "Mi trabajo también vale."], "t": 0.0, "dur": 2.2}
+        self.detenerLagrimas()
+        self.restaurarMusicaAlegre()
 
     def empezarLagrimas(self) -> None:
         self.lagrimas = {"t": 0.0, "dur": 7.5}
         self.gotas = []
         for _ in range(9):
             self.gotas.append(self.nuevaGota(random.uniform(-0.6, 0.0)))
+        if hasattr(self.audio, "play_bgm"):
+            self.audio.play_bgm("cancion_triste_heladero.ogg", volume_scale=0.55)
+
+    def detenerLagrimas(self) -> None:
+        self.lagrimas = None
+        self.gotas = []
+
+    def restaurarMusicaAlegre(self) -> None:
+        if getattr(self.audio, "current_track", None) == "cancion_triste_heladero.ogg":
+            self.ponerMusica()
 
     def nuevaGota(self, retraso: float = 0.0) -> dict:
         lado = random.random()
@@ -1002,6 +1094,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         if self.lagrimas["t"] >= self.lagrimas["dur"]:
             self.lagrimas = None
             self.gotas = []
+            self.restaurarMusicaAlegre()
 
     def dibujarLagrimas(self, surface: pygame.Surface) -> None:
         if self.lagrimas is None:
@@ -1674,15 +1767,14 @@ class HeladeroMetroMicrogame(BaseMicrogame):
     def dibujarConoEnCarrito(self, surface: pygame.Surface) -> None:
         if self.arrastrandoCono or self.conoViaje is not None:
             return
-        if self.carrito is None:
-            x, y = self.puntoCono
-            if self.utensilios is not None:
-                cono = self.utensilios["cono"]
-                surface.blit(cono, cono.get_rect(midtop=(x, y - 6)))
-            else:
-                puntos = [(x - 46, y), (x + 46, y), (x, y + 150)]
-                pygame.draw.polygon(surface, (222, 168, 96), puntos)
-                pygame.draw.polygon(surface, (96, 56, 30), puntos, 4)
+        x, y = self.puntoCono
+        if self.utensilios is not None:
+            cono = self.utensilios["cono"]
+            surface.blit(cono, cono.get_rect(midtop=(x, y - 6)))
+        else:
+            puntos = [(x - 46, y), (x + 46, y), (x, y + 150)]
+            pygame.draw.polygon(surface, (222, 168, 96), puntos)
+            pygame.draw.polygon(surface, (96, 56, 30), puntos, 4)
         for i, bola in enumerate(self.cono):
             self.dibujarBola(surface, bola, self.puntoBolaEnCono(i), 48)
 
@@ -1789,19 +1881,21 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         if c["esCompanero"] and self.companeroImg is not None:
             modelo = self.companeroImg["cliente"]
         elif self.hinchas is not None and c["tipo"] >= 0:
-            modelo = self.hinchas["espera"][c["tipo"] % 4]
+            num_h = len(self.hinchas["espera"])
+            idx = c["tipo"] if c["tipo"] < num_h else (c["tipo"] % num_h)
+            modelo = self.hinchas["espera"][idx]
         if c["esCompanero"] and self.companeroImg is not None:
             imagen = self.companeroImg["cliente"]
             if feliz and servido and self.companeroHelado is not None:
                 imagen = self.companeroHelado
         elif self.hinchas is not None and c["tipo"] >= 0:
-            imagen = self.hinchas["feliz" if feliz else "espera"][c["tipo"] % 4]
-            if feliz and servido and self.pedidosClientes is not None and servido in ordenCombos:
-                imagen = self.pedidosClientes[c["tipo"] % 4][ordenCombos.index(servido)]
+            num_h = len(self.hinchas["espera"])
+            idx = c["tipo"] if c["tipo"] < num_h else (c["tipo"] % num_h)
+            imagen = self.hinchas["feliz" if feliz else "espera"][idx]
+            if feliz and servido and self.pedidosClientes is not None and c["tipo"] < len(self.pedidosClientes) and servido in ordenCombos:
+                imagen = self.pedidosClientes[c["tipo"]][ordenCombos.index(servido)]
         if imagen is not None:
             caja = imagen.get_rect(midbottom=(int(x), self.screen_h + 2))
-            if modelo is not None and imagen is not modelo and imagen.get_height() > modelo.get_height():
-                caja.top = self.screen_h + 2 - modelo.get_height()
             surface.blit(imagen, caja)
             arriba = caja.top
         else:
@@ -2225,3 +2319,32 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             texto = self.textoBorde(self.fuenteAviso, m["texto"], m["color"], m["borde"])
             texto.set_alpha(int(255 * min(1.0, m["vida"] / 0.4)))
             surface.blit(texto, texto.get_rect(center=(int(m["x"]), int(m["y"] - subida))))
+
+
+if __name__ == "__main__":
+    import os
+    import sys
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    for driver in ("SDL_AUDIODRIVER", "SDL_VIDEODRIVER"):
+        if os.environ.get(driver) == "dummy":
+            del os.environ[driver]
+    pygame.init()
+    screen = pygame.display.set_mode((1920, 1080))
+    pygame.display.set_caption("BarranquillaWare · El Heladero del Metro")
+    clock = pygame.time.Clock()
+    from core.asset_manager import AssetManager
+    from core.audio_manager import AudioManager
+    assets = AssetManager()
+    audio = AudioManager(assets.base_dir)
+    game = HeladeroMetroMicrogame(assets, audio=audio)
+    running = True
+    while running:
+        dt = clock.tick(60) / 1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                running = False
+            game.handle_event(event)
+        game.update(dt)
+        game.render(screen)
+        pygame.display.flip()
+    pygame.quit()

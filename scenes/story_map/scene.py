@@ -49,6 +49,7 @@ from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
+from microgames.heladero_metro import HeladeroMetroMicrogame
 
 MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "mallorquin": MallorquinPhotoMicrogame,
@@ -61,6 +62,9 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "metropolitano": MetropolitanoModeracionMicrogame,
     "metropolitano_moderacion": MetropolitanoModeracionMicrogame,
     "metropolitano_penalty": MetropolitanoPenaltyMicrogame,
+    "heladero_metro": HeladeroMetroMicrogame,
+    "estadio": HeladeroMetroMicrogame,
+    "estadio_heladero": HeladeroMetroMicrogame,
     "aeropuerto": __import__("microgames.curramgram_go", fromlist=["CurramGramGoMicrogame"]).CurramGramGoMicrogame,
     "punch_alert": PunchAlertMicrogame,
     "aeropuerto_aterrizaje": AeropuertoAterrizajeMicrogame,
@@ -815,11 +819,11 @@ class StoryMapScene(BaseState):
             "metropolitano": {
                 "title": "ESTADIO METROPOLITANO",
                 "district": "NIVEL 4 • DISTRITO DEPORTIVO",
-                "microgame_id": "metropolitano_moderacion",
-                "microgame_title": "¡MODERA LA BARRA BRAVA!",
+                "microgame_id": "heladero_metro",
+                "microgame_title": "EL HELADERO DEL METRO",
                 "desc": [
-                    "Cuida el ambiente de la tribuna en la pantalla gigante del estadio.",
-                    "Usa FLECHAS y ESPACIO para moderar a los hinchas tóxicos con empatía."
+                    "Vende raspao y helado a la hinchada juniorista afuera del estadio.",
+                    "Prepara los conos de coco y corozo con agilidad y atiende a cada cliente."
                 ],
                 "rect": self.metropolitano_rect
             },
@@ -4762,7 +4766,7 @@ class StoryMapScene(BaseState):
         concise_goals = {
             "uninorte": "Cruza el pasillo sin celular y estudia en calma.",
             "buenavista": "Sigue el ritmo del trend sin buscar likes.",
-            "metropolitano": "Modera el chat en vivo con respeto y empatía.",
+            "metropolitano": "Vende raspao y helado a la hinchada juniorista.",
             "aeropuerto": "Limpia el spam y las fake news antes de despegar.",
             "aleta": "Sirve los fritos en calma sin responder al trol.",
             "malecon": "Traza la vía a mano y disfruta la brisa del río.",

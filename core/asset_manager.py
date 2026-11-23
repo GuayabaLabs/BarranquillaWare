@@ -342,11 +342,27 @@ class AssetManager:
 
     def get_voice_button_frames(self, target_size: int = 58) -> List[pygame.Surface]:
         """
-        Genera los 2 frames acuarela para el botón toggle de Voces [ON, OFF]
-        en formato 1:1 armonizado con los botones de Música y SFX.
+        Carga los 2 frames acuarela ilustrados para el botón toggle de Voces [ON, OFF]
+        desde assets/boton_voz_on.png y assets/boton_voz_off.png, armonizados con los sellos
+        de cera de la UI. Mantiene fallback procedural si no existieran los archivos en disco.
         """
         if target_size in self._voice_cache:
             return self._voice_cache[target_size]
+
+        on_path = os.path.join(self.base_dir, "boton_voz_on.png")
+        off_path = os.path.join(self.base_dir, "boton_voz_off.png")
+        if os.path.exists(on_path) and os.path.exists(off_path):
+            try:
+                s_on = pygame.image.load(on_path).convert_alpha()
+                s_off = pygame.image.load(off_path).convert_alpha()
+                frames = [
+                    pygame.transform.smoothscale(s_on, (target_size, target_size)),
+                    pygame.transform.smoothscale(s_off, (target_size, target_size)),
+                ]
+                self._voice_cache[target_size] = frames
+                return frames
+            except Exception:
+                pass
 
         hi = max(128, target_size * 2)
         frames: List[pygame.Surface] = []
