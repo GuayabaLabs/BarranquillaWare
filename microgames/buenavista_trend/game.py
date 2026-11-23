@@ -794,6 +794,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
     def update(self, dt: float) -> None:
         """Ciclo principal de estados (INTRO -> PLAY -> OUTRO) con victoria de supervivencia a los 30s."""
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            super().update(dt)
+            return
         if hasattr(self.audio, "update"):
             self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:

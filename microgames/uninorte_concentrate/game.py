@@ -487,6 +487,9 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         Sobreescribe el ciclo de actualización para que el juego dure exactamente los 25 segundos
         completos, evaluando victoria o derrota según si la tarea llegó al 100%.
         """
+        if self.paloma_intro is not None and self.paloma_intro.active:
+            super().update(dt)
+            return
         if hasattr(self.audio, "update"):
             self.audio.update(dt)
         if self.phase == self.PHASE_INTRO:
