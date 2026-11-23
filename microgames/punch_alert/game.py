@@ -1869,10 +1869,8 @@ class PunchAlertMicrogame(BaseMicrogame):
                     else:
                         self._play_sfx(self.snd_safe)
                         self.combo_streak += 1
-                        recupera = self.strikes > 0
-                        self.strikes = max(0, self.strikes - 1)
                         self.popups.append({
-                            "text": "¡ESO, MI LLAVE! +1 VIDA" if recupera else "¡A TU POST!",
+                            "text": "¡A TU POST!",
                             "x": float(self.lane_center_x),
                             "y": float(self.hit_zone_y_max - 20),
                             "timer": 0.55,

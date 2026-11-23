@@ -1058,6 +1058,9 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
         self.combo += 1
         self.max_combo = max(self.max_combo, self.combo)
+        if self.lives < self.max_lives and self.combo % 5 == 0:
+            self.lives += 1
+            judgment = "¡+1 CORAZÓN!"
         self.yellow_glow_alpha = 95.0
         self.last_hit_lane = note.lane
         self.lane_hit_flash[note.lane] = 0.22
