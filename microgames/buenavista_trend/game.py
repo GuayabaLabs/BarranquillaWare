@@ -80,7 +80,11 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self._music_track_path: Optional[str] = None
         self._music_preloaded: bool = False
         self._music_started_own_track: bool = False
-        self.music_track_name: str = "en_barranquilla_me_quedo_piano.ogg"
+        self.music_track_name: str = (
+            "en_barranquilla_me_quedo_piano.ogg"
+            if os.path.exists(os.path.join("assets", "en_barranquilla_me_quedo_piano.ogg"))
+            else "imitadora_ost_piano_tiles_microjuego.ogg"
+        )
         self.spritesheet_name: str = "spritesheet_teclas_costenas_piano.png"
 
         # Escala de diseño respecto al lienzo virtual 1920x1080
