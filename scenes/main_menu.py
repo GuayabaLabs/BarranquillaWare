@@ -362,6 +362,19 @@ class MainMenuScene(BaseState):
             return
 
         self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
+        if self._mode_select_scene is None:
+            from scenes.loading_scene import LoadingScene
+
+            def _build_mode():
+                sc = self.mode_select_scene
+                sc.sync_audio_buttons()
+                return sc
+
+            self.state_machine.change_state(
+                LoadingScene(_build_mode, message="Cargando selección de modo...")
+            )
+            return
+
         self.mode_select_scene.sync_audio_buttons()
         trans_to_mode = SlideTransitionState(
             from_scene=self,
@@ -376,6 +389,19 @@ class MainMenuScene(BaseState):
             return
 
         self.audio.play_click()
+        if self._load_game_scene is None:
+            from scenes.loading_scene import LoadingScene
+
+            def _build_load():
+                sc = self.load_game_scene
+                sc.enter()
+                return sc
+
+            self.state_machine.change_state(
+                LoadingScene(_build_load, message="Cargando partidas guardadas...")
+            )
+            return
+
         self.load_game_scene.enter()
         trans_to_load = SlideTransitionState(
             from_scene=self,
