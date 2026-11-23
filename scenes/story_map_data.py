@@ -9,10 +9,12 @@ from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
+from microgames.curramgram_go import CurramGramGoMicrogame
 
 # Progresión de los 5 Niveles Principales del Modo Historia
 STORY_CAMPAIGN_ORDER = ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
-STORY_SECRET_POIS = ["malecon"]
+# Niveles extra jugables en el mapa (no cuentan para la campaña de 5 niveles)
+STORY_SECRET_POIS = ["malecon", "aeropuerto"]
 STORY_PLAYABLE_POIS = STORY_CAMPAIGN_ORDER + STORY_SECRET_POIS
 
 # Secuencia de desafíos encadenados por cada Nivel de la Historia
@@ -55,7 +57,14 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
             "difficulty": 3,
         }
     ],
-    "aeropuerto": [],
+    "aeropuerto": [
+        {
+            "id": "curramgram_go",
+            "title": "CURRAMGRAM GO! · LLEGA A LA PUERTA 7",
+            "cls": CurramGramGoMicrogame,
+            "difficulty": 4,
+        }
+    ],
     "aleta": [
         {
             "id": "fritanga_84",
@@ -99,7 +108,7 @@ STORY_LEVEL_PREVIEW_META: Dict[str, Dict[str, Any]] = {
     "aeropuerto": {
         "difficulty": 4,
         "max_difficulty": 5,
-        "preview_asset": "fondo_box_microjuego.png",
+        "preview_asset": "curramgram/fondo_pared_terminal.png",
         "crop_anchor": "center",
         "callout_title": "AEROPUERTO CORTISSOZ",
     },
@@ -265,26 +274,28 @@ PALOMA_STORY_DIALOGS: Dict[str, Dict[str, Any]] = {
         "speaker": "PALOMA DE CURRAMBA",
         "pre_pages": [
             [
-                "¡Llegamos a la pista del Aeropuerto Ernesto Cortissoz!",
-                "Antes de despegar, el celular quiere llenarte la maleta de cadenas falsas, spam",
-                "y un montón de urgencias ficticias que solo te cargan de angustia.",
+                "¡Ajá, llegamos al Aeropuerto Ernesto Cortissoz!",
+                "Cami es creadora de contenido y tiene que llegar a la puerta 7",
+                "antes de su vuelo, junta sellos por el camino y no pierdas el tiempo.",
             ],
             [
-                "Dale un buen golpe al spam y a las fake news para viajar con la mente despejada.",
-                "¡Limpia la pantalla y preparemos el vuelo triunfal por toda Curramba!"
+                "En la terminal verá cosas que parecen virales: un chisme, un accidente,",
+                "una foto privada... ¡Ojo! No todo lo que se ve merece un post.",
+                "Confirma, protege los datos de los demás y, si algo está mal, avísale a la Policía.",
             ]
         ],
         "post_win_pages": [
             [
-                "¡Pista limpia, cielo despejado y corazón en paz! Despachaste todo el spam.",
-                "Antes de despedirnos nos falta una parada bien sabrosa:",
-                "¡vamos a la Aleta del Tiburón a comernos una arepa de huevo!"
+                "¡Abordaste a tiempo y sin exponer a nadie! Así se usan las redes.",
+                "Verificar antes de publicar y respetar la privacidad ajena",
+                "también es ser buen ciudadano en Curramba."
             ]
         ],
         "post_lose_pages": [
             [
-                "¡Erda, se nos colaron demasiadas ventanas emergentes antes de abordar!",
-                "Cierra ese ruido, respira fresco y despejemos la pista juntos otra vez."
+                "¡Erda, se nos fue el vuelo entre chismes y fotos!",
+                "Recuerda: primero confirma y respeta, después publica.",
+                "Respira y volvamos a intentarlo por la terminal."
             ]
         ],
         "voice_clip_prefix": "paloma_aeropuerto"

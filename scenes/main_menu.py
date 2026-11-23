@@ -71,6 +71,8 @@ class MainMenuScene(BaseState):
 
         self.assets = AssetManager.get_instance()
         self.audio = AudioManager.get_instance()
+        # Prepara en segundo plano la interfaz común de los minijuegos (sin congelar el menú)
+        self.assets.precargarInterfaz(en_segundo_plano=True)
 
         # 1. Fondo Full HD
         raw_bg = self.assets.load_surface("fondo_main_menu.png", has_alpha=False)

@@ -11,6 +11,10 @@ from core.audio_manager import AudioManager
 from core.settings import SettingsManager, CHARACTER_DISPLAY_NAMES
 from core.map_settings import MapSettingsState
 from core.microgame import BaseMicrogame
+from scenes.story_map.ciclo_dia import CicloDia, HORA_DE_CLIMA, HORAS_POR_NIVEL, NOMBRE_FASE
+from scenes.story_map.rio import RioAnimado
+from scenes.story_map.luces_lugares import LucesLugares
+from scenes.story_map.faroles import Faroles, _halo as halo_aditivo
 from core.camera import Camera2D
 from ui.button import UIButton
 from ui.focus_nav import FocusNavigator
@@ -57,7 +61,7 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "metropolitano": MetropolitanoModeracionMicrogame,
     "metropolitano_moderacion": MetropolitanoModeracionMicrogame,
     "metropolitano_penalty": MetropolitanoPenaltyMicrogame,
-    "aeropuerto": PunchAlertMicrogame,
+    "aeropuerto": __import__("microgames.curramgram_go", fromlist=["CurramGramGoMicrogame"]).CurramGramGoMicrogame,
     "punch_alert": PunchAlertMicrogame,
     "aeropuerto_aterrizaje": AeropuertoAterrizajeMicrogame,
     "fritanga_84": Fritanga84Microgame,
@@ -137,15 +141,31 @@ class StoryMapScene(BaseState):
         # 1. Ensamblar mapa mundial base y estampar POIs
         self._build_world_map()
 
-        # 2. Inicializar sistema de Clima y Atmósfera (Día, Atardecer, Noche, Lluvia)
+        # 2. Paso del tiempo (reloj del mapa) y clima. El clima día/atardecer/noche sale de la hora;
+        #    la lluvia es aparte. Ver scenes/story_map/ciclo_dia.py.
         self.weather_modes = ["day", "sunset", "night", "rain"]
-        saved_weather = str(self.settings.get_story_progress().get("weather", "day")).lower()
-        self.current_weather = saved_weather if saved_weather in self.weather_modes else "day"
+        progreso = self.settings.get_story_progress()
+        saved_weather = str(progreso.get("weather", "day")).lower()
+        if saved_weather not in self.weather_modes:
+            saved_weather = "day"
+        hora_guardada = progreso.get("hora_mapa")
+        if isinstance(hora_guardada, (int, float)):
+            self.ciclo = CicloDia(float(hora_guardada), lluvia=saved_weather == "rain")
+        else:
+            self.ciclo = CicloDia(HORA_DE_CLIMA.get(saved_weather, 11.0) if saved_weather != "day" else 9.0,
+                                  lluvia=saved_weather == "rain")
         self.night_mix: float = 1.0 if self.current_weather == "night" else 0.0
         self._weather_weights: Dict[str, float] = {
             m: (1.0 if m == self.current_weather else 0.0) for m in self.weather_modes
         }
         self._init_weather_shaders()
+        # Río y ciénaga animados (se preparan en segundo plano) y faroles que alumbran de noche.
+        self.rio = RioAnimado(self.world_map, en_segundo_plano=True)
+        self.faroles = Faroles()
+        # Halos de luz precalculados en 12 intensidades (teñir cada frame es caro)
+        self.halos_cami = [halo_aditivo(300, 210, (190, 160, 110), 0.85 * (i + 1) / 12, 1.6) for i in range(12)]
+        # Lugares emblemáticos iluminados de noche (silueta de cada edificio) y luces del aeropuerto
+        self.luces_lugares = LucesLugares(self._siluetas_lugares())
 
         # 3. Inicializar sistema de Nubes Algodonosas Caribeñas Chiquitas (Cozy Clouds)
         self._init_cozy_clouds()
@@ -318,6 +338,11 @@ class StoryMapScene(BaseState):
                 "completada": malecon_done,
             },
         ]
+        misiones.append({
+            "id": "aeropuerto", "titulo": "Aeropuerto Cortissoz",
+            "desc": "Llega a la puerta 7 sin publicar chismes ni fotos privadas.",
+            "completada": "aeropuerto" in unlocked_locations or "curramgram_go" in completed_microgames,
+        })
         self.side_drawer.ponerMisiones(misiones)
 
         # Mensajes narrativos y alertas de redes
@@ -676,6 +701,16 @@ class StoryMapScene(BaseState):
         ("aeropuerto", "aeropuerto_ernesto_cortissoz_mapa.png", 2611, 1311, 540, 353, (20, 30, 50, 48), (10, 14)),
     ]
 
+    def _siluetas_lugares(self) -> Dict[str, Tuple[pygame.Surface, pygame.Rect]]:
+        """Sprite y posición de cada lugar emblemático, tal como está estampado en el mapa."""
+        siluetas = {}
+        for key, asset, dx, dy, dw, dh, scol, soff in self.POI_SPECS:
+            try:
+                siluetas[key] = self._prepare_poi_transform(asset, key, dx, dy, dw)
+            except Exception:
+                pass
+        return siluetas
+
     def _stamp_all_pois(self) -> None:
         """Estampa todos los POIs configurables sobre el mapa mundial actual."""
         for key, asset, dx, dy, dw, dh, scol, soff in self.POI_SPECS:
@@ -814,11 +849,11 @@ class StoryMapScene(BaseState):
             "aeropuerto": {
                 "title": "AEROPUERTO CORTISSOZ",
                 "district": "DISTRITO AÉREO",
-                "microgame_id": "",
-                "microgame_title": "",
+                "microgame_id": "curramgram_go",
+                "microgame_title": "CURRAMGRAM GO!",
                 "desc": [
-                    "Antes de despegar, limpia tu pantalla de ventanas emergentes y spam.",
-                    "Viaja ligero de equipaje digital para cerrar tu aventura en calma."
+                    "Llega a la puerta 7 junto a Cami sin exponer a nadie en redes.",
+                    "Confirma antes de publicar y respeta la privacidad de los demás."
                 ],
                 "rect": self.aeropuerto_rect
             }
@@ -1680,6 +1715,8 @@ class StoryMapScene(BaseState):
             kwargs["character_id"] = self.character_id
 
         microgame = microgame_cls(**kwargs)
+        if getattr(microgame, "paloma_intro", None) is not None:
+            microgame.paloma_intro = None
         if stages and idx + 1 < len(stages):
             # Ronda intermedia del nivel: mostrar resultado breve ("¡Ganaste!" / "¡Perdiste!") y pasar rápido a la siguiente ronda
             microgame.show_outro_banner = True
@@ -1764,6 +1801,8 @@ class StoryMapScene(BaseState):
                 unlocked.append(self.active_poi)
 
             self.current_level_stage_idx = 0
+            # Cada nivel completado hace avanzar el tiempo del mapa (con animación corta).
+            self.ciclo.adelantar(HORAS_POR_NIVEL)
             new_score = int(progress.get("high_score", 0)) + 100
             self.settings.update_story_progress(
                 has_active_save=True,
@@ -1772,6 +1811,7 @@ class StoryMapScene(BaseState):
                 unlocked_locations=unlocked,
                 high_score=new_score,
                 weather=self.current_weather,
+                hora_mapa=round(self.ciclo.hora_destino(), 3),
                 save_source="auto",
             )
             metrics = self._sync_social_hud()
@@ -1917,8 +1957,22 @@ class StoryMapScene(BaseState):
         if hasattr(self, "audio") and hasattr(self.audio, "play_hover"):
             self.audio.play_hover()
 
+    @property
+    def current_weather(self) -> str:
+        """'day', 'sunset' o 'night' según la hora del mapa, o 'rain' si llueve."""
+        ciclo = self.__dict__.get("ciclo")
+        return ciclo.clima() if ciclo is not None else self.__dict__.get("_clima_fijo", "day")
+
+    @current_weather.setter
+    def current_weather(self, valor: str) -> None:
+        ciclo = self.__dict__.get("ciclo")
+        if ciclo is not None:
+            ciclo.poner_clima(valor)
+        else:
+            self.__dict__["_clima_fijo"] = valor
+
     def set_weather(self, weather_name: str, instant: bool = True) -> None:
-        """Cambia el clima actual del mapa ('day', 'sunset', 'night', 'rain')."""
+        """Cambia el clima ('day', 'sunset', 'night' llevan el reloj a esa hora; 'rain' activa lluvia)."""
         if weather_name in self.weather_modes:
             self.current_weather = weather_name
             if instant:
@@ -1945,6 +1999,7 @@ class StoryMapScene(BaseState):
             "last_camera_x": float(self.camera.x),
             "last_camera_y": float(self.camera.y),
             "weather": self.current_weather,
+            "hora_mapa": round(self.ciclo.hora_destino(), 3),
             "save_source": source,
         }
         if metrics:
@@ -3016,6 +3071,10 @@ class StoryMapScene(BaseState):
         self.timer += dt
         if hasattr(self.audio, "update"):
             self.audio.update(dt)
+        # Reloj del mapa y río: siempre corren, también detrás de diálogos y modales
+        # (así se ve anochecer mientras la Paloma felicita al pasar un nivel).
+        self.ciclo.update(dt)
+        self.rio.update(dt)
         if self.toast_timer > 0.0:
             self.toast_timer = max(0.0, self.toast_timer - dt)
             if self.toast_timer == 0.0:
@@ -3263,7 +3322,7 @@ class StoryMapScene(BaseState):
                 cloud["x"] = -350.0
 
         # Partículas ambientales según los pesos interpolados del clima activo
-        if self._weather_weights.get("rain", 0.0) > 0.02:
+        if self._weather_weights.get("rain", 0.0) > 0.02 or self.ciclo.lluvia:
             for drop in self.rain_drops:
                 drop["y"] += drop["speed"] * dt
                 drop["x"] -= 160.0 * dt
@@ -3896,6 +3955,8 @@ class StoryMapScene(BaseState):
         weather_weights = getattr(self, "_weather_weights", None)
         if not isinstance(weather_weights, dict):
             weather_weights = {m: (1.0 if m == self.current_weather else 0.0) for m in self.weather_modes}
+        # 1B. Río y ciénaga en movimiento (solo dentro del agua; el resto del mapa no cambia)
+        self.rio.render(surface, cam_x, cam_y, self.timer, self.ciclo.luz())
 
         # 1B. Caminos diurnos en acuarela (se atenúan al entrar la noche para evitar doble dibujo)
         if night_mix < 0.99:
@@ -3933,6 +3994,7 @@ class StoryMapScene(BaseState):
         if not hasattr(self, "_night_halo_cache"):
             self._night_halo_cache = {}
 
+        pines = []  # (x, y, completado) de cada estrella/pin visible, para su luz nocturna
         for p_key in STORY_PLAYABLE_POIS:
             p_info = self.poi_registry.get(p_key)
             if not p_info:
@@ -3983,6 +4045,7 @@ class StoryMapScene(BaseState):
                     vuelta = (self.timer * 0.45 + (sum(map(ord, p_key)) % 100) / 100.0) % 1.0
                     pin_to_draw = self.estrellaConBrillo(vuelta * 2.4)
                 surface.blit(pin_to_draw, pin_to_draw.get_rect(center=(pin_center_x, pin_center_y)))
+                pines.append((int(pin_center_x), int(pin_center_y), is_cleared))
 
         # 5. Renderizar nubes algodonosas caribeñas (siempre sobre rutas y entidades, con crossfade día/noche)
         for cloud in self.clouds:
@@ -4016,6 +4079,13 @@ class StoryMapScene(BaseState):
                         surface.blit(ov, (0, 0))
 
         # 7. Halos de farol nocturnos y partículas ambientales según pesos del clima
+        oscuridad = self.ciclo.oscuridad()
+        if oscuridad > 0.28:
+            self.faroles.render(surface, cam_x, cam_y, oscuridad, self.timer)
+        aero = self.poi_registry.get("aeropuerto")
+        if aero:
+            self.luces_lugares.luces_aeropuerto(surface, aero["rect"], cam_x, cam_y, oscuridad, self.timer)
+
         if night_mix > 0.02:
             if hasattr(self, "night_lamp_halo"):
                 halo_base = self.night_lamp_halo
@@ -4073,7 +4143,6 @@ class StoryMapScene(BaseState):
                     rip_surf = pygame.Surface((rad * 2 + 4, rad + 4), pygame.SRCALPHA)
                     pygame.draw.ellipse(rip_surf, (215, 238, 255, alpha_r), (2, 2, rad * 2, rad), 1)
                     surface.blit(rip_surf, (int(rip["x"]) - rad - 2, int(rip["y"]) - rad // 2 - 2))
-
         w_day = max(0.0, float(weather_weights.get("day", 0.0)))
         w_sunset = max(0.0, float(weather_weights.get("sunset", 0.0)))
         w_breeze = min(1.0, w_day + w_sunset)
@@ -4775,7 +4844,8 @@ class StoryMapScene(BaseState):
         if icon is not None:
             pill.blit(icon, icon.get_rect(center=(28, rect.height // 2)))
 
-        txt_surf = self.weather_font.render(label, True, txt_col)
+        etiqueta = f"{self.ciclo.reloj()}  {NOMBRE_FASE.get(self.current_weather, label).upper()}"
+        txt_surf = self.weather_font.render(etiqueta, True, txt_col)
         avail_w = rect.width - text_left - 14
         if txt_surf.get_width() > avail_w:
             sc = avail_w / float(max(1, txt_surf.get_width()))

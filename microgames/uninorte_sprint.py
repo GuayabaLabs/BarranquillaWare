@@ -658,6 +658,9 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
         self.stun_timer = 0.40
         self.freeze_frames = 4       # Hit-stop táctil
+        if self.tiempoDistraido > 0.0:
+            # Chocar por ir mirando el celular cierra todavía más la visión
+            self.choquesDistraido += 1
         self.trauma = 0.65           # Screen shake perceptible
 
         # Impacto sonoro físico + Voz reactiva del estudiante ("¡Ajá estás ciego!", "¡Erda!", "¡Qué pasa valemía!")
@@ -908,6 +911,9 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.iconoNoti = None
         self.tiempoDistraido = 0.0
         self.duracionDistraccion = 4.0
+        # Choques mientras se mira el celular: cada uno cierra más el túnel de visión (se reinicia al terminar)
+        self.choquesDistraido = 0
+        self.escalaTunel = 1.0
         self.saltoNormal = (self.jump_duration, self.jump_recovery)
         self.mensajeFlotante = ""
         self.tiempoMensaje = 0.0
@@ -1008,16 +1014,31 @@ class UninorteSprintMicrogame(BaseMicrogame):
             self.canalTictac.stop()
             self.canalTictac = None
 
-    def crearTunel(self) -> pygame.Surface:
+    # Tamaño del túnel (1 = el de siempre) tras 0, 1, 2 y 3+ choques mirando el celular
+    ESCALAS_TUNEL = (1.0, 0.68, 0.48, 0.34)
+
+    def crearTunel(self, escala: float = 1.0) -> pygame.Surface:
         tunel = pygame.Surface((self.screen_w, 2000), pygame.SRCALPHA)
         oscuro = (20, 20, 22)
         tunel.fill((*oscuro, 252))
         centro = (self.screen_w // 2, 1000)
-        for radio in range(230, 95, -5):
-            claridad = (radio - 95) / 135.0
+        borde, hueco = int(230 * escala), max(30, int(95 * escala))
+        paso = max(2, int(5 * escala))
+        for radio in range(borde, hueco, -paso):
+            claridad = (radio - hueco) / float(max(1, borde - hueco))
             pygame.draw.circle(tunel, (*oscuro, int(252 * claridad)), centro, radio)
-        pygame.draw.circle(tunel, (*oscuro, 0), centro, 95)
+        pygame.draw.circle(tunel, (*oscuro, 0), centro, hueco)
         return tunel
+
+    def tunelActual(self) -> pygame.Surface:
+        """Túnel de visión según los choques (solo 4 tamaños en caché; el cambio coincide con el golpe)."""
+        if not hasattr(self, "_tuneles"):
+            self._tuneles = {1.0: self.tunel}
+        escala = self.ESCALAS_TUNEL[min(self.choquesDistraido, len(self.ESCALAS_TUNEL) - 1)]
+        self.escalaTunel = escala
+        if escala not in self._tuneles:
+            self._tuneles[escala] = self.crearTunel(escala)
+        return self._tuneles[escala]
 
     def update(self, dt: float) -> None:
         if self.phase == self.PHASE_PLAY and not self.is_finished and getattr(self, "imagenesNoti", False):
@@ -1093,6 +1114,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.tiempoDistraido = max(0.0, self.tiempoDistraido - dt)
         if self.tiempoDistraido == 0.0:
             self.jump_duration, self.jump_recovery = self.saltoNormal
+            self.choquesDistraido = 0
+            self.escalaTunel = 1.0
 
     def botonesAviso(self) -> list:
         return [
@@ -1271,8 +1294,9 @@ class UninorteSprintMicrogame(BaseMicrogame):
         if self.tiempoDistraido > 0.0:
             fuerza = min(1.0, (self.duracionDistraccion - self.tiempoDistraido) / 0.3, self.tiempoDistraido / 0.5)
             yJugador = int(self.player_visual_world_y - cam_offset - 30)
-            self.tunel.set_alpha(int(255 * fuerza))
-            surface.blit(self.tunel, (shake_x, yJugador - 1000))
+            tunel = self.tunelActual()
+            tunel.set_alpha(int(255 * fuerza))
+            surface.blit(tunel, (shake_x, yJugador - 1000))
 
             vaiven = math.sin(self.tiempoJugado * 6.0) * 4
             celular = self.celularMini.get_rect(midleft=(int(self.player_x + shake_x + 40), int(yJugador - 60 + vaiven)))
