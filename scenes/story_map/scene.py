@@ -865,14 +865,9 @@ class StoryMapScene(BaseState):
 
         self.active_poi: str = "uninorte"
 
-        # 1. Faro acuarela en el suelo del siguiente destino (mapa_faro_destino.png)
-        try:
-            raw_faro = self.assets.load_cropped_surface("mapa_faro_destino.png", alpha_threshold=6)
-            self.poi_ground_glow = pygame.transform.smoothscale(raw_faro, (330, 200))
-            self.poi_target_beacon = pygame.transform.smoothscale(raw_faro, (390, 236))
-        except Exception:
-            self.poi_ground_glow = self.crearResplandorSuave(480, 280)
-            self.poi_target_beacon = self.poi_ground_glow
+        # 1. Resplandor suave en el suelo del siguiente destino (sin discos concéntricos duros)
+        self.poi_ground_glow = self.crearResplandorSuave(380, 220)
+        self.poi_target_beacon = self.crearResplandorSuave(440, 260)
 
         # 2. Pin acuarela de ubicación clave (assets/pin_nivel_mapa.png)
         try:
