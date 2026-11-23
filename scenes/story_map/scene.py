@@ -45,6 +45,7 @@ from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
+from microgames.heladero_metro import HeladeroMetroMicrogame
 
 MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "mallorquin": MallorquinPhotoMicrogame,
@@ -57,6 +58,9 @@ MICROGAME_MAP: Dict[str, Type[BaseMicrogame]] = {
     "metropolitano": MetropolitanoModeracionMicrogame,
     "metropolitano_moderacion": MetropolitanoModeracionMicrogame,
     "metropolitano_penalty": MetropolitanoPenaltyMicrogame,
+    "heladero_metro": HeladeroMetroMicrogame,
+    "estadio": HeladeroMetroMicrogame,
+    "estadio_heladero": HeladeroMetroMicrogame,
     "aeropuerto": PunchAlertMicrogame,
     "punch_alert": PunchAlertMicrogame,
     "aeropuerto_aterrizaje": AeropuertoAterrizajeMicrogame,
