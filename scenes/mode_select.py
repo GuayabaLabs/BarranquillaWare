@@ -241,6 +241,8 @@ class ModeSelectScene(BaseState):
             return
 
         setattr(self.character_select_scene, "chosen_mode", mode_id)
+        if mode_id == "historia":
+            self.prepararMapaHistoria()
 
         trans = SlideTransitionState(
             from_scene=self,
@@ -287,7 +289,52 @@ class ModeSelectScene(BaseState):
                 on_main_menu_callback=self.on_main_menu_callback,
             )
 
+        if self.state_machine.current_state is self.character_select_scene:
+            from scenes.fuegos_transition import FuegosTransitionState
+            self.state_machine.change_state(FuegosTransitionState(
+                self.character_select_scene, lambda: self.tomarMapaPrevio(character_id, _build)))
+            return
+
         self.state_machine.change_state(LoadingScene(_build, message="Cargando mapa de Barranquilla..."))
+
+    def prepararMapaHistoria(self) -> None:
+        import threading
+        from scenes.story_map import StoryMapScene
+
+        previo = getattr(self, "mapaPrevio", None)
+        if previo is not None and previo["hilo"].is_alive():
+            return
+        datos = {"escena": None, "error": None}
+
+        def construir():
+            try:
+                datos["escena"] = StoryMapScene(
+                    character_id="westcol",
+                    on_back_callback=self._return_from_subscene,
+                    on_main_menu_callback=self.on_main_menu_callback,
+                )
+            except BaseException as exc:
+                datos["error"] = exc
+
+        datos["hilo"] = threading.Thread(target=construir, name="bw-mapa-previo", daemon=True)
+        self.mapaPrevio = datos
+        datos["hilo"].start()
+
+    def tomarMapaPrevio(self, character_id: str, construir) -> BaseState:
+        datos = getattr(self, "mapaPrevio", None)
+        self.mapaPrevio = None
+        escena = None
+        if datos is not None:
+            datos["hilo"].join()
+            escena = datos["escena"]
+        if escena is None:
+            return construir()
+        escena.character_id = character_id
+        for nombre in ("_load_character_bust", "_build_player_token", "_load_player_chibi", "_sync_drawer_data"):
+            metodo = getattr(escena, nombre, None)
+            if callable(metodo):
+                metodo()
+        return escena
 
     def _continue_saved_story_map(self, character_id: str) -> None:
         """Entra directamente a StoryMapScene desde ModeSelectScene al continuar partida guardada."""
