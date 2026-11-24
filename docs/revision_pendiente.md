@@ -116,3 +116,13 @@ python microgames/emoji_catch.py
       las luces lo siguen; si se cambia su dibujo, ajustar `BORDE_A`, `BORDE_B`, `CABECERA_*` y `TORRE`.
 - [ ] Rendimiento medido sin pantalla: unos 11 ms por cuadro de mediana, con picos de 20-30 ms durante el
       anochecer. Revisar en el PC real que no se note tironeo al caer la noche.
+
+## 9. Música única y voz del heladero
+
+- [ ] Punch: al caer la tarjeta del villancico se apaga la música del juego y suena solo "Los peces en el río";
+      sigue sonando en el menú de pausa y nada vuelve a poner la música del Punch. (No se pudo reproducir el
+      "dos canciones" en pruebas: se blindó para que cualquier música nueva apague la anterior.)
+- [ ] Una sola canción en todo el juego: `AudioManager.play_bgm` apaga la anterior y también las canciones que un
+      minijuego suene como efecto (p. ej. la del trol de la Fritanga). La canción del trol ahora sigue en la pausa.
+- [ ] Heladero: el pregón "¡Heladooo!..." se oye cuando aparece la línea (falta el archivo de voz,
+      `assets/voces/heladero_pregon.mp3`). La línea espera a que termine la voz antes de pasar.

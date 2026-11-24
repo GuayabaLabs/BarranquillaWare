@@ -123,12 +123,60 @@ class AudioManager:
         track_path = os.path.join(self.base_assets_dir, filename)
         if os.path.exists(track_path):
             try:
+                # Una sola canción a la vez: se apaga la anterior y cualquier canción que un minijuego
+                # esté sonando como efecto (p. ej. la del trol de la Fritanga).
+                self.detener_canciones_en_canal()
+                if pygame.mixer.get_init():
+                    pygame.mixer.music.stop()
                 pygame.mixer.music.load(track_path)
                 pygame.mixer.music.set_volume(applied_volume)
                 if self.music_enabled:
                     pygame.mixer.music.play(loops=-1, fade_ms=300)
             except Exception as e:
                 print(f"Aviso: no se pudo cargar la música {filename}: {e}")
+
+    # --- Control de "una sola canción" ----------------------------------------------------------------
+    def registrar_cancion_en_canal(self, canal: Optional[pygame.mixer.Channel]) -> None:
+        """Un minijuego que reproduce una canción como Sound (en un canal) la registra aquí para que,
+        si otra parte del juego pone música, esa canción se apague y no suenen dos a la vez."""
+        if canal is None:
+            return
+        canales = getattr(self, "_canciones_en_canal", None)
+        if canales is None:
+            canales = self._canciones_en_canal = []
+        if canal not in canales:
+            canales.append(canal)
+
+    def detener_canciones_en_canal(self, fade_ms: int = 0) -> None:
+        for canal in getattr(self, "_canciones_en_canal", []) or []:
+            try:
+                if fade_ms > 0:
+                    canal.fadeout(fade_ms)
+                else:
+                    canal.stop()
+            except Exception:
+                pass
+        self._canciones_en_canal = []
+
+    def stop_music(self) -> None:
+        """Detiene la música de fondo y deja el registro coherente (sin pista actual)."""
+        self.detener_canciones_en_canal()
+        if pygame.mixer.get_init():
+            try:
+                pygame.mixer.music.stop()
+            except pygame.error:
+                pass
+        self.current_track = None
+
+    def fadeout_music(self, ms: int) -> None:
+        """Atenúa la música hasta silenciarla y lo anota (así un play_bgm posterior sí vuelve a sonar)."""
+        self.detener_canciones_en_canal(fade_ms=ms)
+        if pygame.mixer.get_init():
+            try:
+                pygame.mixer.music.fadeout(int(ms))
+            except pygame.error:
+                pass
+        self.current_track = None
 
     def _generate_procedural_sounds(self) -> None:
         """Genera efectos de sonido procedurales tipo pop / arcade nítidos."""

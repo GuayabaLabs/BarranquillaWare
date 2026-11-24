@@ -1071,6 +1071,9 @@ class Fritanga84Microgame(BaseMicrogame):
         self.canalTrol = self.cancionTrol.play(loops=-1, fade_ms=250)
         if self.canalTrol is not None:
             self.canalTrol.set_volume(max(0.0, min(1.0, getattr(self.audio, "music_volume", 0.7))))
+            # Es una canción: si otra parte del juego pone música, esta se apaga (nunca dos a la vez)
+            if hasattr(self.audio, "registrar_cancion_en_canal"):
+                self.audio.registrar_cancion_en_canal(self.canalTrol)
 
     def callarCancionTrol(self) -> None:
         if self.canalTrol is not None:
@@ -1353,8 +1356,7 @@ class Fritanga84Microgame(BaseMicrogame):
     def callarAceiteSiPausado(self) -> None:
         if self.canalAceite is not None and pygame.time.get_ticks() - self.ultimoUpdate > 150:
             self.canalAceite.pause()
-        if self.canalTrol is not None and pygame.time.get_ticks() - self.ultimoUpdate > 150:
-            self.canalTrol.pause()
+        # La canción del trol es la música del momento: sigue sonando en el menú de pausa.
 
     def exit(self) -> None:
         if getattr(self, "agache", 0.0) > 0.0:
