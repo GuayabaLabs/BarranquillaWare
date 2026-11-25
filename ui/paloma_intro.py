@@ -27,8 +27,8 @@ class PalomaIntro:
         self.done = not pages
         self.timer = 0.0
         self._assets_listos = False
-        if self.pages:
-            self._play_voice()
+        # La voz suena al entrar al minijuego (BaseMicrogame.enter), no al construirlo: en el Modo Historia
+        # el diálogo se quita antes de entrar y así no corta la voz de SEOR entre rondas.
 
     @staticmethod
     def _play_voice() -> None:

@@ -711,9 +711,9 @@ def test_bgm_start_and_switch_do_not_cancel_welcome_or_microgame_intro_voices(mo
         mg.exit()
 
     # 3. BuenavistaTrend._start_music_if_needed tampoco debe cortar voces activas
+    bt = BuenavistaTrendMicrogame()  # se construye antes: la primera vez precarga la interfaz y tarda más que la voz
     audio.play_voice("coronaste.ogg")
     assert audio.is_voice_playing() is True
-    bt = BuenavistaTrendMicrogame()
     bt._start_music_if_needed()
     assert audio.is_voice_playing() is True
     bt.exit()

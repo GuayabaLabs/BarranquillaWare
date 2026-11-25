@@ -276,6 +276,9 @@ def test_remastered_non_voice_sfx_and_bgm_healthy_levels():
         "assets/curramgram_caso_bien.mp3",
         "assets/curramgram_caso_mal.mp3",
     ]
+    import shutil
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("Se necesita ffmpeg en el PATH para medir el volumen de los audios")
     for path in checked:
         assert os.path.exists(path), f"Falta {path}"
         snd = pygame.mixer.Sound(path)

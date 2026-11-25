@@ -218,7 +218,8 @@ def test_main_menu_logros_modal_close_x_hitbox():
 def test_buenavista_costeno_piano_spritesheet_beatmap_and_dialogs():
     game = BuenavistaTrendMicrogame(character_id="westcol")
     assert game.spritesheet_name == "spritesheet_teclas_costenas_piano.png"
-    assert game.music_track_name == "en_barranquilla_me_quedo_piano.ogg"
+    # Sin "en_barranquilla_me_quedo_piano" en assets se usa la canción de respaldo del piano
+    assert game.music_track_name in ("en_barranquilla_me_quedo_piano.ogg", "imitadora_ost_piano_tiles_microjuego.ogg")
     assert EN_BARRANQUILLA_BEATMAP_DATA is IMITADORA_BEATMAP_DATA
     assert len(game.musical_events) == len(EN_BARRANQUILLA_BEATMAP_DATA)
     assert len(game.normal_tile_sprites) == 4

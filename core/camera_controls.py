@@ -15,6 +15,7 @@ CAMERA_CONTROL_GUIDE = (
     ("Fritanga84Microgame", "Fritanga", "Pellizca para voltear una arepa. Abre la palma para servir; vuelve a abrirla para entregar."),
     ("TrojaBaileMicrogame", "La Troja", "Mueve la mano a izquierda o derecha para mantener el equilibrio."),
     ("CurramGramGoMicrogame", "CurramGram Go", "Mano lateral: caminar; arriba: saltar; abajo: esconderse. Pellizco: foto. Índice: avisar; medio: publicar."),
+    ("HeladeroMetroMicrogame", "Heladero del Metro", "Dobla el índice (coco) o el medio (corozo) para elegir sabor; cierra el puño o pellizca para entregar el cono."),
     ("EmojiCatchMicrogame", "Emoji Catch", "Usa ambas manos: la mitad izquierda guía la morada; la derecha, la azul."),
     ("StoryMapScene", "Mapa", "Índice: apunta y espera. Para caminar: pellizca en el mapa y desliza hacia donde quieras ir; suelta para detenerte. Puño: entrar."),
     ("CoasterLauncherState", "Montaña rusa", "Usa los marcadores de color y el calibrador propio del juego para trazar la vía."),
