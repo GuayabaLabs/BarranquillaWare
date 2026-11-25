@@ -119,64 +119,66 @@ def test_story_map_integration():
 
     print("  -> Integración en StoryMapScene validada con éxito.")
 
-def test_drawer_tabs_and_sections():
+def test_drawer_tabs_and_sections(tmp_path=None):
     """Valida la navegación entre todas las pestañas del menú desplegable izquierdo."""
+    import tempfile
     print("[TEST] 4. Verificando pestañas Mensajes, Misiones, Perfil y Logros...")
     scene = StoryMapScene(character_id="westcol")
     drawer = scene.side_drawer
     drawer.is_open = True
     drawer.anim_t = 1.0
 
-    os.makedirs("artifacts", exist_ok=True)
-    test_surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+    with tempfile.TemporaryDirectory() as _td:
+        out_dir = str(tmp_path) if tmp_path is not None else _td
+        test_surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
 
-    # 1. Probar pestaña Mensajes
-    scene._on_side_nav_selected("mensajes")
-    assert drawer.seccionActual == "mensajes"
-    drawer.render(test_surf)
-    pygame.image.save(test_surf, "artifacts/verify_drawer_mensajes.png")
+        # 1. Probar pestaña Mensajes
+        scene._on_side_nav_selected("mensajes")
+        assert drawer.seccionActual == "mensajes"
+        drawer.render(test_surf)
+        pygame.image.save(test_surf, os.path.join(out_dir, "verify_drawer_mensajes.png"))
 
-    # Cerrar sección con botón X
-    close_r = drawer.rectBotonCerrar(drawer._get_panel_x())
-    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
-    consumed = drawer.handle_event(ev_down)
-    assert consumed is True
-    assert drawer.seccionActual == "botones"
+        # Cerrar sección con botón X
+        close_r = drawer.rectBotonCerrar(drawer._get_panel_x())
+        ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+        consumed = drawer.handle_event(ev_down)
+        assert consumed is True
+        assert drawer.seccionActual == "botones"
 
-    # 2. Probar pestaña Misiones
-    scene._on_side_nav_selected("misiones")
-    assert drawer.seccionActual == "misiones"
-    test_surf.fill((0, 0, 0, 0))
-    drawer.render(test_surf)
-    pygame.image.save(test_surf, "artifacts/verify_drawer_misiones.png")
+        # 2. Probar pestaña Misiones
+        scene._on_side_nav_selected("misiones")
+        assert drawer.seccionActual == "misiones"
+        test_surf.fill((0, 0, 0, 0))
+        drawer.render(test_surf)
+        pygame.image.save(test_surf, os.path.join(out_dir, "verify_drawer_misiones.png"))
 
-    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
-    drawer.handle_event(ev_down)
-    assert drawer.seccionActual == "botones"
+        ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+        drawer.handle_event(ev_down)
+        assert drawer.seccionActual == "botones"
 
-    # 3. Probar pestaña Perfil
-    scene._on_side_nav_selected("perfil")
-    assert drawer.seccionActual == "perfil"
-    test_surf.fill((0, 0, 0, 0))
-    drawer.render(test_surf)
-    pygame.image.save(test_surf, "artifacts/verify_drawer_perfil.png")
+        # 3. Probar pestaña Perfil
+        scene._on_side_nav_selected("perfil")
+        assert drawer.seccionActual == "perfil"
+        test_surf.fill((0, 0, 0, 0))
+        drawer.render(test_surf)
+        pygame.image.save(test_surf, os.path.join(out_dir, "verify_drawer_perfil.png"))
 
-    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
-    drawer.handle_event(ev_down)
-    assert drawer.seccionActual == "botones"
+        ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+        drawer.handle_event(ev_down)
+        assert drawer.seccionActual == "botones"
 
-    # 4. Probar pestaña Logros
-    scene._on_side_nav_selected("logros")
-    assert drawer.seccionActual == "trofeos"
-    test_surf.fill((0, 0, 0, 0))
-    drawer.render(test_surf)
-    pygame.image.save(test_surf, "artifacts/verify_drawer_trofeos.png")
+        # 4. Probar pestaña Logros
+        scene._on_side_nav_selected("logros")
+        assert drawer.seccionActual == "trofeos"
+        test_surf.fill((0, 0, 0, 0))
+        drawer.render(test_surf)
+        pygame.image.save(test_surf, os.path.join(out_dir, "verify_drawer_trofeos.png"))
 
-    ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
-    drawer.handle_event(ev_down)
-    assert drawer.seccionActual == "botones"
+        ev_down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": close_r.center})
+        drawer.handle_event(ev_down)
+        assert drawer.seccionActual == "botones"
 
-    print("  -> Todas las secciones del Drawer validadas y capturadas en artifacts/.")
+    print("  -> Todas las secciones del Drawer validadas.")
 
 if __name__ == "__main__":
     test_social_hud()
@@ -205,11 +207,11 @@ def test_drawer_missions_messages_state_and_main_menu_logros():
     try:
         scene = StoryMapScene(character_id="westcol")
         missions = {m["id"]: m["completada"] for m in scene.side_drawer.misiones}
-        assert len(missions) == 6
+        assert len(missions) == 7
         assert all(not done for done in missions.values()), f"En partida nueva ninguna misión debe iniciar completada: {missions}"
         assert scene.side_drawer.show_notification_badge is True
 
-        # Renderizar pestañas con 6 ítems sin errores de superficie
+        # Renderizar pestañas con 7 ítems sin errores de superficie
         scene.side_drawer.is_open = True
         scene.side_drawer.anim_t = 1.0
         surf = pygame.Surface((1920, 1080), pygame.SRCALPHA)
@@ -314,3 +316,56 @@ def test_mensajes_section_no_text_overlap_and_fits_panel():
         assert card["as_ink"].right <= c_rect.width - 8, f"long card={idx} asunto desbordado: {card['as_ink']}"
         assert card["rem_ink"].bottom < card["as_ink"].top
         assert card["as_ink"].bottom < card["body_inks"][0].top
+
+
+def test_drawer_sync_ventana_heladero_and_badge_clear_on_campaign_complete():
+    """Valida que Misiones/Mensajes incluyen ventana, metropolitano=heladero_metro, aeropuerto (CurramGram), y limpian badge al completar."""
+    from core.settings import SettingsManager
+
+    settings = SettingsManager.get_instance()
+    settings.reset_story_progress()
+    try:
+        scene = StoryMapScene(character_id="westcol")
+        drawer = scene.side_drawer
+
+        mission_ids = [m["id"] for m in drawer.misiones]
+        assert "ventana" in mission_ids
+        assert "aeropuerto" in mission_ids
+        assert len(mission_ids) == 7
+
+        metro_mis = next(m for m in drawer.misiones if m["id"] == "metropolitano")
+        assert ("raspao" in metro_mis["desc"].lower() or "helado" in metro_mis["desc"].lower())
+        assert "chat" not in metro_mis["desc"].lower()
+
+        msg_senders = [m["remitente"] for m in drawer.mensajes]
+        assert "Ventana al Mundo" in msg_senders
+        assert "Seguridad Cortissoz" not in msg_senders
+        metro_msg = next(m for m in drawer.mensajes if m["remitente"] == "Estadio Metropolitano")
+        assert ("raspao" in metro_msg["cuerpo"].lower() or "tribuna" in metro_msg["cuerpo"].lower())
+        assert "chat" not in metro_msg["cuerpo"].lower()
+
+        # Al abrir mensajes y cambiar a misiones en el mismo estado, el badge no revive
+        assert drawer.show_notification_badge is True
+        scene._on_side_nav_selected("mensajes")
+        assert drawer.show_notification_badge is False
+        scene._on_side_nav_selected("misiones")
+        assert drawer.show_notification_badge is False
+
+        # Al completar los 5 niveles principales de campaña, todos los mensajes quedan leídos y badge=False
+        settings.update_story_progress(
+            completed_microgames=[
+                "uninorte_sprint",
+                "uninorte_concentrate",
+                "punch_alert",
+                "emoji_catch",
+                "buenavista_trend",
+                "heladero_metro",
+                "fritanga_84",
+            ],
+            unlocked_locations=["uninorte", "ventana", "buenavista", "metropolitano", "aleta"],
+        )
+        scene._sync_drawer_data()
+        assert all(m["leido"] is True for m in drawer.mensajes)
+        assert drawer.show_notification_badge is False
+    finally:
+        settings.reset_story_progress()

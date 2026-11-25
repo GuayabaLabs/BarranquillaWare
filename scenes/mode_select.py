@@ -1,5 +1,6 @@
 import math
-from typing import List, Optional, Callable
+import os
+from typing import List, Optional, Callable, Tuple
 import pygame
 
 from core.state_machine import BaseState
@@ -11,7 +12,7 @@ from ui.focus_nav import FocusNavigator
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
 from scenes.character_select import CharacterSelectScene
-from scenes.load_game import StorySaveModalPanel
+from scenes.load_game import StorySaveModalPanel, build_centered_pill_button, render_outlined_text
 from scenes.slide_transition import SlideTransitionState
 
 class ModeSelectScene(BaseState):
@@ -107,9 +108,18 @@ class ModeSelectScene(BaseState):
         self.paloma_stand_timer: float = 0.0
 
     def _init_buttons(self) -> None:
-        # Botón Volver
-        btn_back_surf = self.assets.get_scaled("boton_volver_seleccion_modo.png", target_width=175)
-        self.btn_back = UIButton((130, 75), btn_back_surf, on_click=self._on_back_clicked)
+        # Botón Volver (misma base morada y texto centrado que Selección de Personaje)
+        back_base = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 220)
+        btn_back_surf = build_centered_pill_button(
+            self.assets,
+            back_base,
+            label="Volver",
+            target_size=(192, 66),
+            font_size=30,
+            fill_color=(255, 251, 242),
+            outline_color=(66, 28, 108),
+        )
+        self.btn_back = UIButton((145, 76), btn_back_surf, on_click=self._on_back_clicked)
 
         # Botones de audio
         audio_frames = self.assets.get_audio_button_frames(target_size=86)
@@ -140,11 +150,29 @@ class ModeSelectScene(BaseState):
         )
         self._draws_voice_badge = True
 
-        # Tarjetas de Modo de Juego
-        card_w = 470
-        btn_historia_surf = self.assets.get_scaled("boton_modo_historia_seleccion_modo.png", target_width=card_w)
-        btn_arcade_surf = self.assets.get_scaled("boton_modo_arcade_seleccion_modo.png", target_width=card_w)
-        btn_libre_surf = self.assets.get_scaled("boton_modo_libre_seleccion_modo.png", target_width=card_w)
+        # Tarjetas de Modo de Juego (base separada + icono separado + texto Titulos.ttf por código)
+        card_size = (470, 360)
+        btn_historia_surf = self._build_mode_button_surface(
+            "fondo_boton_modo_historia.png",
+            "icono_modo_historia.png",
+            "Modo",
+            "Historia",
+            card_size=card_size,
+        )
+        btn_arcade_surf = self._build_mode_button_surface(
+            "fondo_boton_modo_arcade.png",
+            "icono_modo_arcade.png",
+            "Modo",
+            "Arcade",
+            card_size=card_size,
+        )
+        btn_libre_surf = self._build_mode_button_surface(
+            "fondo_boton_modo_libre.png",
+            "icono_modo_libre.png",
+            "Modo",
+            "Libre",
+            card_size=card_size,
+        )
 
         center_y = 550
         self.btn_historia = UIButton((420, center_y), btn_historia_surf, on_click=lambda: self._select_mode("historia"))
@@ -164,6 +192,66 @@ class ModeSelectScene(BaseState):
             lambda: [*self.buttons, self.btn_voice] if hasattr(self, "btn_voice") else self.buttons,
             default_index=3,
         )
+
+    def _build_mode_button_surface(
+        self,
+        bg_filename: str,
+        icon_filename: str,
+        top_label: str,
+        main_label: str,
+        card_size: Tuple[int, int] = (470, 360),
+    ) -> pygame.Surface:
+        """Compone una tarjeta de modo uniendo base acuarela, icono transparente y texto en código."""
+        card_w, card_h = card_size
+        base_raw = self.assets.load_cropped_surface(bg_filename, alpha_threshold=20)
+        card = pygame.transform.smoothscale(base_raw, (card_w, card_h)).copy()
+
+        # Icono ilustrado centrado en el tercio superior (con margen respecto al borde)
+        icon_raw = self.assets.load_cropped_surface(icon_filename, alpha_threshold=20)
+        max_icon_w = int(card_w * 0.60)
+        max_icon_h = int(card_h * 0.41)
+        scale = min(
+            max_icon_w / max(1, icon_raw.get_width()),
+            max_icon_h / max(1, icon_raw.get_height()),
+        )
+        icon_w = max(1, round(icon_raw.get_width() * scale))
+        icon_h = max(1, round(icon_raw.get_height() * scale))
+        icon_scaled = pygame.transform.smoothscale(icon_raw, (icon_w, icon_h))
+        icon_center_y = 114
+        card.blit(icon_scaled, icon_scaled.get_rect(center=(card_w // 2, icon_center_y)))
+
+        # Títulos renderizados por código con Titulos.ttf y contorno crema cálido
+        fill_col = (56, 22, 88)
+        outline_col = (255, 250, 238)
+
+        top_font = self.assets.cargarFuenteTitulo(40)
+        top_surf = render_outlined_text(top_font, top_label, fill_col, outline_col, thickness=3)
+        top_ink = top_surf.get_bounding_rect(min_alpha=10)
+
+        main_size = 52
+        main_font = self.assets.cargarFuenteTitulo(main_size)
+        max_text_w = int(card_w * 0.78)
+        while main_font.size(main_label)[0] > max_text_w and main_size > 28:
+            main_size -= 2
+            main_font = self.assets.cargarFuenteTitulo(main_size)
+        main_surf = render_outlined_text(main_font, main_label, fill_col, outline_col, thickness=3)
+        main_ink = main_surf.get_bounding_rect(min_alpha=10)
+
+        gap = 12
+        block_h = top_ink.height + gap + main_ink.height
+        block_center_y = 258
+        top_target_top = block_center_y - block_h // 2
+        main_target_top = top_target_top + top_ink.height + gap
+
+        card.blit(
+            top_surf,
+            (card_w // 2 - top_ink.centerx, top_target_top - top_ink.top),
+        )
+        card.blit(
+            main_surf,
+            (card_w // 2 - main_ink.centerx, main_target_top - main_ink.top),
+        )
+        return card
 
     def _init_story_save_modal(self) -> None:
         """Inicializa el modal acuarela de 'Continuar Partida' vs 'Nueva Partida' para el Modo Historia."""

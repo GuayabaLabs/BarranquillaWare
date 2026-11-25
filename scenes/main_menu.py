@@ -106,8 +106,9 @@ class MainMenuScene(BaseState):
         from scenes.load_game import _poner_borde_calcomania
         self._modal_close_surf = _poner_borde_calcomania(close_base, grosor_blanco=4, grosor_tinta=2)
         self._modal_close_hovered: bool = False
+        frame_rect = self._modal_frame.get_rect(center=(self.screen_w // 2, self.screen_h // 2))
         self._modal_close_rect = self._modal_close_surf.get_rect(
-            center=(self.screen_w // 2 + self._modal_frame.get_width() // 2 - 96, self.screen_h // 2 - self._modal_frame.get_height() // 2 + 88)
+            center=(frame_rect.right - 92, frame_rect.top + 90)
         )
         self._modal_trofeo_on = self.assets.cargarTrofeo(48)
         self._modal_trofeo_off = self.assets.cargarTrofeo(48, enGris=True)

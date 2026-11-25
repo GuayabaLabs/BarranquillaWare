@@ -14,6 +14,7 @@ from core.microgame import BaseMicrogame
 from core.asset_manager import quitarBlanco, achicar, borrarFondo
 
 carpetaHelado = "Estadio"
+ALTURA_CLIENTE = 561
 sabores = [
     {"nombre": "coco", "color": (246, 240, 226), "sombra": (196, 178, 150), "brillo": (255, 255, 250)},
     {"nombre": "corozo", "color": (156, 34, 64), "sombra": (96, 14, 38), "brillo": (214, 96, 120)},
@@ -278,7 +279,8 @@ class HeladeroMetroMicrogame(BaseMicrogame):
 
         self.cliente = None
         self.esperaCliente = 1.2
-        self.ordenClientes = [0, 1, 2, 3, 4, 5, 6]
+        self.ordenClientes = list(range(len(archivosClientes)))
+        random.shuffle(self.ordenClientes)
         self.cuantosClientes = 0
         self.llegaCompanero = 105.0
 
@@ -336,6 +338,17 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         alto = max(1, int(imagen.get_height() * ancho / float(imagen.get_width())))
         return pygame.transform.smoothscale(imagen, (ancho, alto))
 
+    def aAlto(self, imagen: pygame.Surface, alto: int) -> pygame.Surface:
+        caja = imagen.get_bounding_rect(min_alpha=60)
+        recortada = imagen.subsurface(caja).copy() if (caja.w > 0 and caja.h > 0) else imagen
+        h = recortada.get_height()
+        if h <= 0:
+            return recortada
+        if h == alto:
+            return recortada if recortada is not imagen else imagen.copy()
+        ancho = max(1, int(round(recortada.get_width() * alto / float(h))))
+        return pygame.transform.smoothscale(recortada, (ancho, alto))
+
     def separar(self, hoja: pygame.Surface, columnas: int, filas: int = 1, margen: float = 0.0) -> list:
         piezas = []
         w, h = hoja.get_width() // columnas, hoja.get_height() // filas
@@ -348,6 +361,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         return piezas
 
     def cargarVerde(self, archivo: str):
+        from collections import deque
         import numpy as np
         ruta = os.path.join(self.assets.base_dir, carpetaHelado, archivo)
         if not os.path.exists(ruta):
@@ -357,16 +371,71 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         except pygame.error as e:
             print(f"[Heladero] Aviso al cargar {archivo}: {e}")
             return None
-        rgb = pygame.surfarray.array3d(imagen).astype(np.float32)
+        rgb = pygame.surfarray.array3d(imagen).transpose(1, 0, 2).astype(np.float32)
+        h, w, _ = rgb.shape
         r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
         resto = np.maximum(r, b)
-        dominio = g - resto
-        alfa = np.clip(255 - (dominio - 40) * 255 / 60, 0, 255)
+        dom = g - resto
+        is_green = dom > 32
+        pure_chroma = (g > 170) & (dom > 85)
+
+        visited = pure_chroma.copy()
+        frontier = np.zeros_like(visited)
+        frontier[1:, :] |= pure_chroma[:-1, :]
+        frontier[:-1, :] |= pure_chroma[1:, :]
+        frontier[:, 1:] |= pure_chroma[:, :-1]
+        frontier[:, :-1] |= pure_chroma[:, 1:]
+        frontier &= is_green & ~visited
+        frontier[0, :] |= is_green[0, :] & ~visited[0, :]
+        frontier[-1, :] |= is_green[-1, :] & ~visited[-1, :]
+        frontier[:, 0] |= is_green[:, 0] & ~visited[:, 0]
+        frontier[:, -1] |= is_green[:, -1] & ~visited[:, -1]
+
+        visited |= frontier
+        ys_s, xs_s = np.nonzero(frontier)
+        q = deque(zip(ys_s.tolist(), xs_s.tolist()))
+        while q:
+            cy, cx = q.popleft()
+            if cy > 0 and not visited[cy - 1, cx] and is_green[cy - 1, cx]:
+                visited[cy - 1, cx] = True
+                q.append((cy - 1, cx))
+            if cy + 1 < h and not visited[cy + 1, cx] and is_green[cy + 1, cx]:
+                visited[cy + 1, cx] = True
+                q.append((cy + 1, cx))
+            if cx > 0 and not visited[cy, cx - 1] and is_green[cy, cx - 1]:
+                visited[cy, cx - 1] = True
+                q.append((cy, cx - 1))
+            if cx + 1 < w and not visited[cy, cx + 1] and is_green[cy, cx + 1]:
+                visited[cy, cx + 1] = True
+                q.append((cy, cx + 1))
+
+        band1 = np.zeros_like(visited)
+        band1[1:, :] |= visited[:-1, :]
+        band1[:-1, :] |= visited[1:, :]
+        band1[:, 1:] |= visited[:, :-1]
+        band1[:, :-1] |= visited[:, 1:]
+        band1 &= ~visited
+
+        band2 = np.zeros_like(visited)
+        band2[1:, :] |= band1[:-1, :]
+        band2[:-1, :] |= band1[1:, :]
+        band2[:, 1:] |= band1[:, :-1]
+        band2[:, :-1] |= band1[:, 1:]
+        band2 &= ~(visited | band1)
+
+        alfa = np.where(visited, np.clip(255 - (dom - 35) * 255 / 60, 0, 255), 255.0)
+        aa_edge = np.clip(255 - (dom - 10) * 10, 0, 255)
+        alfa = np.where(band1 & (dom > 10), aa_edge, alfa)
+
+        despill = (visited & (dom > 12)) | ((band1 | band2) & (dom > 2))
+        rgb_out = rgb.copy()
+        rgb_out[..., 1] = np.where(despill, np.clip(resto + 2, 0, 255), g)
+
         pixeles = pygame.surfarray.pixels3d(imagen)
-        pixeles[..., 1] = np.minimum(g, resto + 12).astype(np.uint8)
+        pixeles[...] = np.clip(rgb_out, 0, 255).transpose(1, 0, 2).astype(np.uint8)
         del pixeles
         canal = pygame.surfarray.pixels_alpha(imagen)
-        canal[...] = alfa.astype(np.uint8)
+        canal[...] = np.clip(alfa, 0, 255).T.astype(np.uint8)
         del canal
         return imagen
 
@@ -509,41 +578,70 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         import numpy as np
         alfa = pygame.surfarray.array_alpha(imagen)
         mayor = 1
-        for y in range(0, int(imagen.get_height() * 0.3), 2):
-            xs = np.nonzero(alfa[:, y] > 100)[0]
-            if len(xs):
-                mayor = max(mayor, int(xs.max() - xs.min()))
+        for y in range(0, int(imagen.get_height() * 0.28), 2):
+            fila = alfa[:, y] > 100
+            if not fila.any():
+                continue
+            padded = np.concatenate(([False], fila, [False]))
+            inicios = np.nonzero(padded[1:] & ~padded[:-1])[0]
+            fines = np.nonzero(~padded[1:] & padded[:-1])[0]
+            tramo = int((fines - inicios).max()) if len(inicios) else 0
+            if tramo > mayor:
+                mayor = tramo
         return mayor
 
     def igualarA(self, imagen: pygame.Surface, modelo: pygame.Surface) -> pygame.Surface:
         escala = self.anchoCabeza(modelo) / float(max(1, self.anchoCabeza(imagen)))
         return pygame.transform.smoothscale_by(imagen, escala)
 
+    def _normalizarFraming(self, imagen: pygame.Surface, modelo: pygame.Surface, alto: int) -> pygame.Surface:
+        img = self.aAlto(imagen, alto)
+        head_m = self.anchoCabeza(modelo)
+        head_f = self.anchoCabeza(img)
+        if head_m > 10 and head_f > 10:
+            ratio = head_m / float(head_f)
+            if 1.015 < ratio <= 1.25:
+                nuevo_w = max(1, int(round(img.get_width() * ratio)))
+                nuevo_h = max(alto, int(round(img.get_height() * ratio)))
+                escalada = pygame.transform.smoothscale(img, (nuevo_w, nuevo_h))
+                return escalada.subsurface((0, 0, nuevo_w, alto)).copy()
+        return img
+
     def igualarTamanos(self) -> None:
-        if self.pedidosClientes is not None and self.hinchas is not None:
+        if self.hinchas is not None:
+            self.hinchas["espera"] = [self.aAlto(f, ALTURA_CLIENTE) for f in self.hinchas["espera"]]
+            self.hinchas["feliz"] = [self.aAlto(f, ALTURA_CLIENTE) for f in self.hinchas["feliz"]]
+            if self.pedidosClientes is not None:
+                for tipo, figuras in enumerate(self.pedidosClientes):
+                    self.pedidosClientes[tipo] = [self.aAlto(f, ALTURA_CLIENTE) for f in figuras]
             num_h = len(self.hinchas["espera"])
+            for i in range(num_h):
+                variantes = [self.hinchas["espera"][i]]
+                if i < len(self.hinchas["feliz"]):
+                    variantes.append(self.hinchas["feliz"][i])
+                if self.pedidosClientes is not None and i < len(self.pedidosClientes):
+                    variantes.extend(self.pedidosClientes[i])
+                modelo = max(variantes, key=self.anchoCabeza)
+                self.hinchas["espera"][i] = self._normalizarFraming(self.hinchas["espera"][i], modelo, ALTURA_CLIENTE)
+                if i < len(self.hinchas["feliz"]):
+                    self.hinchas["feliz"][i] = self._normalizarFraming(self.hinchas["feliz"][i], modelo, ALTURA_CLIENTE)
+                if self.pedidosClientes is not None and i < len(self.pedidosClientes):
+                    self.pedidosClientes[i] = [
+                        self._normalizarFraming(f, modelo, ALTURA_CLIENTE) for f in self.pedidosClientes[i]
+                    ]
+        elif self.pedidosClientes is not None:
             for tipo, figuras in enumerate(self.pedidosClientes):
-                idx = tipo if tipo < num_h else (tipo % num_h)
-                modelo = self.hinchas["espera"][idx]
-                target_h = modelo.get_height()
-                normalizadas = []
-                for f in figuras:
-                    fh = f.get_height()
-                    if fh > 0 and fh != target_h:
-                        escala = target_h / float(fh)
-                        nuevo_w = max(1, int(round(f.get_width() * escala)))
-                        normalizadas.append(pygame.transform.smoothscale(f, (nuevo_w, target_h)))
-                    else:
-                        normalizadas.append(f)
-                self.pedidosClientes[tipo] = normalizadas
-        if self.companeroHelado is not None and self.companeroImg is not None:
-            modelo = self.companeroImg["cliente"]
-            target_h = modelo.get_height()
-            fh = self.companeroHelado.get_height()
-            if fh > 0 and fh != target_h:
-                escala = target_h / float(fh)
-                nuevo_w = max(1, int(round(self.companeroHelado.get_width() * escala)))
-                self.companeroHelado = pygame.transform.smoothscale(self.companeroHelado, (nuevo_w, target_h))
+                self.pedidosClientes[tipo] = [self.aAlto(f, ALTURA_CLIENTE) for f in figuras]
+
+        if self.companeroImg is not None and self.companeroImg.get("cliente") is not None:
+            self.companeroImg["cliente"] = self.aAlto(self.companeroImg["cliente"], ALTURA_CLIENTE)
+        if self.companeroHelado is not None:
+            self.companeroHelado = self.aAlto(self.companeroHelado, ALTURA_CLIENTE)
+        if self.companeroImg is not None and self.companeroImg.get("cliente") is not None and self.companeroHelado is not None:
+            comp_esp = self.companeroImg["cliente"]
+            modelo_comp = max((comp_esp, self.companeroHelado), key=self.anchoCabeza)
+            self.companeroImg["cliente"] = self._normalizarFraming(comp_esp, modelo_comp, ALTURA_CLIENTE)
+            self.companeroHelado = self._normalizarFraming(self.companeroHelado, modelo_comp, ALTURA_CLIENTE)
 
     def cargarCruda(self, archivo: str, ancho: int):
         ruta = os.path.join(carpetaHelado, archivo)
@@ -642,11 +740,11 @@ class HeladeroMetroMicrogame(BaseMicrogame):
                 caja = celda.get_bounding_rect(min_alpha=100)
                 figura = celda.subsurface(caja).copy()
                 figura = figura.subsurface((0, 0, figura.get_width(), int(figura.get_height() * 0.95))).copy()
-                piezas.append(self.aAncho(figura, 420))
+                piezas.append(self.aAlto(figura, ALTURA_CLIENTE))
             self.hinchas = {"espera": piezas[:4], "feliz": piezas[4:]}
         hoja = None if self.hinchas is not None else self.cargarCruda("hinchas.png", 1800)
         if hoja is not None:
-            piezas = [self.aAncho(self.recortarFigura(p), 420) for p in self.separarCrudo(hoja, 4, 2, 0.03)]
+            piezas = [self.aAlto(self.recortarFigura(p), ALTURA_CLIENTE) for p in self.separarCrudo(hoja, 4, 2, 0.03)]
             self.hinchas = {"espera": piezas[:4], "feliz": piezas[4:]}
 
         extras = [
@@ -656,16 +754,14 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         ]
         if self.hinchas is not None:
             for f_esp, f_fel in extras:
-                esp_img = self.cargarOpcional(f_esp, 600)
-                fel_img = self.cargarOpcional(f_fel, 600)
-                if esp_img is not None:
-                    caja = esp_img.get_bounding_rect(min_alpha=100)
-                    esp_crop = self.aAncho(esp_img.subsurface(caja).copy(), 420)
-                    self.hinchas["espera"].append(esp_crop)
-                if fel_img is not None:
-                    caja = fel_img.get_bounding_rect(min_alpha=100)
-                    fel_crop = self.aAncho(fel_img.subsurface(caja).copy(), 420)
-                    self.hinchas["feliz"].append(fel_crop)
+                for clave, archivo in (("espera", f_esp), ("feliz", f_fel)):
+                    ruta_extra = os.path.join(carpetaHelado, archivo)
+                    if os.path.exists(os.path.join(self.assets.base_dir, ruta_extra)):
+                        try:
+                            img = self.assets.load_surface(ruta_extra, has_alpha=True)
+                            self.hinchas[clave].append(self.aAlto(img, ALTURA_CLIENTE))
+                        except Exception as e:
+                            print(f"[Heladero] Aviso al cargar {archivo}: {e}")
 
         self.companeroImg = None
         verde = self.cargarVerde("companero.jpg")
@@ -681,7 +777,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             avatar = pygame.Surface(cara.size, pygame.SRCALPHA)
             avatar.fill((178, 208, 236, 255))
             avatar.blit(busto.subsurface(cara), (0, 0))
-            self.companeroImg = {"avatar": avatar, "cliente": self.aAncho(figura, 420)}
+            self.companeroImg = {"avatar": avatar, "cliente": self.aAlto(figura, ALTURA_CLIENTE)}
         hoja = None if self.companeroImg is not None else self.cargarOpcional("companero.png", 1400)
         cruda = self.cargarCruda("companero.png", 1400)
         if hoja is not None and cruda is not None:
@@ -692,7 +788,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             cara = pygame.Rect(0, 0, lado, lado)
             cara.midtop = (busto.get_width() // 2, int(busto.get_height() * 0.04))
             cara = cara.clip(busto.get_rect())
-            self.companeroImg = {"avatar": busto.subsurface(cara).copy(), "cliente": self.aAncho(piezas[1], 420)}
+            self.companeroImg = {"avatar": busto.subsurface(cara).copy(), "cliente": self.aAlto(piezas[1], ALTURA_CLIENTE)}
 
         self.appBase = self.cargarOpcional("appLinked.png", 900)
         self.fotosPosts = None
@@ -725,19 +821,20 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         hojas = [self.cargarVerde(n) for n in archivosClientes]
         if all(h is not None for h in hojas):
             self.pedidosClientes = []
-            for hoja in hojas:
+            for idx, hoja in enumerate(hojas):
                 figuras = []
                 for celda in self.separarCrudo(hoja, 5, 1, 0.03):
                     figura = celda.subsurface(celda.get_bounding_rect(min_alpha=100)).copy()
-                    figura = figura.subsurface((0, 0, figura.get_width(), int(figura.get_height() * 0.95))).copy()
-                    figuras.append(self.aAncho(figura, 420))
+                    if idx < 4:
+                        figura = figura.subsurface((0, 0, figura.get_width(), int(figura.get_height() * 0.95))).copy()
+                    figuras.append(self.aAlto(figura, ALTURA_CLIENTE))
                 self.pedidosClientes.append(figuras)
         self.companeroHelado = None
         imagen = self.cargarVerde("companeroHelado.jpg")
         if imagen is not None:
             figura = imagen.subsurface(imagen.get_bounding_rect(min_alpha=100)).copy()
             figura = figura.subsurface((0, 0, figura.get_width(), int(figura.get_height() * 0.96))).copy()
-            self.companeroHelado = self.aAncho(figura, 420)
+            self.companeroHelado = self.aAlto(figura, ALTURA_CLIENTE)
         self.igualarTamanos()
         self.imagenesLagrimas = None
         hoja = self.cargarVerde("lagrimas.jpg")
@@ -1893,13 +1990,6 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         feliz = c["estado"] in ("feliz", "confiesa")
         imagen = None
         servido = c.get("servido")
-        modelo = None
-        if c["esCompanero"] and self.companeroImg is not None:
-            modelo = self.companeroImg["cliente"]
-        elif self.hinchas is not None and c["tipo"] >= 0:
-            num_h = len(self.hinchas["espera"])
-            idx = c["tipo"] if c["tipo"] < num_h else (c["tipo"] % num_h)
-            modelo = self.hinchas["espera"][idx]
         if c["esCompanero"] and self.companeroImg is not None:
             imagen = self.companeroImg["cliente"]
             if feliz and servido and self.companeroHelado is not None:
@@ -2212,9 +2302,11 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         if sub.get_width() > tarjeta.w - 110:
             sub = pygame.transform.smoothscale_by(sub, (tarjeta.w - 110) / sub.get_width())
         surface.blit(sub, (tarjeta.x + 98, tarjeta.y + 56))
-        fuente = self.assets.cargarFuenteTitulo(22)
-        y = tarjeta.y + 104
-        for linea in self.partirEnLineas(fuente, postsExito[post][0], tarjeta.w - 32)[:3]:
+        fuente = self.assets.cargarFuenteTitulo(20)
+        y = tarjeta.y + 98
+        for linea in self.partirEnLineas(fuente, postsExito[post][0], tarjeta.w - 32):
+            if y + fuente.get_linesize() > tarjeta.bottom - 8:
+                break
             surface.blit(fuente.render(linea, True, (30, 30, 40)), (tarjeta.x + 16, y))
             y += fuente.get_linesize()
 
@@ -2306,7 +2398,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         return caja
 
     def dibujarHud(self, surface: pygame.Surface) -> None:
-        x, y = 470, 28
+        x, y = 690, 28
         if self.panelCorazones is not None:
             surface.blit(self.panelCorazones, (x, y))
         for i in range(self.maxAnimo):
@@ -2348,11 +2440,7 @@ if __name__ == "__main__":
     screen = pygame.display.set_mode((1920, 1080))
     pygame.display.set_caption("BarranquillaWare · El Heladero del Metro")
     clock = pygame.time.Clock()
-    from core.asset_manager import AssetManager
-    from core.audio_manager import AudioManager
-    assets = AssetManager()
-    audio = AudioManager(assets.base_dir)
-    game = HeladeroMetroMicrogame(assets, audio=audio)
+    game = HeladeroMetroMicrogame()
     running = True
     while running:
         dt = clock.tick(60) / 1000.0

@@ -979,7 +979,7 @@ def test_voice_ui_layout_non_overlap_focus_and_no_ghost_badges(monkeypatch):
     assert story.paloma_dialog_open is True
     story.render(surface)
     ref_badge = pygame.Surface((1920, 1080), pygame.SRCALPHA)
-    audio.render_voice_muted_badge(ref_badge, right_top=(1894, 114))
+    audio.render_voice_muted_badge(ref_badge, right_top=(1809, 129))
     badge_rect = ref_badge.get_bounding_rect()
     assert badge_rect.width > 0
     bright_pixels = 0
@@ -1162,3 +1162,116 @@ def test_microgame_transitions_freeplay_arcade_pause_and_audio_update(monkeypatc
     sprint.update(0.016)
     assert sprint_calls
     sprint.exit()
+
+
+def test_story_map_open_hud_voice_button_sync_and_no_overlap():
+    """StoryMapScene expone btn_voice en HUD abierto sin solapar menú/clima/badge/callout y sincronizado."""
+    pygame.display.set_mode((1920, 1080))
+    from scenes.main_menu import MainMenuScene
+    from scenes.story_map.scene import StoryMapScene
+
+    audio = AudioManager.get_instance()
+    audio.voice_enabled = True
+
+    # 1. MainMenuScene._modal_close_rect coincide antes y después de renderizar el modal
+    mm = MainMenuScene()
+    init_close = mm._modal_close_rect.copy()
+    mm._open_modal("logros")
+    mm.modal_alpha = 255.0
+    surf = pygame.Surface((1920, 1080))
+    mm.render(surf)
+    assert mm._modal_close_rect == init_close
+
+    # 2. StoryMapScene btn_voice en HUD abierto y sin colisiones
+    story = StoryMapScene(character_id="westcol")
+    story.show_intro_dialog = False
+    story.paloma_dialog_open = False
+    story.paloma_dialog_anim_t = 0.0
+    story.menu_open = False
+    story.menu_anim_t = 0.0
+
+    assert hasattr(story, "btn_voice")
+    assert story.btn_voice.rect.center == (1855, 148)
+    assert not story.btn_voice.rect.colliderect(story.btn_menu_toggle.rect.inflate(20, 20))
+    assert not story.btn_voice.rect.colliderect(story.weather_pill_rect)
+    assert story._is_screen_pos_over_map_hud(story.btn_voice.rect.center) is True
+    assert story.camera_dwell_target(story.btn_voice.rect.center) == ("voice",)
+
+    # Clic en btn_voice silencia voz, sincroniza btn_drawer_voice y bloquea área del badge contra callouts
+    story.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": story.btn_voice.rect.center}))
+    story.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": 1, "pos": story.btn_voice.rect.center}))
+    assert audio.voice_enabled is False
+    assert story.btn_voice.toggle_state is False
+    assert story.btn_drawer_voice.toggle_state is False
+
+    blocked = story._get_blocked_hud_rects()
+    assert any(r.colliderect(story.btn_voice.rect) for r in blocked)
+    badge_probe = pygame.Surface((1920, 1080), pygame.SRCALPHA)
+    badge_rect = audio.render_voice_muted_badge(badge_probe, right_top=(1809, 129))
+    assert badge_rect is not None
+    assert not badge_rect.colliderect(story.btn_voice.rect)
+    assert not badge_rect.colliderect(story.weather_pill_rect)
+    assert any(r.colliderect(badge_rect) for r in blocked)
+
+    # Reactivar desde btn_voice vuelve a sincronizar ambos toggles
+    story.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": story.btn_voice.rect.center}))
+    story.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": 1, "pos": story.btn_voice.rect.center}))
+    assert audio.voice_enabled is True
+    assert story.btn_voice.toggle_state is True
+    assert story.btn_drawer_voice.toggle_state is True
+    story.exit()
+
+
+def test_story_map_muted_voice_badge_blocks_hud_hover_dwell_and_click_through():
+    """El badge 'Voces silenciadas' bloquea hover, dwell y click-through sobre POIs/arrastre cuando voice_enabled=False."""
+    pygame.display.set_mode((1920, 1080))
+    from scenes.story_map.scene import StoryMapScene
+
+    audio = AudioManager.get_instance()
+    orig_voice_enabled = audio.voice_enabled
+    orig_voice_vol = audio.voice_volume
+    story = StoryMapScene(character_id="westcol")
+    try:
+        story.show_intro_dialog = False
+        story.paloma_dialog_open = False
+        story.paloma_dialog_anim_t = 0.0
+        story.quest_card_open = False
+        story.menu_open = False
+        story.menu_anim_t = 0.0
+        story.cinematic_timer = story.cinematic_duration
+
+        # Colocar el POI jugable 'ventana' justo debajo del centro del badge silenciado (1710, 148)
+        badge_pos = (1710, 148)
+        world_x = int(story.camera.x) + badge_pos[0]
+        world_y = int(story.camera.y) + badge_pos[1]
+        story.poi_registry["ventana"]["rect"].center = (world_x, world_y)
+
+        # Con voz activa el badge no está presente y el punto debajo apunta al destino
+        audio.voice_enabled = True
+        audio.voice_volume = 1.0
+        assert story._is_screen_pos_over_map_hud(badge_pos) is False
+        assert story.camera_dwell_target(badge_pos) == ("destination", "ventana")
+
+        # Al silenciar voz, el badge bloquea HUD, dwell, hover y click-through (incluyendo botones 1 y 3)
+        audio.voice_enabled = False
+        assert story._is_screen_pos_over_map_hud(badge_pos) is True
+        assert story.camera_dwell_target(badge_pos) is None
+
+        for btn in (1, 3):
+            story.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": btn, "pos": badge_pos}))
+            assert story.camera.is_dragging is False
+            assert story.mouse_down_pos is None
+            story.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": btn, "pos": badge_pos}))
+            assert story.camera.is_dragging is False
+            assert story.player_is_moving is False
+            assert story.player_target_poi is None
+
+        # También bloquea cuando voice_volume <= 0.0 aunque voice_enabled sea True
+        audio.voice_enabled = True
+        audio.voice_volume = 0.0
+        assert story._is_screen_pos_over_map_hud(badge_pos) is True
+        assert story.camera_dwell_target(badge_pos) is None
+    finally:
+        audio.voice_enabled = orig_voice_enabled
+        audio.voice_volume = orig_voice_vol
+        story.exit()

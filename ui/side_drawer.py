@@ -681,12 +681,12 @@ class SideNavDrawer:
         surface.blit(sub, sub_rect)
 
         mensajes_a_mostrar = self.mensajes if self.mensajes else [
-            {"remitente": "Paloma de Curramba", "asunto": "¡Bienvenido a BarranquillaWare!", "cuerpo": "Usa las redes con cabeza fría. ¡No todo en el feed es real!", "leido": True},
-            {"remitente": "Alerta Digital Uninorte", "asunto": "Zona Libre de Distracciones", "cuerpo": "Enfoca tu mente y silencia avisos innecesarios al estudiar.", "leido": False},
-            {"remitente": "Radar Buenavista", "asunto": "Baila a tu propio compás", "cuerpo": "No dejes que los likes dicten tu felicidad ni tu valor.", "leido": False},
-            {"remitente": "Tribuna Metropolitano", "asunto": "Convivencia y Respeto", "cuerpo": "Apoya a tu equipo sin lanzar odio en comentarios ni chats.", "leido": False},
-            {"remitente": "Seguridad Cortissoz", "asunto": "Alerta de Phishing y Estafas", "cuerpo": "Nunca abras enlaces de premios milagrosos ni compartas claves.", "leido": False},
-            {"remitente": "Aleta del Tiburón", "asunto": "El Sabor del Troll", "cuerpo": "No muerdas el anzuelo del trol. Respira hondo y atiende en calma.", "leido": False},
+            {"remitente": "Paloma de Curramba", "asunto": "¡Bienvenido a Curramba!", "cuerpo": "¡Epa llave! Usa las redes con cabeza fría. No todo lo que brilla en el feed es oro.", "leido": True},
+            {"remitente": "Alerta Digital Uninorte", "asunto": "Zona Libre de Doomscrolling", "cuerpo": "El estudio rinde más cuando silencias las notificaciones innecesarias.", "leido": False},
+            {"remitente": "Ventana al Mundo", "asunto": "Filtro Antes de Publicar", "cuerpo": "Piensa antes de compartir: protege tu privacidad y la de tu gente.", "leido": False},
+            {"remitente": "Radar Buenavista", "asunto": "Tendencia en Consciencia", "cuerpo": "Baila por alegría y arte, no para buscar validación en métricas vacías.", "leido": False},
+            {"remitente": "Estadio Metropolitano", "asunto": "Pasión en Calma", "cuerpo": "Sirve tu raspao con buena vibra y deja la ansiedad fuera de la tribuna.", "leido": False},
+            {"remitente": "Aleta del Tiburón", "asunto": "El Sabor del Troll", "cuerpo": "No muerdas el anzuelo del trol. Respira hondo y atiende tu mesa con calma.", "leido": False},
         ]
 
         visibles = mensajes_a_mostrar[:6]
@@ -784,10 +784,10 @@ class SideNavDrawer:
         surface.blit(cerrar, cerrar.get_rect(center=self.rectBotonCerrar(panelX).center))
 
         misiones_a_mostrar = self.misiones if self.misiones else [
-            {"id": "uninorte", "titulo": "Biblioteca Uninorte", "desc": "Espanta distracciones y vence el doomscrolling.", "completada": False},
-            {"id": "buenavista", "titulo": "C.C. Buenavista", "desc": "Sigue el compás del trend sin volverte viral adicto.", "completada": False},
-            {"id": "metropolitano", "titulo": "Estadio Metropolitano", "desc": "Modera el chat en vivo y frena la toxicidad.", "completada": False},
-            {"id": "aeropuerto", "titulo": "Aeropuerto Cortissoz", "desc": "Batea el phishing y bloquea mensajes sospechosos.", "completada": False},
+            {"id": "uninorte", "titulo": "Campus Uninorte", "desc": "Cruza el pasillo sin celular y despeja distracciones.", "completada": False},
+            {"id": "ventana", "titulo": "Ventana al Mundo", "desc": "Golpea lo que no debes publicar y deja pasar lo bonito.", "completada": False},
+            {"id": "buenavista", "titulo": "C.C. Buenavista", "desc": "Sigue el compás del trend sin buscar likes vacíos.", "completada": False},
+            {"id": "metropolitano", "titulo": "Estadio Metropolitano", "desc": "Vende raspao y helado a la hinchada en calma.", "completada": False},
             {"id": "aleta", "titulo": "Aleta del Tiburón", "desc": "Atiende los fritos sin engancharte con el trol.", "completada": False},
             {"id": "malecon", "titulo": "Gran Malecón del Río", "desc": "Suelta el celular y reconéctate con el Magdalena.", "completada": False},
         ]

@@ -11,6 +11,7 @@ from core.audio_manager import AudioManager
 from ui.button import UIButton
 from effects.gl_particles import GLParticleSystem
 from effects.juice_particles import JuiceParticleManager
+from scenes.load_game import build_centered_pill_button, render_outlined_text
 
 CHARACTER_CATALOG: List[Dict[str, Any]] = [
     {
@@ -359,17 +360,47 @@ class CharacterSelectScene(BaseState):
                 card.is_selected = True
             self.cards.append(card)
 
+    def _build_centered_pill_button(
+        self,
+        base_surface: pygame.Surface,
+        label: str,
+        target_size: Tuple[int, int],
+        font_size: int,
+        fill_color: Tuple[int, int, int],
+        outline_color: Tuple[int, int, int],
+    ) -> pygame.Surface:
+        """Delega en el constructor compartido de botones píldora centrados."""
+        return build_centered_pill_button(
+            self.assets, base_surface, label, target_size, font_size, fill_color, outline_color
+        )
+
     def _init_buttons(self) -> None:
-        # Botón Regresar (ampliado proporcionalmente para mejor ergonomía y presencia visual)
-        btn_back_surf = self.assets.get_scaled("regresar_seleccion_personaje.png", target_width=165)
+        # Botón Regresar (base limpia de acuarela morada + 'Volver' centrado por tinta)
+        back_base = self.assets.cargarSinFondo(os.path.join("Interfaz", "botonMorado.jpg"), 220)
+        btn_back_surf = self._build_centered_pill_button(
+            back_base,
+            label="Volver",
+            target_size=(192, 66),
+            font_size=30,
+            fill_color=(255, 251, 242),
+            outline_color=(66, 28, 108),
+        )
         self.btn_back = UIButton(
             center_pos=(150, 88),
             normal_sprite=btn_back_surf,
             on_click=self._on_back_clicked
         )
 
-        # Botón Seleccionar
-        btn_select_surf = self.assets.get_scaled("boton_seleccionar_seleccion_personaje.png", target_width=440)
+        # Botón Seleccionar (base limpia dorada + 'Seleccionar' centrado por tinta)
+        select_base = self.assets.load_cropped_surface("boton_jugar_modal.png", alpha_threshold=20)
+        btn_select_surf = self._build_centered_pill_button(
+            select_base,
+            label="Seleccionar",
+            target_size=(360, 124),
+            font_size=44,
+            fill_color=(64, 24, 92),
+            outline_color=(255, 248, 232),
+        )
         self.btn_select = UIButton(
             center_pos=(960, 955),
             normal_sprite=btn_select_surf,

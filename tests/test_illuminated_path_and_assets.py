@@ -661,3 +661,106 @@ def test_night_path_glow_three_tier_hierarchy_and_dt_flow_beads():
         under = arr2[rx0 : rx0 + inter.width, ry0 : ry0 + inter.height][poi_a >= 6]
         del poi_a
         assert under.size == 0 or int(under.max()) == 0
+
+
+def test_voice_button_assets_squircle_and_alpha_crop_parity():
+    from core.asset_manager import AssetManager
+
+    assets = AssetManager.get_instance()
+    for rel in ("assets/boton_voz_on.png", "assets/boton_voz_off.png"):
+        p = Path(rel)
+        assert p.is_file(), f"Falta asset de voz: {rel}"
+        surf = pygame.image.load(str(p)).convert_alpha()
+        assert surf.get_size() == (534, 534)
+        alpha = pygame.surfarray.array_alpha(surf)
+        mask = alpha > 35
+        cols = np.where(mask.any(axis=1))[0]
+        rows = np.where(mask.any(axis=0))[0]
+        bw = int(cols[-1] - cols[0] + 1)
+        bh = int(rows[-1] - rows[0] + 1)
+        assert bw >= int(534 * 0.90) and bh >= int(534 * 0.90)
+
+    audio_frames = assets.get_audio_button_frames(86)
+    voice_frames = assets.get_voice_button_frames(86)
+    assert len(voice_frames) == 2
+
+    def _opaque_box(s):
+        a = pygame.surfarray.array_alpha(s) > 35
+        c = np.where(a.any(axis=1))[0]
+        r = np.where(a.any(axis=0))[0]
+        return int(c[-1] - c[0] + 1), int(r[-1] - r[0] + 1)
+
+    aw, ah = _opaque_box(audio_frames[2])
+    vw, vh = _opaque_box(voice_frames[0])
+    assert abs(aw - vw) <= 2 and abs(ah - vh) <= 2
+
+
+def test_illuminated_path_rejects_replays_backwards_skips_and_malecon():
+    settings = SettingsManager.get_instance()
+    settings.reset_story_progress()
+
+    # 1. Rejugar uninorte cuando uninorte y ventana ya fueron completados no debe generar salto ni repetir revelación
+    settings.update_story_progress(
+        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert"],
+        unlocked_locations=["uninorte", "ventana"],
+    )
+    scene = StoryMapScene(character_id="westcol")
+    scene.show_intro_dialog = False
+    scene.paloma_dialog_open = False
+    scene.active_poi = "uninorte"
+    scene.current_level_stage_idx = 0
+    scene._pending_path_reveal = None
+    scene._on_microgame_complete(True)
+    scene._on_microgame_complete(True)
+    assert scene._pending_path_reveal is None
+    assert ("uninorte", "buenavista") not in scene._unlocked_path_pairs
+
+    # 2. Completar buenavista fuera de orden (antes de uninorte) jamás debe generar par inverso ("buenavista", "uninorte")
+    settings.reset_story_progress()
+    scene2 = StoryMapScene(character_id="westcol")
+    scene2.show_intro_dialog = False
+    scene2.paloma_dialog_open = False
+    scene2.active_poi = "buenavista"
+    scene2.current_level_stage_idx = 0
+    scene2._pending_path_reveal = None
+    scene2._on_microgame_complete(True)
+    assert scene2._pending_path_reveal != ("buenavista", "uninorte")
+    assert ("buenavista", "uninorte") not in scene2._unlocked_path_pairs
+
+    # 3. Completar nivel secreto malecon no modifica rutas de campaña
+    before_pairs = list(scene2._unlocked_path_pairs)
+    scene2.active_poi = "malecon"
+    scene2._pending_path_reveal = None
+    scene2._on_microgame_complete(True)
+    assert scene2._pending_path_reveal is None
+    assert scene2._unlocked_path_pairs == before_pairs
+
+    # 4. _start_path_reveal rechaza pares no consecutivos o inversos
+    scene2.active_path_reveal = None
+    scene2._start_path_reveal("buenavista", "uninorte")
+    assert scene2.active_path_reveal is None
+    scene2._start_path_reveal("uninorte", "buenavista")
+    assert scene2.active_path_reveal is None
+
+
+def test_story_map_pause_menu_no_overlap_with_save_feedback():
+    scene = StoryMapScene(character_id="westcol")
+    assert scene.menuMapaListo is True
+    scene.menu_open = True
+    scene.menu_anim_t = 1.0
+    scene.save_feedback_timer = 2.5
+
+    surf = pygame.Surface((1920, 1080))
+    assert scene.dibujarMenuMapa(surf) is True
+
+    cinta_rect = scene.cintaEstadoMenu.get_rect(center=(scene.centroPapelMenu, 316))
+    explorando_rect = scene.fuenteTextoMenu.render("Con Westcol", True, (110, 68, 38)).get_rect(
+        center=(scene.centroPapelMenu, 270)
+    )
+    assert explorando_rect.bottom < cinta_rect.top
+    assert cinta_rect.bottom < scene.btn_resume.rect.top
+    for i in range(len(scene.drawer_buttons)):
+        for j in range(i + 1, len(scene.drawer_buttons)):
+            r1 = scene.drawer_buttons[i].rect
+            r2 = scene.drawer_buttons[j].rect
+            assert not r1.colliderect(r2), f"Botones de pausa solapados: {r1} vs {r2}"

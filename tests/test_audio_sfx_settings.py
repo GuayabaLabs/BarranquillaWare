@@ -360,3 +360,58 @@ def test_audio_manager_music_volume_scale_and_mute_restore(monkeypatch):
     audio.toggle_music()
     assert audio.music_enabled is True
     assert set_vol_calls[-1] == pytest.approx(0.225)
+
+
+def test_buenavista_trend_sfx_respects_sfx_volume_and_sound_enabled_independent_of_music(monkeypatch):
+    pygame.display.set_mode((1920, 1080))
+    from microgames.buenavista_trend import BuenavistaTrendMicrogame
+
+    audio = AudioManager.get_instance()
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    game.phase = game.PHASE_PLAY
+
+    recorded = []
+    orig_play_sfx = audio.play_sfx
+
+    def spy_play_sfx(sound, volume_scale=1.0):
+        expected_vol = max(0.0, min(1.0, audio.sfx_volume * volume_scale)) if audio.sound_enabled else 0.0
+        recorded.append((audio.sound_enabled, audio.sfx_volume, volume_scale, expected_vol))
+        return orig_play_sfx(sound, volume_scale)
+
+    monkeypatch.setattr(audio, "play_sfx", spy_play_sfx)
+
+    try:
+        audio.sound_enabled = True
+        for vol in (0.0, 0.25, 0.8, 1.0):
+            audio.set_sfx_volume(vol)
+            audio.set_music_volume(1.0 - vol)  # music_volume no debe afectar sfx_volume
+            ev = game.musical_events[0]
+            ev.spawned = True
+            ev.state = "falling"
+            game.song_elapsed = ev.impact_time
+            game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=game.LANE_KEYS[ev.lane]))
+            game.handle_event(pygame.event.Event(pygame.KEYUP, key=game.LANE_KEYS[ev.lane]))
+            assert recorded[-1][1] == pytest.approx(vol)
+            assert recorded[-1][3] == pytest.approx(vol * 0.78)
+
+        # Fallo por nota perdida y pulsación errónea escalan por sfx_volume
+        audio.set_sfx_volume(0.4)
+        ev_miss = game.musical_events[1]
+        ev_miss.penalized = False
+        ev_miss.state = "falling"
+        game._mark_note_missed(ev_miss, reason="¡FALLO!")
+        assert recorded[-1][3] == pytest.approx(0.4 * 0.80)
+
+        game.wrong_press_cooldown = 0.0
+        game.song_elapsed = 0.05
+        game._apply_wrong_press_penalty(3, reason="¡CARRIL INCORRECTO!")
+        assert recorded[-1][3] == pytest.approx(0.4 * 0.80)
+
+        # Cuando sound_enabled=False, play_sfx real devuelve None y no dispara sonido
+        monkeypatch.undo()
+        audio.sound_enabled = False
+        assert audio.play_sfx(game._sfx_note_perfect[0], 0.78) is None
+    finally:
+        audio.sound_enabled = True
+        audio.set_sfx_volume(1.0)
+        game.cleanup()

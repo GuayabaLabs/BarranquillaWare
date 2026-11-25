@@ -293,6 +293,43 @@ class AssetManager:
         self._cache[cache_key] = scaled
         return scaled
 
+    def _crop_alpha_square_and_scale(
+        self,
+        surf: pygame.Surface,
+        target_size: int,
+        alpha_threshold: int = 35,
+    ) -> pygame.Surface:
+        """Recorta un sprite a su cuadrado mínimo según `alpha > alpha_threshold` y escala 1:1."""
+        sub_arr = pygame.surfarray.pixels_alpha(surf)
+        mask = sub_arr > alpha_threshold
+        del sub_arr
+
+        cols = np.where(mask.any(axis=1))[0]
+        rows = np.where(mask.any(axis=0))[0]
+
+        if len(cols) > 0 and len(rows) > 0:
+            min_x, max_x = int(cols[0]), int(cols[-1])
+            min_y, max_y = int(rows[0]), int(rows[-1])
+            bw = max_x - min_x + 1
+            bh = max_y - min_y + 1
+
+            side = max(bw, bh)
+            crop_x = min_x - (side - bw) // 2
+            crop_y = min_y - (side - bh) // 2
+
+            raw_rect = surf.get_rect()
+            crop_rect = pygame.Rect(crop_x, crop_y, side, side)
+            clipped = crop_rect.clip(raw_rect)
+            square_surf = pygame.Surface((side, side), pygame.SRCALPHA)
+            if clipped.width > 0 and clipped.height > 0:
+                square_surf.blit(
+                    surf,
+                    (clipped.x - crop_rect.x, clipped.y - crop_rect.y),
+                    clipped,
+                )
+            return pygame.transform.smoothscale(square_surf, (target_size, target_size))
+        return pygame.transform.smoothscale(surf, (target_size, target_size))
+
     def get_audio_button_frames(self, target_size: int = 58) -> List[pygame.Surface]:
         """
         Extrae los 4 frames del spritesheet de audio sin deformación (aspect ratio 1:1 exacto):
@@ -309,33 +346,7 @@ class AssetManager:
         for i in range(4):
             sub = pygame.Surface((frame_width, frame_height), pygame.SRCALPHA)
             sub.blit(raw, (0, 0), (i * frame_width, 0, frame_width, frame_height))
-
-            # Segmentar máscara con umbral alfa > 35 para aislar silueta física real
-            sub_arr = pygame.surfarray.pixels_alpha(sub)
-            mask = sub_arr > 35
-            del sub_arr
-
-            cols = np.where(mask.any(axis=1))[0]
-            rows = np.where(mask.any(axis=0))[0]
-
-            if len(cols) > 0 and len(rows) > 0:
-                min_x, max_x = cols[0], cols[-1]
-                min_y, max_y = rows[0], rows[-1]
-                bw = max_x - min_x + 1
-                bh = max_y - min_y + 1
-
-                side = max(bw, bh)
-                cx = (min_x + max_x) // 2
-                cy = (min_y + max_y) // 2
-
-                crop_rect = pygame.Rect(cx - side // 2, cy - side // 2, side, side)
-                square_surf = pygame.Surface((side, side), pygame.SRCALPHA)
-                square_surf.blit(sub, (0, 0), crop_rect)
-                scaled = pygame.transform.smoothscale(square_surf, (target_size, target_size))
-            else:
-                scaled = pygame.transform.smoothscale(sub, (target_size, target_size))
-
-            frames.append(scaled)
+            frames.append(self._crop_alpha_square_and_scale(sub, target_size, alpha_threshold=35))
 
         self._audio_cache[target_size] = frames
         return frames
@@ -343,8 +354,9 @@ class AssetManager:
     def get_voice_button_frames(self, target_size: int = 58) -> List[pygame.Surface]:
         """
         Carga los 2 frames acuarela ilustrados para el botón toggle de Voces [ON, OFF]
-        desde assets/boton_voz_on.png y assets/boton_voz_off.png, armonizados con los sellos
-        de cera de la UI. Mantiene fallback procedural si no existieran los archivos en disco.
+        desde assets/boton_voz_on.png y assets/boton_voz_off.png, recortados y escalados 1:1
+        con la misma métrica alfa que los botones de música y sonido.
+        Mantiene fallback procedural si no existieran los archivos en disco.
         """
         if target_size in self._voice_cache:
             return self._voice_cache[target_size]
@@ -356,8 +368,8 @@ class AssetManager:
                 s_on = pygame.image.load(on_path).convert_alpha()
                 s_off = pygame.image.load(off_path).convert_alpha()
                 frames = [
-                    pygame.transform.smoothscale(s_on, (target_size, target_size)),
-                    pygame.transform.smoothscale(s_off, (target_size, target_size)),
+                    self._crop_alpha_square_and_scale(s_on, target_size, alpha_threshold=35),
+                    self._crop_alpha_square_and_scale(s_off, target_size, alpha_threshold=35),
                 ]
                 self._voice_cache[target_size] = frames
                 return frames

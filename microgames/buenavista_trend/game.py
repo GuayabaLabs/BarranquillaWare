@@ -3,6 +3,7 @@ import math
 import random
 from dataclasses import dataclass, field
 from typing import Optional, Callable, List, Tuple, Dict, Any, Set
+import numpy as np
 import pygame
 
 from core.microgame import BaseMicrogame
@@ -162,6 +163,53 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
 
         self.iniciarPublico()
         self._preload_music_track()
+        self._init_note_sfx()
+
+    def _init_note_sfx(self) -> None:
+        """Pre-genera efectos de percusión melódica suave por carril para notas Perfecto/Bien sin saturar la música."""
+        self._sfx_note_perfect: List[Optional[pygame.mixer.Sound]] = [None, None, None, None]
+        self._sfx_note_good: List[Optional[pygame.mixer.Sound]] = [None, None, None, None]
+        self._sfx_note_miss: Optional[pygame.mixer.Sound] = getattr(self.audio, "_miss_sound", None)
+
+        mixer_info = pygame.mixer.get_init()
+        if not mixer_info:
+            return
+        try:
+            sr = int(mixer_info[0]) or 44100
+            perfect_freqs = (523.25, 587.33, 659.25, 783.99)  # C5, D5, E5, G5 (pentatónica alegre)
+            good_freqs = (392.00, 440.00, 493.88, 523.25)     # G4, A4, B4, C5 (toque de madera más suave)
+
+            dur_p = 0.095
+            t_p = np.linspace(0.0, dur_p, max(1, int(sr * dur_p)), False)
+            attack_p = np.minimum(1.0, t_p / 0.004)
+            env_p = attack_p * np.exp(-t_p * 30.0)
+            trans_p = np.exp(-t_p * 180.0)
+
+            dur_g = 0.070
+            t_g = np.linspace(0.0, dur_g, max(1, int(sr * dur_g)), False)
+            attack_g = np.minimum(1.0, t_g / 0.004)
+            env_g = attack_g * np.exp(-t_g * 44.0)
+
+            for lane_i in range(4):
+                fp = perfect_freqs[lane_i]
+                wave_p = (
+                    0.72 * np.sin(2.0 * np.pi * fp * t_p)
+                    + 0.24 * np.sin(2.0 * np.pi * (fp * 2.0) * t_p) * np.exp(-t_p * 42.0)
+                    + 0.16 * np.sin(2.0 * np.pi * (fp * 3.0) * t_p) * trans_p
+                ) * env_p * 0.78
+                arr_p = (np.clip(wave_p, -1.0, 1.0) * 32767).astype(np.int16)
+                self._sfx_note_perfect[lane_i] = pygame.sndarray.make_sound(np.column_stack((arr_p, arr_p)))
+
+                fg = good_freqs[lane_i]
+                wave_g = (
+                    0.82 * np.sin(2.0 * np.pi * fg * t_g)
+                    + 0.18 * np.sin(2.0 * np.pi * (fg * 2.0) * t_g) * np.exp(-t_g * 60.0)
+                ) * env_g * 0.70
+                arr_g = (np.clip(wave_g, -1.0, 1.0) * 32767).astype(np.int16)
+                self._sfx_note_good[lane_i] = pygame.sndarray.make_sound(np.column_stack((arr_g, arr_g)))
+        except Exception:
+            self._sfx_note_perfect = [None, None, None, None]
+            self._sfx_note_good = [None, None, None, None]
 
     def _load_background_layer(self) -> None:
         """Carga el fondo de Buenavista a resolución lógica y aplica un velo suave para destacar el celular."""
@@ -1079,7 +1127,15 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.combo_pop_timer = 0.18
         self.paloma_cheer_timer = 0.65
 
-        if hasattr(self.audio, "play_drum"):
+        lane_idx = max(0, min(3, int(note.lane)))
+        is_perfect = "PERFECTO" in judgment
+        sfx_pool = getattr(self, "_sfx_note_perfect", None) if is_perfect else getattr(self, "_sfx_note_good", None)
+        note_snd = sfx_pool[lane_idx] if sfx_pool and lane_idx < len(sfx_pool) else None
+        vol_scale = 0.78 if is_perfect else 0.58
+
+        if note_snd is not None and hasattr(self.audio, "play_sfx"):
+            self.audio.play_sfx(note_snd, vol_scale)
+        elif hasattr(self.audio, "play_drum"):
             self.audio.play_drum()
         elif hasattr(self.audio, "play_hit"):
             self.audio.play_hit()
@@ -1175,7 +1231,10 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self.red_flash_alpha = 135.0
         self.trauma = min(1.0, self.trauma + 0.55)
 
-        if hasattr(self.audio, "play_miss"):
+        miss_snd = getattr(self, "_sfx_note_miss", None) or getattr(self.audio, "_miss_sound", None)
+        if miss_snd is not None and hasattr(self.audio, "play_sfx"):
+            self.audio.play_sfx(miss_snd, 0.80)
+        elif hasattr(self.audio, "play_miss"):
             self.audio.play_miss()
         elif hasattr(self.audio, "play_lose"):
             self.audio.play_lose()

@@ -90,6 +90,48 @@ def make_watercolor_button_surface(
     return plate
 
 
+def build_centered_pill_button(
+    assets: AssetManager,
+    base_surface: pygame.Surface,
+    label: str,
+    target_size: Tuple[int, int],
+    font_size: int,
+    fill_color: Tuple[int, int, int],
+    outline_color: Tuple[int, int, int],
+) -> pygame.Surface:
+    """Compone texto Titulos.ttf centrado ópticamente por su tinta dentro de un botón base."""
+    bbox = base_surface.get_bounding_rect(min_alpha=20)
+    if bbox.width > 0 and bbox.height > 0:
+        cropped = pygame.Surface((bbox.width, bbox.height), pygame.SRCALPHA)
+        cropped.blit(base_surface, (0, 0), bbox)
+    else:
+        cropped = base_surface
+
+    plate = pygame.transform.smoothscale(cropped, target_size).copy()
+    vis_rect = plate.get_bounding_rect(min_alpha=20)
+    if vis_rect.width <= 0 or vis_rect.height <= 0:
+        vis_rect = plate.get_rect()
+
+    cur_size = font_size
+    max_text_w = int(vis_rect.width * 0.78)
+    font = assets.cargarFuenteTitulo(cur_size)
+    txt_surf = render_outlined_text(font, label, fill_color, outline_color, thickness=3)
+    ink_rect = txt_surf.get_bounding_rect(min_alpha=10)
+    while ink_rect.width > max_text_w and cur_size > 16:
+        cur_size -= 1
+        font = assets.cargarFuenteTitulo(cur_size)
+        txt_surf = render_outlined_text(font, label, fill_color, outline_color, thickness=3)
+        ink_rect = txt_surf.get_bounding_rect(min_alpha=10)
+
+    if ink_rect.width <= 0 or ink_rect.height <= 0:
+        ink_rect = txt_surf.get_rect()
+
+    draw_x = vis_rect.centerx - ink_rect.centerx
+    draw_y = vis_rect.centery - ink_rect.centery
+    plate.blit(txt_surf, (draw_x, draw_y))
+    return plate
+
+
 class StorySaveModalPanel:
     """
     Panel modal ilustrado en acuarela para 'Partida Guardada Encontrada' y 'Cargar Partida'.

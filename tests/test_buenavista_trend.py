@@ -481,3 +481,61 @@ def _trend_sin_dialogo_paloma(monkeypatch):
     """Estas pruebas son del juego en sí: arrancan sin el diálogo de la Paloma (como en el Modo Historia)."""
     from microgames.buenavista_trend import BuenavistaTrendMicrogame as _Trend
     monkeypatch.setattr(_Trend, "dialogoPaloma", None)
+
+
+def test_buenavista_note_hit_and_miss_sfx_differentiated_and_muted(monkeypatch):
+    """Valida SFX diferenciados de acierto Perfecto/Bien, fallo y respeto a sound_enabled."""
+    game = BuenavistaTrendMicrogame(character_id="westcol")
+    game.phase = game.PHASE_PLAY
+    sfx_calls = []
+    orig_play_sfx = game.audio.play_sfx
+
+    def spy_play_sfx(sound, volume_scale=1.0):
+        sfx_calls.append((sound, volume_scale))
+        return orig_play_sfx(sound, volume_scale)
+
+    monkeypatch.setattr(game.audio, "play_sfx", spy_play_sfx)
+
+    game.audio.sound_enabled = True
+    game.audio.set_sfx_volume(0.8)
+
+    # 1. Nota Perfecto en carril 0
+    ev0 = game.musical_events[0]
+    ev0.spawned = True
+    ev0.state = "falling"
+    game.song_elapsed = ev0.impact_time
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=game.LANE_KEYS[ev0.lane]))
+    game.handle_event(pygame.event.Event(pygame.KEYUP, key=game.LANE_KEYS[ev0.lane]))
+
+    # 2. Nota Bien en otro carril
+    ev1 = next(e for e in game.musical_events[1:] if e.lane != ev0.lane)
+    ev1.spawned = True
+    ev1.state = "falling"
+    game.song_elapsed = ev1.impact_time + 0.11
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=game.LANE_KEYS[ev1.lane]))
+    game.handle_event(pygame.event.Event(pygame.KEYUP, key=game.LANE_KEYS[ev1.lane]))
+
+    assert len(sfx_calls) == 2
+    assert sfx_calls[0][1] == pytest.approx(0.78)
+    assert sfx_calls[1][1] == pytest.approx(0.58)
+    assert sfx_calls[0][0] is not sfx_calls[1][0]
+
+    # 3. Carril equivocado / fallo
+    game.wrong_press_cooldown = 0.0
+    game.song_elapsed = 0.05
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_k))
+    game.handle_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_k))
+    assert len(sfx_calls) == 3
+    assert sfx_calls[2][1] == pytest.approx(0.80)
+
+    # 4. sound_enabled=False no dispara canal de reproducción
+    game.audio.sound_enabled = False
+    ev2 = next(e for e in game.musical_events[2:] if e.state == "falling" or e is not ev0 and e is not ev1)
+    ev2.spawned = True
+    ev2.state = "falling"
+    game.song_elapsed = ev2.impact_time
+    res = game.audio.play_sfx(game._sfx_note_perfect[ev2.lane], 0.78)
+    assert res is None
+
+    game.audio.sound_enabled = True
+    game.cleanup()
