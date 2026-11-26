@@ -564,7 +564,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self._walk_step_flash = max(0.0, self._walk_step_flash - dt)
         self._walk_step_buffer = max(0.0, self._walk_step_buffer - dt)
         self._walk_finger_idle += dt
-        if self._walk_finger_idle >= 0.65:
+        if self._walk_finger_idle >= 1.15:
             self._last_walk_finger = None
         if getattr(self, "camera_input", None) and self.camera_input.enabled and self.camera_input.is_hand_present():
             f0 = self.camera_input.consume_finger(0)
@@ -573,7 +573,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
             if tapped is not None:
                 self._last_walk_finger = tapped
                 self._walk_finger_idle = 0.0
-                self._walk_step_buffer = 0.35
+                self._walk_step_buffer = 0.45
         if self._walk_step_buffer > 0.0 and not self.is_jumping and self.jump_cooldown <= 0.0:
             self._jump_forward()
             if self.is_jumping:
@@ -1171,14 +1171,34 @@ class UninorteSprintMicrogame(BaseMicrogame):
             self._walk_title_font = self.assets.cargarFuenteTitulo(22)
         msg = "¡PASO!" if self._walk_step_flash > 0 else "CÁMARA: ALTERNA ÍNDICE Y MEDIO PARA AVANZAR"
         txt = self._walk_title_font.render(msg, True, (78, 51, 35))
-        pw = txt.get_width() + 48
+        pw = txt.get_width() + 96
         ph = 44
         pill = pygame.Surface((pw, ph), pygame.SRCALPHA)
         bg_col = (218, 244, 224, 225) if self._walk_step_flash > 0 else (255, 249, 234, 220)
         pygame.draw.rect(pill, bg_col, (0, 0, pw, ph), border_radius=22)
         pygame.draw.rect(pill, (126, 86, 56, 230), (0, 0, pw, ph), width=2, border_radius=22)
+        last_f = getattr(self, "_last_walk_finger", None)
+        for idx, cx in ((0, 24), (1, pw - 24)):
+            next_up = (last_f is None and idx == 0) or (last_f is not None and last_f != idx)
+            col = (84, 194, 118) if next_up else (196, 178, 152)
+            pygame.draw.circle(pill, col, (cx, ph // 2), 10)
+            pygame.draw.circle(pill, (78, 51, 35), (cx, ph // 2), 10, width=2)
         pill.blit(txt, txt.get_rect(center=(pw // 2, ph // 2 + 1)))
         surface.blit(pill, pill.get_rect(center=(self.screen_w // 2, 42)))
+
+        # Sombra/silueta de dedos en esquina inferior derecha para feedback táctil de cámara
+        hand_panel = pygame.Surface((104, 88), pygame.SRCALPHA)
+        pygame.draw.ellipse(hand_panel, (24, 18, 16, 85), (22, 42, 60, 40))
+        for idx, fx, fh in ((0, 34, 42), (1, 58, 48)):
+            next_up = (last_f is None and idx == 0) or (last_f is not None and last_f != idx)
+            if next_up:
+                pulse_r = int(16 + 4 * math.sin(pygame.time.get_ticks() * 0.012))
+                pygame.draw.circle(hand_panel, (110, 235, 145, 95), (fx + 7, 44 - fh // 2), pulse_r)
+                col = (110, 235, 145, 210)
+            else:
+                col = (38, 30, 26, 130)
+            pygame.draw.rect(hand_panel, col, (fx, 48 - fh, 15, fh), border_radius=7)
+        surface.blit(hand_panel, (self.screen_w - 122, self.screen_h - 104))
 
     def partirEnLineas(self, fuente, texto: str, anchoMax: int) -> list:
         lineas = []

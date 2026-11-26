@@ -128,6 +128,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         self._attach_sfx_cooldown: float = 0.0
         self._gesture_pos_freeze_timer: float = 0.0
         self._frozen_cam_pos: Optional[Tuple[float, float]] = None
+        self._cursor_trail: List[Tuple[float, float]] = []
+        self._pinch_ripples: List[Dict[str, float]] = []
 
     def _load_pencil_cursor_sprite(self, target_w: int = 84) -> pygame.Surface:
         """Carga y procesa el sprite oficial del Lapicero de BarranquillaWare ('puntero_lapiz.png')."""
@@ -527,8 +529,9 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             if pinch_hit or fist_hit:
                 self._gesture_pos_freeze_timer = 0.22
                 self._frozen_cam_pos = (self.cursor.x, self.cursor.y)
-                # Radio de tolerancia ampliado a +40px para garantizar el pop de la distracción
-                self._trigger_pop_action(extra_radius=40.0)
+                self._pinch_ripples.append({"x": self.cursor.x, "y": self.cursor.y, "r": 10.0, "alpha": 220.0})
+                # Radio de tolerancia moderado (+26px) para comodidad sin regalar clics lejanos
+                self._trigger_pop_action(extra_radius=26.0)
 
             if self._gesture_pos_freeze_timer > 0.0:
                 self._gesture_pos_freeze_timer -= dt
@@ -543,10 +546,13 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
                 self.cursor.vy = 0.0
             else:
                 self._frozen_cam_pos = None
-                # Suavizado cinético estándar (LERP)
-                smooth = min(1.0, dt * 24.0)
-                self.cursor.x += (target_x - self.cursor.x) * smooth
-                self.cursor.y += (target_y - self.cursor.y) * smooth
+                # Zona muerta de 6px para eliminar micro-temblores de la cámara al apuntar
+                dx = target_x - self.cursor.x
+                dy = target_y - self.cursor.y
+                if (dx * dx + dy * dy) >= 36.0:
+                    smooth = min(1.0, dt * 24.0)
+                    self.cursor.x += dx * smooth
+                    self.cursor.y += dy * smooth
                 self.cursor.vx = 0.0
                 self.cursor.vy = 0.0
         self.elapsed_play_time += dt
@@ -597,6 +603,13 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
         # 4. Actualizar cursor virtual con asistencia magnética sutil
         self.cursor.update(dt, self.clouds)
+        self._cursor_trail.append((self.cursor.x, self.cursor.y))
+        if len(self._cursor_trail) > 6:
+            self._cursor_trail.pop(0)
+        for rp in self._pinch_ripples:
+            rp["r"] += 165.0 * dt
+            rp["alpha"] -= 520.0 * dt
+        self._pinch_ripples = [rp for rp in self._pinch_ripples if rp["alpha"] > 8.0]
 
         # 5. Actualizar partículas de acuarela y puntuación
         for p in self.watercolor_particles:
@@ -667,7 +680,18 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
         self.dibujarEnsenanza(surface)
 
-        # 9. Cursor personalizado en forma de lapicero (siempre al frente)
+        # 9. Estela de movimiento, ondas de pellizco y cursor personalizado (siempre al frente)
+        for i, (tx, ty) in enumerate(self._cursor_trail[:-1]):
+            alpha = int(28 + i * 18)
+            rad = 4 + i
+            dot = pygame.Surface((rad * 2 + 2, rad * 2 + 2), pygame.SRCALPHA)
+            pygame.draw.circle(dot, (255, 232, 140, alpha), (rad + 1, rad + 1), rad)
+            surface.blit(dot, (int(tx) - rad - 1, int(ty) - rad - 1))
+        for rp in self._pinch_ripples:
+            rr = max(2, int(rp["r"]))
+            rs = pygame.Surface((rr * 2 + 4, rr * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(rs, (120, 235, 165, max(0, min(255, int(rp["alpha"])))), (rr + 2, rr + 2), rr, width=3)
+            surface.blit(rs, (int(rp["x"]) - rr - 2, int(rp["y"]) - rr - 2))
         has_target = len(self.cursor.get_pop_targets(self.clouds)) > 0
         self.cursor.render(surface, has_target_in_range=has_target, is_cam_controlled=bool(cam_active))
 
