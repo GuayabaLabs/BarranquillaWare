@@ -100,12 +100,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         bar_frame = self._load_focus_bar_frame(target_w=760)
         self.progress_bar = ProgressBar(bar_frame, center_top_pos=(self.screen_w // 2, 18))
 
-        # 5. Puntero de Valdiri o lapicero oficial para los demás personajes
-        pencil_sprite = (
-            self._load_character_cursor_sprite(target_h=118)
-            if self.character_id == "valdiri"
-            else self._load_pencil_cursor_sprite(target_w=84)
-        )
+        # 5. Puntero temático del personaje seleccionado
+        pencil_sprite = self._load_character_cursor_sprite(target_h=118)
         self.cursor = VirtualCursor(self.screen_w, self.screen_h, pencil_surface=pencil_sprite)
         if self.character_id == "valdiri":
             # La punta del índice ocupa otra posición que la punta del lapicero.
