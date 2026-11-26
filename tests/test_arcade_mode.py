@@ -191,8 +191,6 @@ def test_all_registered_arcade_games_render_on_entry():
 
 
 @pytest.mark.parametrize("game_class", [
-    CurramGramGoMicrogame,
-    EmojiCatchMicrogame,
     PunchAlertMicrogame,
 ])
 def test_arcade_real_game_loss_reaches_score_screen(game_class, monkeypatch):

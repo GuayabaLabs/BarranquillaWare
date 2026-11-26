@@ -164,8 +164,12 @@ class HeladeroMetroMicrogame(BaseMicrogame):
                    "Lo que ves en redes es la vitrina, no la vida.",
                    "Tu trabajo bien hecho también es éxito."],
     }
-    GAMEPAD_BUTTON_KEYS = {2: pygame.K_1, 1: pygame.K_2, 0: pygame.K_SPACE, 3: pygame.K_RETURN}
-    CAMERA_ACTIONS = {"accion": pygame.K_RETURN, "dedos": (pygame.K_1, pygame.K_2)}
+    GAMEPAD_POINTER = True
+    GAMEPAD_BUTTON_KEYS = {2: pygame.K_1, 3: pygame.K_2, 1: pygame.K_b}
+    CAMERA_ACTIONS = {}
+    CAMERA_POINTER = True
+    CAMERA_POINTER_DRAG = True
+    CAMERA_DWELL_CLICK = False
     TIME_BAR_LAYOUT = (1585, 48, 470)
     fraseRedes = "Usa las redes pa' inspirarte, no pa' compararte."
 

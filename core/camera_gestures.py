@@ -203,6 +203,11 @@ class CameraGestureInput:
         with self._lock:
             return self.hand_x, self.hand_y
 
+    def get_hands(self) -> list[tuple[float, float]]:
+        """Devuelve la lista de posiciones (x, y) normalizadas de hasta 2 manos."""
+        with self._lock:
+            return list(getattr(self, "_hands", []))
+
     def get_pointing_direction(self) -> Optional[tuple[float, float]]:
         """Dirección cardinal (dx, dy) al apuntar con los dedos arriba/abajo/izquierda/derecha."""
         with self._lock:
@@ -264,8 +269,10 @@ class CameraGestureInput:
                 fist = False
                 pinch = False
                 pointing_dir = None
+                hands_list: list[tuple[float, float]] = []
                 if result.multi_hand_landmarks:
                     detected = True
+                    hands_list = [(h.landmark[9].x, h.landmark[9].y) for h in result.multi_hand_landmarks[:2]]
                     lm = result.multi_hand_landmarks[0].landmark
                     # Preferir la mano derecha (en imagen espejada) para apuntar direcciones en el mapa.
                     right_hand_lm = max(result.multi_hand_landmarks[:2], key=lambda h: h.landmark[9].x).landmark
@@ -273,9 +280,9 @@ class CameraGestureInput:
                     # Seguimiento focal en la punta del dedo índice (LM 8) para que el lápiz apunte donde apunta el dedo
                     hand_x, hand_y = lm[8].x, lm[8].y
 
-                    # Detección de pellizco (distancia euclidiana entre punta de pulgar LM 4 y punta de índice LM 8)
+                    # Detección de pellizco con histéresis para evitar rebotes cerca del umbral
                     dist_pinch = ((lm[8].x - lm[4].x) ** 2 + (lm[8].y - lm[4].y) ** 2) ** 0.5
-                    pinch = dist_pinch < 0.075
+                    pinch = dist_pinch < (0.095 if self._previous_pinch else 0.068)
 
                     # Clasificación robusta: no depende de la altura absoluta de la cámara.
                     # Los cuatro dedos extendidos representan palma abierta.
@@ -288,6 +295,7 @@ class CameraGestureInput:
                     moving_up = self._previous_hand_y - hand_y > 0.035
                     self.hand_detected = detected
                     self.hand_x, self.hand_y = hand_x, hand_y
+                    self._hands = hands_list
                     self.pointing_direction = pointing_dir
                     self.hand_raised = raised
                     self.open_palm = raised

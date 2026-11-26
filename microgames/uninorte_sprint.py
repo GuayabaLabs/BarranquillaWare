@@ -7,6 +7,7 @@ from PIL import Image
 
 from core.microgame import BaseMicrogame
 from core.camera_gestures import CameraGestureInput
+from effects.juice_particles import JuiceParticleManager
 
 # Caché compartida a nivel de módulo para reutilizar spritesheets recortados, fondos y audios .ogg
 _SURFACE_CACHE: Dict[Tuple[Any, ...], Any] = {}
@@ -137,7 +138,6 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
     def enter(self, params: Optional[dict] = None) -> None:
         self.audio.play_bgm("contraRelojMusic.mp3")
-        pygame.mouse.set_visible(False)
 
     def setup_game(self) -> None:
         self._last_walk_finger: Optional[int] = None
@@ -145,6 +145,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self._walk_step_buffer: float = 0.0
         self._walk_step_flash: float = 0.0
         self._walk_feedback_font = self.assets.cargarFuenteCuento(24)
+        self.juice_particles = JuiceParticleManager()
         self.camera_input = CameraGestureInput.get_instance()
         if not self.camera_input.enabled:
             self.camera_input.start()
@@ -535,7 +536,6 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
-        pygame.mouse.set_visible(True)
         self.callarTictac()
         super().exit()
 
@@ -573,7 +573,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
         if getattr(self, "camera_input", None) and self.camera_input.enabled and self.camera_input.is_hand_present():
             f0 = self.camera_input.consume_finger(0)
             f1 = self.camera_input.consume_finger(1)
-            tapped = 0 if (f0 and self._last_walk_finger != 0) else 1 if (f1 and self._last_walk_finger != 1) else None
+            tapped = 0 if (f0 and not f1 and self._last_walk_finger != 0) else 1 if (f1 and not f0 and self._last_walk_finger != 1) else None
             if tapped is not None:
                 self._last_walk_finger = tapped
                 self._walk_finger_idle = 0.0
@@ -582,7 +582,11 @@ class UninorteSprintMicrogame(BaseMicrogame):
             self._jump_forward()
             if self.is_jumping:
                 self._walk_step_flash = 0.25
+                if hasattr(self, "juice_particles"):
+                    self.juice_particles.emit_sparks((self.screen_w // 2, int(self.screen_h * 0.72)), count=8)
             self._walk_step_buffer = 0.0
+        if hasattr(self, "juice_particles"):
+            self.juice_particles.update(dt)
         # Hit-Stop / Freeze frame al impactar
         if self.freeze_frames > 0:
             self.freeze_frames -= 1
@@ -1066,6 +1070,11 @@ class UninorteSprintMicrogame(BaseMicrogame):
                     else:
                         self.callarTictac()
                 self.revisarGestosAviso(dt)
+                self.time_left = max(0.0, self.time_left - dt)
+                if self.time_left <= 0.0:
+                    self.avisoAbierto = False
+                    self.callarTictac()
+                    self.finish_game(won=False)
                 return
             self.tiempoJugado += dt
             self.revisarLlegadaNoti()
@@ -1087,6 +1096,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
         self.avisoAbierto = True
         self._walk_step_buffer = 0.0
         self._last_walk_finger = None
+        cam = getattr(self, "camera_input", None)
+        self._aviso_require_reset = bool(cam and cam.enabled and getattr(cam, "is_open_palm", lambda: False)())
         self.reset_binary_camera_choice()
         self.tiempoAviso = 0.0
         self.opcionAviso = 1
@@ -1100,6 +1111,11 @@ class UninorteSprintMicrogame(BaseMicrogame):
         if not camara or not camara.enabled or self.tiempoAviso < 0.6:
             self.reset_binary_camera_choice()
             return
+        if getattr(self, "_aviso_require_reset", False):
+            if getattr(camara, "is_open_palm", lambda: False)():
+                self.reset_binary_camera_choice()
+                return
+            self._aviso_require_reset = False
         choice = self.poll_binary_camera_choice(camara, dt)
         if choice is not None:
             self.elegirOpcionAviso(choice)
@@ -1163,6 +1179,8 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
     def render(self, surface: pygame.Surface) -> None:
         super().render(surface)
+        if hasattr(self, "juice_particles"):
+            self.juice_particles.render(surface)
         if getattr(self, "avisoAbierto", False) and self.phase == self.PHASE_PLAY:
             self.dibujarAviso(surface)
         elif self.phase == self.PHASE_PLAY and getattr(self, "camera_input", None) and self.camera_input.enabled:
@@ -1190,19 +1208,35 @@ class UninorteSprintMicrogame(BaseMicrogame):
         pill.blit(txt, txt.get_rect(center=(pw // 2, ph // 2 + 1)))
         surface.blit(pill, pill.get_rect(center=(self.screen_w // 2, 42)))
 
-        # Sombra/silueta de dedos en esquina inferior derecha para feedback táctil de cámara
-        hand_panel = pygame.Surface((104, 88), pygame.SRCALPHA)
-        pygame.draw.ellipse(hand_panel, (24, 18, 16, 85), (22, 42, 60, 40))
-        for idx, fx, fh in ((0, 34, 42), (1, 58, 48)):
-            next_up = (last_f is None and idx == 0) or (last_f is not None and last_f != idx)
-            if next_up:
-                pulse_r = int(16 + 4 * math.sin(pygame.time.get_ticks() * 0.012))
-                pygame.draw.circle(hand_panel, (110, 235, 145, 95), (fx + 7, 44 - fh // 2), pulse_r)
-                col = (110, 235, 145, 210)
-            else:
-                col = (38, 30, 26, 130)
-            pygame.draw.rect(hand_panel, col, (fx, 48 - fh, 15, fh), border_radius=7)
-        surface.blit(hand_panel, (self.screen_w - 122, self.screen_h - 104))
+        # Mano estilizada en esquina inferior derecha para feedback táctil de cámara
+        self._draw_hand_icon(surface, self.screen_w - 114, self.screen_h - 96, mode="walk", highlight_finger=last_f, scale=1.15)
+
+    def _draw_hand_icon(self, surface: pygame.Surface, cx: int, cy: int, mode: str = "palm",
+                        highlight_finger: Optional[int] = None, scale: float = 1.0) -> None:
+        if not hasattr(self, "_hand_icons_cache"):
+            import os
+            self._hand_icons_cache = {}
+            for key, fname in (
+                ("fist", "mano_puno.png"),
+                ("palm", "mano_palma.png"),
+                ("index", "mano_indice.png"),
+                ("middle", "mano_medio.png"),
+            ):
+                try:
+                    self._hand_icons_cache[key] = self.assets.cargarSinFondo(os.path.join("Interfaz", fname), 150)
+                except Exception:
+                    self._hand_icons_cache[key] = None
+        if mode == "walk":
+            key = "index" if (highlight_finger is None or highlight_finger != 0) else "middle"
+        elif mode == "fist":
+            key = "fist"
+        else:
+            key = "palm"
+        spr = self._hand_icons_cache.get(key)
+        if spr is not None:
+            if abs(scale - 1.0) > 0.02:
+                spr = pygame.transform.smoothscale_by(spr, scale)
+            surface.blit(spr, spr.get_rect(center=(cx, cy)))
 
     def partirEnLineas(self, fuente, texto: str, anchoMax: int) -> list:
         lineas = []
@@ -1268,6 +1302,29 @@ class UninorteSprintMicrogame(BaseMicrogame):
         if camara and camara.enabled:
             ayuda = "Pellizco/puño (mantén): revisar · Palma abierta (mantén): seguir"
             progress_pair = getattr(self, "_choice_hold_progress", (0.0, 0.0))
+            # Signos visuales a izquierda (puño/pellizco) y derecha (palma abierta) usando los assets del juego
+            for side_idx, sx, label, col_border in (
+                (0, 310, "PUÑO / PELLIZCO", (92, 46, 118)),
+                (1, 1610, "PALMA ABIERTA", (36, 92, 68)),
+            ):
+                prog = min(1.0, progress_pair[side_idx])
+                if prog > 0.02:
+                    halo = pygame.Surface((320, 320), pygame.SRCALPHA)
+                    for step in range(10, 0, -1):
+                        r = int(160 * step / 10)
+                        a = int((26 * prog) * (1.0 - step / 11.0))
+                        pygame.draw.circle(halo, (255, 224, 110, a), (160, 160), r)
+                    surface.blit(halo, halo.get_rect(center=(sx, 470)))
+                escala_g = 1.0 + 0.08 * prog
+                fondo = pygame.transform.smoothscale(self.globo, (int(280 * escala_g), int(210 * escala_g)))
+                if side_idx == 1:
+                    fondo = pygame.transform.flip(fondo, True, False)
+                surface.blit(fondo, fondo.get_rect(center=(sx, 470)))
+                self._draw_hand_icon(surface, sx, 456, mode="fist" if side_idx == 0 else "palm", scale=0.82)
+                badge = pygame.transform.smoothscale(self.botonMorado if side_idx == 0 else self.botonRojo, (250, 56))
+                surface.blit(badge, badge.get_rect(center=(sx, 584)))
+                lbl = self.textoConBorde(self.fuenteAyudaAviso, label, (255, 248, 236), col_border)
+                surface.blit(lbl, lbl.get_rect(center=(sx, 582)))
             for index, progress in enumerate(progress_pair):
                 rect = self.botonesAviso()[index]
                 bar = pygame.Rect(rect.left + 30, rect.bottom + 10, rect.width - 60, 10)

@@ -8,6 +8,7 @@ from PIL import Image
 
 from core.microgame import BaseMicrogame
 from core.camera_gestures import CameraGestureInput
+from effects.juice_particles import JuiceParticleManager
 from microgames.uninorte_concentrate.entities import (
     Student,
     Distraction,
@@ -126,6 +127,11 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         self._frozen_cam_pos: Optional[Tuple[float, float]] = None
         self._cursor_trail: List[Tuple[float, float]] = []
         self._pinch_ripples: List[Dict[str, float]] = []
+        self.juice_particles = JuiceParticleManager()
+        try:
+            self.spr_pinch_hint = self.assets.cargarSinFondo(os.path.join("Interfaz", "mano_pellizco.jpg"), 108)
+        except Exception:
+            self.spr_pinch_hint = None
 
     def _load_pencil_cursor_sprite(self, target_w: int = 84) -> pygame.Surface:
         """Carga y procesa el sprite oficial del Lapicero de BarranquillaWare ('puntero_lapiz.png')."""
@@ -526,6 +532,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
                 self._gesture_pos_freeze_timer = 0.22
                 self._frozen_cam_pos = (self.cursor.x, self.cursor.y)
                 self._pinch_ripples.append({"x": self.cursor.x, "y": self.cursor.y, "r": 10.0, "alpha": 220.0})
+                if hasattr(self, "juice_particles"):
+                    self.juice_particles.emit_sparks((self.cursor.x, self.cursor.y), count=10)
                 # Radio de tolerancia moderado (+26px) para comodidad sin regalar clics lejanos
                 self._trigger_pop_action(extra_radius=26.0)
 
@@ -618,6 +626,8 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
         self.watercolor_particles = [p for p in self.watercolor_particles if p["alpha"] > 5.0]
 
         self.score_manager.update(dt)
+        if hasattr(self, "juice_particles"):
+            self.juice_particles.update(dt)
 
         if self.screen_trauma > 0.0:
             self.screen_trauma = max(0.0, self.screen_trauma - dt * 1.8)
@@ -676,6 +686,22 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
 
         self.dibujarEnsenanza(surface)
 
+        has_target = len(self.cursor.get_pop_targets(self.clouds)) > 0
+        if cam_active and getattr(self, "spr_pinch_hint", None) is not None:
+            hx = self.screen_w - 150
+            hy = self.screen_h - 124
+            card_w, card_h = 240, 196
+            card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            if has_target:
+                pulse_a = int(120 + 70 * math.sin(pygame.time.get_ticks() * 0.012))
+                pygame.draw.rect(card, (255, 218, 90, pulse_a), (0, 0, card_w, card_h), border_radius=26)
+            pygame.draw.rect(card, (255, 249, 234, 232), (6, 6, card_w - 12, card_h - 12), border_radius=22)
+            pygame.draw.rect(card, (126, 86, 56, 235), (6, 6, card_w - 12, card_h - 12), width=3, border_radius=22)
+            card.blit(self.spr_pinch_hint, self.spr_pinch_hint.get_rect(center=(card_w // 2, 76)))
+            lbl = self.font_hint.render("PELLIZCA LA NUBE", True, (78, 51, 35))
+            card.blit(lbl, lbl.get_rect(center=(card_w // 2, 162)))
+            surface.blit(card, card.get_rect(center=(hx, hy)))
+
         # 9. Estela de movimiento, ondas de pellizco y cursor personalizado (siempre al frente)
         for i, (tx, ty) in enumerate(self._cursor_trail[:-1]):
             alpha = int(28 + i * 18)
@@ -688,8 +714,9 @@ class UninorteConcentrateMicrogame(BaseMicrogame):
             rs = pygame.Surface((rr * 2 + 4, rr * 2 + 4), pygame.SRCALPHA)
             pygame.draw.circle(rs, (120, 235, 165, max(0, min(255, int(rp["alpha"])))), (rr + 2, rr + 2), rr, width=3)
             surface.blit(rs, (int(rp["x"]) - rr - 2, int(rp["y"]) - rr - 2))
-        has_target = len(self.cursor.get_pop_targets(self.clouds)) > 0
         self.cursor.render(surface, has_target_in_range=has_target, is_cam_controlled=bool(cam_active))
+        if hasattr(self, "juice_particles"):
+            self.juice_particles.render(surface)
 
     def _render_top_right_timer(self, surface: pygame.Surface) -> None:
         return

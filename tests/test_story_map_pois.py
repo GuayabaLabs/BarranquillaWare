@@ -61,13 +61,10 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     # 1. Verificar orden de los 4 niveles y configuración de etapas
     assert STORY_CAMPAIGN_ORDER == ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["uninorte"]] == [UninorteSprintMicrogame, UninorteConcentrateMicrogame]
-    from microgames.emoji_catch import EmojiCatchMicrogame
-    assert [s["cls"] for s in STORY_LEVEL_STAGES["ventana"]] == [PunchAlertMicrogame, EmojiCatchMicrogame]
+    assert [s["cls"] for s in STORY_LEVEL_STAGES["ventana"]] == [PunchAlertMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["buenavista"]] == [BuenavistaTrendMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["metropolitano"]] in ([HeladeroMetroMicrogame], [MetropolitanoModeracionMicrogame], [MetropolitanoModeracionMicrogame, HeladeroMetroMicrogame])
-    # El aeropuerto es un nivel extra que se juega con CurramGram Go!
-    from microgames.curramgram_go import CurramGramGoMicrogame
-    assert [s["cls"] for s in STORY_LEVEL_STAGES["aeropuerto"]] == [CurramGramGoMicrogame]
+    assert "aeropuerto" not in STORY_LEVEL_STAGES
 
     # 2. Al llegar a Uninorte, se abre el diálogo pre-nivel con la Paloma
     scene._notify_poi_arrival("uninorte")
@@ -121,11 +118,10 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     scene._notify_poi_arrival("mallorquin")
     assert scene.quest_card_open is False
     assert scene.paloma_dialog_open is False
-    # El aeropuerto ahora es jugable (CurramGram): al llegar abre su diálogo o tarjeta.
+    # El aeropuerto es decorativo (no jugable): al llegar no abre diálogo ni tarjeta.
     scene._notify_poi_arrival("aeropuerto")
-    assert scene.quest_card_open or scene.paloma_dialog_open
-    scene.quest_card_open = False
-    scene.paloma_dialog_open = False
+    assert scene.quest_card_open is False
+    assert scene.paloma_dialog_open is False
 
     # 6. Verificar que la cámara siempre se mantiene enfocada en el personaje al salir de un nivel
     scene.player_pos = (1600.0, 950.0)

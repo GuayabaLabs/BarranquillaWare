@@ -830,7 +830,7 @@ def test_intermediate_rounds_preserve_reaction_voices_and_10_fallback_microgames
 
     audio = AudioManager.get_instance()
 
-    # 1. Ganar Ronda 1 de Uninorte mantiene banner rápido (1.25s) y preserva coronaste.ogg en Ronda 2
+    # 1. Ganar Ronda 1 de Uninorte muestra letrero resultado y preserva la voz en Ronda 2
     sm = StateMachine()
     story = StoryMapScene(character_id="kevin")
     story.state_machine = sm
@@ -840,16 +840,18 @@ def test_intermediate_rounds_preserve_reaction_voices_and_10_fallback_microgames
     story._launch_microgame()
     r1 = sm.current_state
     r1.finish_game(won=True)
-    assert r1.outro_duration == pytest.approx(1.25)
+    assert getattr(r1, "letreroResultado", None) is not None
+    assert r1.outro_duration >= 4.0
     assert audio.is_voice_playing() is True
     assert getattr(audio, "_voice_clip_name", None) == "coronaste.ogg"
 
-    r1.update(1.30)
+    r1.outro_timer = r1.outro_duration
+    r1.update(0.05)
     r2 = sm.current_state
     assert r2 is not r1
     assert story.current_level_stage_idx == 1
-    assert audio.is_voice_playing() is True, "La transición de Ronda 1 a Ronda 2 truncó coronaste.ogg"
-    assert getattr(audio, "_voice_clip_name", None) == "coronaste.ogg"
+    assert audio.is_voice_playing() is True, "La transición de Ronda 1 a Ronda 2 truncó la voz activa"
+    assert getattr(audio, "_voice_clip_name", None) in ("coronaste.ogg", "refl_uninorte_sprint_win.ogg")
     r2.exit()
 
     # 2. Perder Ronda 1 de Uninorte extiende el outro para que ombe_casi.ogg no se corte al instante
@@ -1074,11 +1076,12 @@ def test_microgame_transitions_freeplay_arcade_pause_and_audio_update(monkeypatc
         nxt.exit()
 
     # 2. FreePlayScene: reiniciar y salir desde pausa limpia la pila y respeta voces
+    from microgames.buenavista_trend import BuenavistaTrendMicrogame
     fp = FreePlayScene(character_id="char")
     sm_fp = StateMachine()
     sm_fp.change_state(fp)
-    curram_idx = next(i for i, g in enumerate(fp.games_data) if g["cls"] is CurramGramGoMicrogame)
-    fp._launch_game(curram_idx)
+    trend_idx = next(i for i, g in enumerate(fp.games_data) if g["cls"] is BuenavistaTrendMicrogame)
+    fp._launch_game(trend_idx)
     mg_fp = sm_fp.current_state
     pause_fp = MicrogamePauseState(
         previous=mg_fp,
@@ -1087,8 +1090,9 @@ def test_microgame_transitions_freeplay_arcade_pause_and_audio_update(monkeypatc
         menu_callback=mg_fp.pause_menu_callback,
     )
     sm_fp.push_state(pause_fp)
+    audio.play_voice("paloma_animo.ogg")
     mg_fp.pause_restart_callback()
-    assert isinstance(sm_fp.current_state, CurramGramGoMicrogame)
+    assert isinstance(sm_fp.current_state, BuenavistaTrendMicrogame)
     assert len(sm_fp._states) == 1
     assert audio.is_voice_playing() is True
     assert getattr(audio, "_voice_clip_name", None) == "paloma_animo.ogg"

@@ -127,7 +127,11 @@ class Fritanga84Microgame(BaseMicrogame):
                           "de lo que de verdad importa."]
     fraseRedes = "Usa las redes pa' compartir lo bueno, no pa' pelear."
 
-    CAMERA_POINTER = False  # Sus gestos propios voltean, sirven y entregan el patillazo.
+    GAMEPAD_POINTER = True
+    GAMEPAD_BUTTON_KEYS = {2: pygame.K_p, 3: pygame.K_e}
+    CAMERA_POINTER = True
+    CAMERA_POINTER_DRAG = True
+    CAMERA_DWELL_CLICK = False
     def __init__(
         self,
         character_id: str = "westcol",
@@ -656,10 +660,12 @@ class Fritanga84Microgame(BaseMicrogame):
             apretado = bool(getattr(event, "buttons", (1, 0, 0))[0])
             if self.estadoVaso == "arrastrando" and apretado:
                 self.posArrastre = [float(event.pos[0]), float(event.pos[1])]
-            elif apretado and self.mouseServir and self.vasoLleno() and self.estadoVaso == "listo" \
-                    and math.hypot(event.pos[0] - self.puntoApretado[0], event.pos[1] - self.puntoApretado[1]) > 25:
-                self.agarrarVaso(event.pos)
-                self.agarreVaso = (0, -70)
+            elif apretado and self.mouseServir and self.vasoLleno() and self.estadoVaso == "listo":
+                es_virtual = bool(getattr(event, "camera_pointer", False) or getattr(event, "gamepad_pointer", False))
+                salio_botellon = (not self.zonaServir().collidepoint(event.pos)) if es_virtual else True
+                if salio_botellon and math.hypot(event.pos[0] - self.puntoApretado[0], event.pos[1] - self.puntoApretado[1]) > 25:
+                    self.agarrarVaso(event.pos)
+                    self.agarreVaso = (0, -70)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             self.mouseServir = False
             if self.estadoVaso == "arrastrando":
@@ -697,9 +703,10 @@ class Fritanga84Microgame(BaseMicrogame):
             self.eventoTutorial(event)
             return
         if self.reflexion and self.phase == self.PHASE_PLAY and not self.is_finished:
+            min_refl = 3.2 if getattr(event, "camera_pointer", False) else 2.0
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 super().handle_event(event)
-            elif self.reflexion["t"] >= 2.0 and (
+            elif self.reflexion["t"] >= min_refl and (
                     (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1)
                     or (event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE))):
                 self.cerrarReflexion()
@@ -710,7 +717,8 @@ class Fritanga84Microgame(BaseMicrogame):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             super().handle_event(event)
             return
-        if self.tiempoAviso < 0.6:
+        min_aviso = 1.1 if getattr(event, "camera_pointer", False) else 0.6
+        if self.tiempoAviso < min_aviso:
             return
         if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
             for i, caja in enumerate(self.botonesAviso):
@@ -719,7 +727,7 @@ class Fritanga84Microgame(BaseMicrogame):
                         self.opcionAviso = i
                         if hasattr(self.audio, "play_hover"):
                             self.audio.play_hover()
-                    elif event.type != pygame.MOUSEMOTION and event.button == 1:
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         self.elegirOpcion(i)
         elif event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_LEFT, pygame.K_a):
@@ -1462,7 +1470,8 @@ class Fritanga84Microgame(BaseMicrogame):
         self.tiempoJugado += dt
         if self.escribiendo > 0.0:
             self.escribiendo = max(0.0, self.escribiendo - dt)
-        self.revisarGestos()
+        if not self.CAMERA_POINTER:
+            self.revisarGestos()
         if self.arrebato > 0.0:
             self.arrebato = max(0.0, self.arrebato - dt)
             if not self.manoQuemada and self.duracionArrebato - self.arrebato >= 1.2:

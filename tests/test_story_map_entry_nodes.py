@@ -139,8 +139,8 @@ class TestStoryMapCameraWalk(unittest.TestCase):
         self.assertFalse(getattr(mg, "skip_outro_story_card", False))
         self.assertAlmostEqual(mg.outro_duration, 1.25)
         mg.finish_game(True)
-        self.assertEqual(mg.outro_message, "¡GANASTE!")
-        self.assertAlmostEqual(mg.outro_duration, 1.25)
+        self.assertIsNotNone(getattr(mg, "letreroResultado", None))
+        self.assertGreaterEqual(mg.outro_duration, 4.0)
 
 
 if __name__ == "__main__":
