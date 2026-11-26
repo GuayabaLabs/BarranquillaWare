@@ -228,3 +228,10 @@ def test_arcade_real_game_loss_reaches_score_screen(game_class, monkeypatch):
     assert scene.lives == 0 and scene.score == 2  # El callback no se repite.
     scene._restart_arcade()
     assert scene.lives == 4 and scene.score == 0
+
+
+def test_arcade_mode_excludes_coaster():
+    from microgames.coaster_launcher import CoasterLauncherState
+
+    scene = ArcadeModeScene()
+    assert CoasterLauncherState not in scene.microgame_pool

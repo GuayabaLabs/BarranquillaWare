@@ -81,10 +81,30 @@ def _get_cached_coaster_module(coaster_dir: str, coaster_file: str):
 
 
 class CoasterLauncherState(BaseState):
-    def __init__(self, on_complete_callback: Optional[Callable[[bool], None]] = None, calibration_only: bool = False) -> None:
+    CAMERA_POINTER: bool = False
+    GAMEPAD_POINTER: bool = True
+    GAMEPAD_POINTER_SHOW_CURSOR: bool = False
+    GAMEPAD_POINTER_DPAD: bool = True
+    GAMEPAD_BUTTON_KEYS: dict[int, int] = {
+        1: pygame.K_u,      # B: Deshacer último trazo
+        2: pygame.K_SPACE,  # X: Probar vía / avanzar intro o tutorial / calibrar
+        3: pygame.K_c,      # Y: Borrar vía
+    }
+
+    def __init__(
+        self,
+        on_complete_callback: Optional[Callable[[bool], None]] = None,
+        calibration_only: bool = False,
+        character_id: str = "westcol",
+    ) -> None:
         super().__init__()
         self.on_complete_callback = on_complete_callback
         self.calibration_only = calibration_only
+        self.character_id = character_id
+        self.hide_return_to_map: bool = False
+        self.pause_return_callback: Optional[Callable[[], None]] = None
+        self.pause_restart_callback: Optional[Callable[[], None]] = None
+        self.pause_menu_callback: Optional[Callable[[], None]] = None
         self.game = None
         self.legacy_surface: Optional[pygame.Surface] = None
         self.legacy_level_count = 0
@@ -126,20 +146,48 @@ class CoasterLauncherState(BaseState):
         if pygame.mixer.get_init() and audio.music_enabled:
             pygame.mixer.music.unpause()
             audio.sync_music_volume()
-        if getattr(self, "_shared_camera", None):
-            self._shared_camera.resume()
+        shared = getattr(self, "_shared_camera", None)
+        self._shared_camera = None
+        if shared:
+            shared.resume()
+
+    def open_pause_menu(self) -> None:
+        if not getattr(self, "state_machine", None):
+            return
+        audio = AudioManager.get_instance()
+        if hasattr(audio, "sonarEscritura"):
+            audio.sonarEscritura(False)
+        from core.microgame_pause import MicrogamePauseState
+        self.state_machine.push_state(
+            MicrogamePauseState(
+                previous=self,
+                return_callback=self.pause_return_callback,
+                restart_callback=self.pause_restart_callback,
+                menu_callback=self.pause_menu_callback,
+            )
+        )
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if not self.game:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self._finish(False)
             return
+        if (
+            event.type == pygame.KEYDOWN
+            and event.key == pygame.K_ESCAPE
+            and getattr(self, "state_machine", None)
+            and any((self.pause_return_callback, self.pause_restart_callback, self.pause_menu_callback))
+        ):
+            self.open_pause_menu()
+            return
         forwarded = event
         if hasattr(event, "pos"):
-            sx = 1100 / 1920
-            sy = 700 / 1080
+            w = self.legacy_surface.get_width() if self.legacy_surface is not None else 1100
+            h = self.legacy_surface.get_height() if self.legacy_surface is not None else 700
+            sx = w / 1920.0
+            sy = h / 1080.0
             data = dict(event.__dict__)
-            data["pos"] = (int(event.pos[0] * sx), int(event.pos[1] * sy))
+            data["pos"] = (round(event.pos[0] * sx), round(event.pos[1] * sy))
             forwarded = pygame.event.Event(event.type, data)
         previous_state = self.game.estado
         previous_level = self.game.numNivel

@@ -2268,6 +2268,9 @@ class Juego:
         self.tiempo = 0.0
         self.camara = None
         self.modo = "raton"
+        self.posRatonEvento = None
+        self.botonRatonEvento = False
+        self.ultimoControlMando = False
         self.aviso, self.avisoHasta = "", 0.0
         if usarCamara:
             if cv2 is None:
@@ -2535,8 +2538,12 @@ class Juego:
                 self.cursor = (interpolar(self.cursor[0], meta[0], 0.45), interpolar(self.cursor[1], meta[1], 0.45))
             self.abajo = self.cursor is not None
         else:
-            self.cursor = pygame.mouse.get_pos()
-            self.abajo = pygame.mouse.get_pressed()[0]
+            if not self.auto_flip or self.posRatonEvento is not None:
+                self.cursor = self.posRatonEvento
+                self.abajo = self.botonRatonEvento
+            else:
+                self.cursor = pygame.mouse.get_pos()
+                self.abajo = pygame.mouse.get_pressed()[0]
 
     def actualizarBotones(self, delta):
         if self.modo != "camara":
@@ -3054,10 +3061,12 @@ class Juego:
                     trazoMano(s, contornoCaja(caja, 3), cOscuro, 2, 0.6, 2.0, True)
 
     def dibujarCursor(self):
-        if self.cursor is None or self.estado == "viajando":
+        if self.cursor is None or self.estado in ("viajando", "intro", "revelacion"):
             return
         p = (int(self.cursor[0]), int(self.cursor[1]))
         if self.modo == "raton" and not self.abajo:
+            if getattr(self, "ultimoControlMando", False):
+                circuloMano(self.pantalla, p, 14, cAmarillo, 2, 0.4, 1.0)
             punto = puntoNitido(cCrema, 6)
             self.pantalla.blit(punto, punto.get_rect(center=p))
             return
@@ -3382,6 +3391,39 @@ class Juego:
     def manejar(self, ev):
         if ev.type == pygame.QUIT:
             return False
+        es_mando = bool(getattr(ev, "gamepad_pointer", False))
+        es_mov_real_mando = es_mando and (
+            ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP)
+            or getattr(ev, "rel", (0, 0)) != (0, 0)
+        )
+        if es_mando:
+            self.ultimoControlMando = True
+            if es_mov_real_mando and self.modo == "camara":
+                self.modo = "raton"
+                if self.estado == "calibrar":
+                    self.posRatonEvento = ev.pos
+                    self.botonRatonEvento = False
+                    self.empezar()
+                    return True
+        elif ev.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+            self.ultimoControlMando = False
+        if ev.type == pygame.MOUSEMOTION:
+            self.posRatonEvento = ev.pos
+            if hasattr(ev, "buttons"):
+                self.botonRatonEvento = bool(ev.buttons[0])
+        elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            self.posRatonEvento = ev.pos
+            self.botonRatonEvento = True
+        elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+            self.posRatonEvento = ev.pos
+            self.botonRatonEvento = False
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and self.estado == "intro":
+            if self.introLista():
+                self.terminarIntro()
+                self.botonRatonEvento = False
+            else:
+                self.tIntro = self.tiempo - self.horarioEscritura(self.lineasEscritas(mensajeAlgoritmo))[-1]
+            return True
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and self.estado == "revelacion":
             if self.revelacionLista():
                 self.pasarAlResultado()
@@ -3395,6 +3437,7 @@ class Juego:
                 for b in self.botonesAhora():
                     if b.caja.collidepoint(ev.pos) and b.habilitado():
                         b.accion()
+                        self.botonRatonEvento = False
                         break
         if ev.type == pygame.KEYDOWN:
             k = ev.key

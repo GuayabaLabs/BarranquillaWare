@@ -215,11 +215,11 @@ def test_free_play_pagination_launches_new_games_with_keyboard(monkeypatch):
     from scenes.free_play import FreePlayScene
     scene = FreePlayScene()
     ids = [g["id"] for g in scene.games_data]
-    # Modo Libre quedó con los 6 juegos principales; sin repetidos
-    assert len(ids) == len(set(ids)) == 6
+    # Modo Libre quedó con los 6 juegos principales + Coaster; sin repetidos
+    assert len(ids) == len(set(ids)) == 7
     calls = []
     monkeypatch.setattr(scene, "_launch_game", calls.append)
-    for game_id in ("punch_alert", "fritanga_84"):
+    for game_id in ("punch_alert", "fritanga_84", "coaster"):
         idx = ids.index(game_id)
         scene.current_page = idx // scene.cards_per_page
         scene._rebuild_page_layout()

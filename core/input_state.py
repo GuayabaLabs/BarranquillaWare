@@ -26,6 +26,10 @@ def is_gamepad_active() -> bool:
     return LAST_INPUT_DEVICE == "gamepad"
 
 
+def is_camera_active() -> bool:
+    return LAST_INPUT_DEVICE == "camera"
+
+
 class _CombinedPressed:
     def __init__(self, real) -> None:
         self._real = real

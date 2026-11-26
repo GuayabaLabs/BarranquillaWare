@@ -32,3 +32,38 @@ def test_window_fits_desktop():
     if sizes:
         assert w <= sizes[0][0] and h <= sizes[0][1]
     assert abs(w / h - 16 / 9) < 0.01
+
+
+def test_coaster_mouse_pointer_matches_mapped_events(monkeypatch):
+    from microgames.coaster_launcher import CoasterLauncherState
+
+    pygame.init()
+    pygame.display.set_mode((1920, 1080))
+    state = CoasterLauncherState()
+    assert state.CAMERA_POINTER is False
+    state.enter()
+    try:
+        assert state.game is not None
+        assert state.game.modo == "raton"
+
+        # Simular mouse OS desalineado respecto al canvas virtual para garantizar que no se use
+        monkeypatch.setattr(pygame.mouse, "get_pos", lambda: (40, 990))
+        monkeypatch.setattr(pygame.mouse, "get_pressed", lambda: (False, False, False))
+
+        for vx, vy in ((960, 540), (1536, 864)):
+            state.handle_event(pygame.event.Event(pygame.MOUSEMOTION, {"pos": (vx, vy), "buttons": (0, 0, 0)}))
+            state.update(0.016)
+            assert state.game.cursor == (round(vx * 1100 / 1920), round(vy * 700 / 1080))
+            assert state.game.abajo is False
+
+        state.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": (1536, 864), "button": 1}))
+        state.update(0.016)
+        assert state.game.cursor == (round(1536 * 1100 / 1920), round(864 * 700 / 1080))
+        assert state.game.abajo is True
+
+        state.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, {"pos": (960, 540), "button": 1}))
+        state.update(0.016)
+        assert state.game.cursor == (round(960 * 1100 / 1920), round(540 * 700 / 1080))
+        assert state.game.abajo is False
+    finally:
+        state.exit()
