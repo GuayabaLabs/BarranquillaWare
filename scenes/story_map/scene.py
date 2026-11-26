@@ -345,11 +345,6 @@ class StoryMapScene(BaseState):
                 "completada": malecon_done,
             },
         ]
-        misiones.append({
-            "id": "aeropuerto", "titulo": "Aeropuerto Cortissoz",
-            "desc": "Llega a la puerta 7 sin publicar chismes ni fotos privadas.",
-            "completada": "aeropuerto" in unlocked_locations or "curramgram_go" in completed_microgames,
-        })
         self.side_drawer.ponerMisiones(misiones)
 
         # Mensajes narrativos y alertas de redes alineados con STORY_CAMPAIGN_ORDER

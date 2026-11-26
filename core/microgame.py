@@ -22,9 +22,17 @@ class BaseMicrogame(BaseState):
     # (índices estilo Xbox: 0=A, 1=B, 2=X, 3=Y). Lo consulta core.engine; Start/Back siguen pausando.
     GAMEPAD_BUTTON_KEYS: Dict[int, int] = {}
 
+    # True en microjuegos donde el stick izquierdo mueve un puntero virtual y el botón A (0)
+    # actúa como clic izquierdo sostenido/arrastre (paridad con mouse y cámara).
+    GAMEPAD_POINTER: bool = False
+
     # False en microjuegos que leen la cámara por su cuenta (posición, pellizco, golpe...):
     # el motor no dibuja el lapicero ni consume gestos para no robarle la entrada al juego.
     CAMERA_POINTER: bool = True
+
+    # True en microjuegos que requieren arrastrar, raspar o mantener presionado con el lapicero:
+    # el pellizco sostenido emite MOUSEBUTTONDOWN, MOUSEMOTION(buttons=(1, 0, 0)) y MOUSEBUTTONUP al soltar.
+    CAMERA_POINTER_DRAG: bool = False
 
     # Barra de tiempo acuarela: (centro_x, centro_y, ancho). None = abajo, centrada y ancha.
     TIME_BAR_LAYOUT: Optional[tuple] = None
@@ -303,6 +311,11 @@ class BaseMicrogame(BaseState):
         if self.phase == self.PHASE_PLAY:
             self.handle_game_event(event)
         elif self.phase == self.PHASE_OUTRO:
+            if getattr(event, "camera_pointer", False):
+                fin_letrero = float(getattr(self, "finLetrero", 0.0) or 0.0)
+                min_cam_wait = (fin_letrero + 3.0) if fin_letrero > 0.0 else 2.5
+                if self.outro_timer < min_cam_wait:
+                    return
             if (
                 (event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_e, pygame.K_ESCAPE))
                 or (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1)

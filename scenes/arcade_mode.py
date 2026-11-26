@@ -66,8 +66,6 @@ class ArcadeModeScene(BaseState):
             BuenavistaTrendMicrogame,
             HeladeroMetroMicrogame,
             Fritanga84Microgame,
-            CurramGramGoMicrogame,
-            EmojiCatchMicrogame,
         ]
 
         # Estado del juego Arcade

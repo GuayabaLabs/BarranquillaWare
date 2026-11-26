@@ -113,6 +113,13 @@ class PalomaIntro:
             self.anim_t = max(0.0, self.anim_t - dt * self.ANIM_VEL)
             if self.anim_t <= 0.0:
                 self.done = True
+                if camera is not None and getattr(camera, "enabled", False):
+                    try:
+                        camera.consume_punch()
+                        camera.consume_fist()
+                        camera.consume_click()
+                    except Exception:
+                        pass
         else:
             self.anim_t = min(1.0, self.anim_t + dt * self.ANIM_VEL)
 

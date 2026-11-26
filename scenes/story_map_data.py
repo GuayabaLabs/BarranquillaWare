@@ -16,7 +16,7 @@ from microgames.emoji_catch import EmojiCatchMicrogame
 # Progresión de los 5 Niveles Principales del Modo Historia
 STORY_CAMPAIGN_ORDER = ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
 # Niveles extra jugables en el mapa (no cuentan para la campaña de 5 niveles)
-STORY_SECRET_POIS = ["malecon", "aeropuerto"]
+STORY_SECRET_POIS = ["malecon"]
 STORY_PLAYABLE_POIS = STORY_CAMPAIGN_ORDER + STORY_SECRET_POIS
 
 # Secuencia de desafíos encadenados por cada Nivel de la Historia
@@ -42,12 +42,6 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
             "cls": PunchAlertMicrogame,
             "difficulty": 4,
         },
-        {
-            "id": "emoji_catch",
-            "title": "EMOJI CATCH: BALANCE!",
-            "cls": EmojiCatchMicrogame,
-            "difficulty": 3,
-        },
     ],
     "buenavista": [
         {
@@ -63,14 +57,6 @@ STORY_LEVEL_STAGES: Dict[str, list] = {
             "title": "EL HELADERO DEL METRO",
             "cls": HeladeroMetroMicrogame,
             "difficulty": 3,
-        }
-    ],
-    "aeropuerto": [
-        {
-            "id": "curramgram_go",
-            "title": "CURRAMGRAM GO! · LLEGA A LA PUERTA 7",
-            "cls": CurramGramGoMicrogame,
-            "difficulty": 4,
         }
     ],
     "aleta": [

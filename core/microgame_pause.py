@@ -10,6 +10,7 @@ from core.map_settings import MapSettingsState
 
 
 class MicrogamePauseState(BaseState):
+    CAMERA_POINTER: bool = False
     """
     Menú de pausa unificado para minijuegos y mapa general.
     Utiliza los assets oficiales de recuadro y botones:
@@ -162,6 +163,17 @@ class MicrogamePauseState(BaseState):
 
     def _resume(self) -> None:
         self.audio.play_click()
+        try:
+            from core.camera_gestures import CameraGestureInput
+            cam = CameraGestureInput.get_instance()
+            if cam is not None:
+                cam.consume_punch()
+                cam.consume_fist()
+                cam.consume_click()
+        except Exception:
+            pass
+        if self.previous is not None and hasattr(self.previous, "_camera_resume_grace"):
+            self.previous._camera_resume_grace = 0.25
         if self.state_machine:
             self.state_machine.pop_state()
 

@@ -336,9 +336,18 @@ class PunchAlertMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    def _flush_camera_gestures(self) -> None:
+        cam = getattr(self, "camera_input", None)
+        if cam and getattr(cam, "enabled", False):
+            cam.consume_punch()
+            cam.consume_fist()
+            cam.consume_click()
+
     def enter(self, params: Optional[dict] = None) -> None:
         self.villancicoSonando = False
         self.audio.fadeout_music(400)
+        self._camera_resume_grace = 0.25
+        self._flush_camera_gestures()
 
     def ponerMusica(self) -> None:
         # Si ya cayó el villancico, esa es la música de la publicación: no se vuelve a poner la del juego.
@@ -1415,6 +1424,10 @@ class PunchAlertMicrogame(BaseMicrogame):
             self.camera_input.keep_alive(retry_interval=2.0)
         """Carga recursos oficiales, configura el reloj HUD, voces del personaje y la oleada."""
         self.assets = AssetManager.get_instance()
+        try:
+            self.spr_fist_hint = self.assets.cargarSinFondo(os.path.join("Interfaz", "mano_puno.png"), 108)
+        except Exception:
+            self.spr_fist_hint = None
         self._init_punch_sounds()
         self._load_character_punch_voices()
 
@@ -1536,6 +1549,7 @@ class PunchAlertMicrogame(BaseMicrogame):
 
         # 7. Estado del jugador, Anti-Spam (Castigo al Whiff) y Combo
         self.is_punching: bool = False
+        self._camera_resume_grace: float = 0.25
         self.punch_timer: float = 0.0
         self.punch_duration: float = 0.22
         self.punch_cooldown: float = 0.28
@@ -1816,8 +1830,14 @@ class PunchAlertMicrogame(BaseMicrogame):
     def update_game(self, dt: float) -> None:
         """Actualiza física, estado de Sweet Spot, ondas expansivas, trauma y partículas."""
         cam = getattr(self, "camera_input", None)
-        if cam and cam.enabled and (cam.consume_punch() or cam.consume_fist()):
-            self.trigger_punch()
+        if self._camera_resume_grace > 0.0:
+            self._camera_resume_grace = max(0.0, self._camera_resume_grace - dt)
+            if cam and cam.enabled:
+                cam.consume_punch()
+                cam.consume_fist()
+        elif cam and cam.enabled and (cam.consume_punch() or cam.consume_fist()):
+            if self.etapa == "juego":
+                self.trigger_punch()
         self.pulse_clock += dt * 10.0
         self.tEtapa += dt
         self.actualizarPost(dt)
@@ -2180,3 +2200,17 @@ class PunchAlertMicrogame(BaseMicrogame):
             flash_overlay = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
             flash_overlay.fill((70, 34, 104, int(self.strike_flash_alpha * 0.6)))
             surface.blit(flash_overlay, (0, 0))
+
+        # 10. Indicador visual de puño para cámara
+        cam = getattr(self, "camera_input", None)
+        if cam and cam.enabled and getattr(self, "spr_fist_hint", None) is not None:
+            hx, hy = self.screen_w - 150, self.screen_h - 124
+            card_w, card_h = 240, 196
+            card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            pygame.draw.rect(card, (255, 249, 234, 232), (6, 6, card_w - 12, card_h - 12), border_radius=22)
+            pygame.draw.rect(card, (126, 86, 56, 235), (6, 6, card_w - 12, card_h - 12), width=3, border_radius=22)
+            card.blit(self.spr_fist_hint, self.spr_fist_hint.get_rect(center=(card_w // 2, 76)))
+            font_hint = getattr(self, "font_hint", None) or pygame.font.SysFont("Arial, sans-serif", 18, bold=True)
+            lbl = font_hint.render("PUÑO PARA GOLPEAR", True, (78, 51, 35))
+            card.blit(lbl, lbl.get_rect(center=(card_w // 2, 162)))
+            surface.blit(card, card.get_rect(center=(hx, hy)))

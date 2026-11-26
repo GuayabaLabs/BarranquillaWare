@@ -79,6 +79,20 @@ class Engine:
         self.cam_hover_anchor_y: float = float(self.VIRTUAL_HEIGHT // 2)
         self.cam_hover_tolerance: float = 38.0  # Margen de temblor permitido en píxeles
         self.cam_click_cooldown: float = 0.0
+        self._cam_pointer_down: bool = False
+        self._cam_pointer_down_time: float = 0.0
+        self._cam_pointer_release_grace: float = 0.0
+        self._cam_pointer_release_delay: float = 0.14
+        self._cam_pointer_state: Optional[object] = None
+        self._cam_last_virt_pos: tuple[int, int] = (self.VIRTUAL_WIDTH // 2, self.VIRTUAL_HEIGHT // 2)
+        self.joy_cursor_x: float = float(self.VIRTUAL_WIDTH // 2)
+        self.joy_cursor_y: float = float(self.VIRTUAL_HEIGHT // 2)
+        self.joy_cursor_speed: float = 980.0
+        self._joy_axis_x: float = 0.0
+        self._joy_axis_y: float = 0.0
+        self._joy_pointer_down: bool = False
+        self._joy_pointer_state: Optional[object] = None
+        self._joy_last_virt_pos: tuple[int, int] = (self.VIRTUAL_WIDTH // 2, self.VIRTUAL_HEIGHT // 2)
         self.cam_pencil_surf: Optional[pygame.Surface] = None
         self._init_cam_pencil_sprite()
 
@@ -227,6 +241,35 @@ class Engine:
             event_dict['rel'] = (int(event_dict['rel'][0] / scale), int(event_dict['rel'][1] / scale))
         return pygame.event.Event(event.type, event_dict)
 
+    def _gamepad_pointer_active(self) -> bool:
+        current = self.state_machine.current_state
+        if not bool(getattr(current, "GAMEPAD_POINTER", False)):
+            return False
+        if getattr(current, "is_finished", False):
+            return False
+        if hasattr(current, "PHASE_PLAY") and getattr(current, "phase", None) != current.PHASE_PLAY:
+            return False
+        paloma = getattr(current, "paloma_intro", None)
+        if paloma is not None and getattr(paloma, "active", False):
+            return False
+        return True
+
+    def _release_gamepad_pointer_drag(self) -> None:
+        if not self._joy_pointer_down:
+            return
+        up_evt = pygame.event.Event(
+            pygame.MOUSEBUTTONUP,
+            {"pos": self._joy_last_virt_pos, "button": 1, "gamepad": True, "gamepad_pointer": True},
+        )
+        if self.state_machine.current_state is self._joy_pointer_state:
+            self._dispatch_event(up_evt)
+        elif self._joy_pointer_state is not None and hasattr(self._joy_pointer_state, "handle_event"):
+            self._joy_pointer_state.handle_event(up_evt)
+        self._joy_pointer_down = False
+        self._joy_pointer_state = None
+        self._joy_axis_x = 0.0
+        self._joy_axis_y = 0.0
+
     def _translate_joystick_event(self, event: pygame.event.Event) -> list:
         """Traduce eventos de gamepad a teclado virtual para compatibilidad universal."""
         from core import input_state
@@ -234,6 +277,36 @@ class Engine:
         current = self.state_machine.current_state
         custom_keys = getattr(current, "GAMEPAD_BUTTON_KEYS", None) or {}
         input_state.set_input_device("gamepad")
+
+        if self._gamepad_pointer_active():
+            if event.type == pygame.JOYAXISMOTION and event.axis in (0, 1):
+                if event.axis == 0:
+                    self._joy_axis_x = float(event.value)
+                else:
+                    self._joy_axis_y = float(event.value)
+                return translated
+            if event.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP) and event.button == 0:
+                pos = (int(self.joy_cursor_x), int(self.joy_cursor_y))
+                self._joy_last_virt_pos = pos
+                if event.type == pygame.JOYBUTTONDOWN:
+                    self._joy_pointer_down = True
+                    self._joy_pointer_state = current
+                    translated.append(
+                        pygame.event.Event(
+                            pygame.MOUSEBUTTONDOWN,
+                            {"pos": pos, "button": 1, "gamepad": True, "gamepad_pointer": True},
+                        )
+                    )
+                elif self._joy_pointer_down:
+                    self._joy_pointer_down = False
+                    self._joy_pointer_state = None
+                    translated.append(
+                        pygame.event.Event(
+                            pygame.MOUSEBUTTONUP,
+                            {"pos": pos, "button": 1, "gamepad": True, "gamepad_pointer": True},
+                        )
+                    )
+                return translated
 
         def _emit(key_type: int, key: int) -> None:
             if key_type == pygame.KEYDOWN:
@@ -323,6 +396,8 @@ class Engine:
             if callable(handles_raw) and handles_raw(event):
                 return
             for virt_evt in self._translate_joystick_event(event):
+                if self.state_machine.current_state is not current:
+                    break
                 self._dispatch_event(virt_evt)
 
     def run(self) -> None:
@@ -365,6 +440,7 @@ class Engine:
             if os.environ.get("SDL_VIDEODRIVER") != "dummy":
                 self.camera_input.keep_alive()
             self._update_camera_cursor_interaction(dt)
+            self._update_gamepad_cursor_interaction(dt)
 
             # 2. Lógica
             self.state_machine.update(dt)
@@ -404,6 +480,7 @@ class Engine:
                 AudioManager.get_instance().render_voice_muted_badge(self.virtual_surface)
             # El lapicero va DESPUÉS de la escena para que no quede oculto debajo del fondo.
             self._render_camera_cursor(self.virtual_surface)
+            self._render_gamepad_cursor(self.virtual_surface)
 
             part_bytes = b""
             part_count = 0
@@ -430,6 +507,7 @@ class Engine:
             if has_sw_particles:
                 particles.render_software(self.virtual_surface)
             self._render_camera_cursor(self.virtual_surface)
+            self._render_gamepad_cursor(self.virtual_surface)
 
             self._apply_visual_settings(self.virtual_surface, brightness, matrix, intensity)
 
@@ -485,15 +563,38 @@ class Engine:
             "FreePlayScene",
             "ArcadeModeScene",
             "MapSettingsState",
+            "MicrogamePauseState",
             "SlideTransitionState",
+            "LoadingScene",
         )
         if current.__class__.__name__ in menu_scene_names:
             return False
         return bool(getattr(current, "CAMERA_POINTER", True))
 
+    def _release_camera_pointer_drag(self) -> None:
+        if not self._cam_pointer_down:
+            return
+        if self.state_machine.current_state is self._cam_pointer_state:
+            up_evt = pygame.event.Event(
+                pygame.MOUSEBUTTONUP,
+                {"pos": self._cam_last_virt_pos, "button": 1, "camera_pointer": True},
+            )
+            self.state_machine.handle_event(up_evt)
+        self._cam_pointer_down = False
+        self._cam_pointer_down_time = 0.0
+        self._cam_pointer_release_grace = 0.0
+        self._cam_pointer_state = None
+
     def _update_camera_cursor_interaction(self, dt: float) -> None:
         """Actualiza el lapicero óptico MediaPipe y simula eventos de MOUSEMOTION y MOUSEBUTTONDOWN por Hover o Gesto."""
         current = self.state_machine.current_state
+        in_outro = hasattr(current, "PHASE_OUTRO") and getattr(current, "phase", None) == current.PHASE_OUTRO
+        if self._cam_pointer_down and (
+            current is not self._cam_pointer_state
+            or not getattr(current, "CAMERA_POINTER_DRAG", False)
+            or in_outro
+        ):
+            self._release_camera_pointer_drag()
         if getattr(current, "CAMERA_ACTIONS", None) and hasattr(current, "update_camera_actions"):
             current.update_camera_actions(getattr(self, "camera_input", None))
         if hasattr(current, "update_camera_walk"):
@@ -504,6 +605,7 @@ class Engine:
             or not self.camera_input.is_hand_present()
             or not self._camera_pointer_allowed()
         ):
+            self._release_camera_pointer_drag()
             self.cam_hover_time = 0.0
             self._cam_dwell_target = None
             self._cam_dwell_fired = False
@@ -513,12 +615,67 @@ class Engine:
         target_x = max(10.0, min(float(self.VIRTUAL_WIDTH - 10), hand_x * self.VIRTUAL_WIDTH))
         target_y = max(10.0, min(float(self.VIRTUAL_HEIGHT - 10), hand_y * self.VIRTUAL_HEIGHT))
 
-        # LERP suave para amortiguar jitter
+        # LERP suave para amortiguar jitter (más firme en el instante inicial del pellizco para no desviar el clic)
         smooth = min(1.0, dt * 22.0)
+        if self._cam_pointer_down and self._cam_pointer_down_time < 0.09:
+            smooth *= 0.25
         self.cam_cursor_x += (target_x - self.cam_cursor_x) * smooth
         self.cam_cursor_y += (target_y - self.cam_cursor_y) * smooth
 
+        prev_pos = self._cam_last_virt_pos
         virt_pos = (int(self.cam_cursor_x), int(self.cam_cursor_y))
+        rel = (virt_pos[0] - prev_pos[0], virt_pos[1] - prev_pos[1])
+        self._cam_last_virt_pos = virt_pos
+
+        drag_mode = bool(getattr(current, "CAMERA_POINTER_DRAG", False))
+        if drag_mode:
+            pinching = bool(getattr(self.camera_input, "is_pinching", lambda: False)())
+            clicked_edge = bool(self.camera_input.consume_click())
+
+            motion_evt = pygame.event.Event(
+                pygame.MOUSEMOTION,
+                {
+                    "pos": virt_pos,
+                    "rel": rel,
+                    "buttons": (1 if self._cam_pointer_down else 0, 0, 0),
+                    "camera_pointer": True,
+                },
+            )
+            self.state_machine.handle_event(motion_evt)
+
+            if self.cam_click_cooldown > 0.0:
+                self.cam_click_cooldown = max(0.0, self.cam_click_cooldown - dt)
+            self.cam_hover_time = 0.0
+
+            if not self._cam_pointer_down:
+                if (pinching or clicked_edge) and self.cam_click_cooldown <= 0.0:
+                    self._cam_pointer_down = True
+                    self._cam_pointer_down_time = 0.0
+                    self._cam_pointer_release_grace = 0.0
+                    self._cam_pointer_state = current
+                    down_evt = pygame.event.Event(
+                        pygame.MOUSEBUTTONDOWN,
+                        {"pos": virt_pos, "button": 1, "camera_pointer": True},
+                    )
+                    self.state_machine.handle_event(down_evt)
+            else:
+                self._cam_pointer_down_time += dt
+                if pinching:
+                    self._cam_pointer_release_grace = 0.0
+                else:
+                    self._cam_pointer_release_grace += dt
+                    if self._cam_pointer_release_grace >= self._cam_pointer_release_delay:
+                        up_evt = pygame.event.Event(
+                            pygame.MOUSEBUTTONUP,
+                            {"pos": virt_pos, "button": 1, "camera_pointer": True},
+                        )
+                        self.state_machine.handle_event(up_evt)
+                        self._cam_pointer_down = False
+                        self._cam_pointer_down_time = 0.0
+                        self._cam_pointer_release_grace = 0.0
+                        self._cam_pointer_state = None
+                        self.cam_click_cooldown = 0.28
+            return
 
         # Despachar MOUSEMOTION virtual para activar hovers en botones
         motion_evt = pygame.event.Event(pygame.MOUSEMOTION, {"pos": virt_pos, "rel": (0, 0), "buttons": (0, 0, 0)})
@@ -564,6 +721,95 @@ class Engine:
             if callable(resolver):
                 self._cam_dwell_fired = True
 
+    def _update_gamepad_cursor_interaction(self, dt: float) -> None:
+        """Actualiza el cursor virtual del joystick izquierdo y emite MOUSEMOTION continuo."""
+        current = self.state_machine.current_state
+        if self._joy_pointer_down and (
+            current is not self._joy_pointer_state or not self._gamepad_pointer_active()
+        ):
+            self._release_gamepad_pointer_drag()
+        if not self._gamepad_pointer_active():
+            return
+
+        ax, ay = self._joy_axis_x, self._joy_axis_y
+        for joy in self.joysticks.values():
+            try:
+                jx = float(joy.get_axis(0))
+                jy = float(joy.get_axis(1))
+                if abs(jx) > 0.18 or abs(jy) > 0.18:
+                    ax, ay = jx, jy
+                    break
+            except Exception:
+                pass
+
+        mag = (ax * ax + ay * ay) ** 0.5
+        deadzone = 0.18
+        if mag > deadzone:
+            norm = min(1.0, (mag - deadzone) / (1.0 - deadzone))
+            speed = self.joy_cursor_speed * (0.35 * norm + 0.65 * norm * norm)
+            vx = (ax / mag) * speed
+            vy = (ay / mag) * speed
+            self.joy_cursor_x = max(10.0, min(float(self.VIRTUAL_WIDTH - 10), self.joy_cursor_x + vx * dt))
+            self.joy_cursor_y = max(10.0, min(float(self.VIRTUAL_HEIGHT - 10), self.joy_cursor_y + vy * dt))
+
+        prev = self._joy_last_virt_pos
+        virt_pos = (int(self.joy_cursor_x), int(self.joy_cursor_y))
+        rel = (virt_pos[0] - prev[0], virt_pos[1] - prev[1])
+        if rel != (0, 0) or self._joy_pointer_down:
+            self._joy_last_virt_pos = virt_pos
+            motion_evt = pygame.event.Event(
+                pygame.MOUSEMOTION,
+                {
+                    "pos": virt_pos,
+                    "rel": rel,
+                    "buttons": (1 if self._joy_pointer_down else 0, 0, 0),
+                    "gamepad": True,
+                    "gamepad_pointer": True,
+                },
+            )
+            self._dispatch_event(motion_evt)
+
+    def _draw_pointer_cursor(
+        self,
+        surface: pygame.Surface,
+        cx: int,
+        cy: int,
+        active_down: bool,
+        hover_progress: float = 0.0,
+    ) -> None:
+        radius = 28
+        halo_surf = pygame.Surface((radius * 2 + 10, radius * 2 + 10), pygame.SRCALPHA)
+        rc = radius + 5
+
+        if active_down:
+            pygame.draw.circle(halo_surf, (80, 235, 140, 50), (rc, rc), radius)
+            pygame.draw.circle(halo_surf, (80, 235, 140, 220), (rc, rc), radius, width=4)
+        else:
+            pygame.draw.circle(halo_surf, (255, 230, 90, 50), (rc, rc), radius, width=2)
+            if hover_progress > 0.04:
+                import math
+                start_angle = -math.pi / 2.0
+                end_angle = start_angle + math.pi * 2.0 * hover_progress
+                arc_rect = pygame.Rect(rc - radius, rc - radius, radius * 2, radius * 2)
+                pygame.draw.arc(halo_surf, (255, 220, 50, 220), arc_rect, start_angle, end_angle, 4)
+
+        surface.blit(halo_surf, (cx - rc, cy - rc))
+
+        if self.cam_pencil_surf:
+            pw = self.cam_pencil_surf.get_width()
+            ph = self.cam_pencil_surf.get_height()
+            tip_x = int(55 * (pw / 1312.0))
+            tip_y = int(195 * (ph / 1199.0))
+            surface.blit(self.cam_pencil_surf, (cx - tip_x, cy - tip_y))
+        else:
+            pygame.draw.circle(surface, (255, 215, 60), (cx, cy), 8)
+
+    def _render_gamepad_cursor(self, surface: pygame.Surface) -> None:
+        from core import input_state
+        if not self._gamepad_pointer_active() or not input_state.is_gamepad_active():
+            return
+        self._draw_pointer_cursor(surface, int(self.joy_cursor_x), int(self.joy_cursor_y), self._joy_pointer_down)
+
     def _render_camera_cursor(self, surface: pygame.Surface) -> None:
         """Dibuja el lapicero y el medidor radial de hover cuando MediaPipe tiene una mano fijada."""
         if (
@@ -575,36 +821,8 @@ class Engine:
             return
 
         cx, cy = int(self.cam_cursor_x), int(self.cam_cursor_y)
-
-        # Anillo radial de progreso de Hover
-        radius = 28
         progress = max(0.0, min(1.0, self.cam_hover_time / max(0.01, self.cam_hover_duration)))
-        halo_surf = pygame.Surface((radius * 2 + 10, radius * 2 + 10), pygame.SRCALPHA)
-        rc = radius + 5
-
-        # Círculo base translúcido
-        pygame.draw.circle(halo_surf, (255, 230, 90, 50), (rc, rc), radius, width=2)
-
-        # Arco de llenado radial
-        if progress > 0.04:
-            import math
-            start_angle = -math.pi / 2.0
-            end_angle = start_angle + math.pi * 2.0 * progress
-            arc_rect = pygame.Rect(rc - radius, rc - radius, radius * 2, radius * 2)
-            pygame.draw.arc(halo_surf, (255, 220, 50, 220), arc_rect, start_angle, end_angle, 4)
-
-        surface.blit(halo_surf, (cx - rc, cy - rc))
-
-        # Dibujar sprite del lapicero (con su punta alineada en cx, cy)
-        if self.cam_pencil_surf:
-            pw = self.cam_pencil_surf.get_width()
-            ph = self.cam_pencil_surf.get_height()
-            # La punta de puntero_lapiz.png está en x=55/1312, y=195/1199
-            tip_x = int(55 * (pw / 1312.0))
-            tip_y = int(195 * (ph / 1199.0))
-            surface.blit(self.cam_pencil_surf, (cx - tip_x, cy - tip_y))
-        else:
-            pygame.draw.circle(surface, (255, 215, 60), (cx, cy), 8)
+        self._draw_pointer_cursor(surface, cx, cy, self._cam_pointer_down, progress)
 
     def shutdown(self) -> None:
         if hasattr(self, "camera_input") and self.camera_input:

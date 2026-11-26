@@ -30,6 +30,23 @@ POSITIVOS = ("emoji_sonriente", "emoji_cara_azul", "emoji_corazon", "emoji_pulga
 ALTO_MANO = 270  # Alto en pantalla de las manos acuarela
 SPRITES = (*NEGATIVOS, *POSITIVOS)
 
+COMENTARIOS_HATER = (
+    ("@troll_baq", "¿Y esa pinta qué?"),
+    ("@hater_84", "Nadie ve tu live..."),
+    ("@envidia_00", "Puro relleno eso"),
+    ("@anonimo_x", "Bloquéate solo mejor"),
+    ("@criticon", "Qué stream tan malo"),
+    ("@malavibra", "Dedícate a otra cosa"),
+)
+COMENTARIOS_APOYO = (
+    ("@prado_fan", "¡Tú puedes, mi llave!"),
+    ("@soledad_ok", "Qué buen contenido"),
+    ("@currambera", "Saludos desde el Prado"),
+    ("@la_arenosa", "Buena vibra siempre"),
+    ("@vecino_baq", "¡Crack, sigue así!"),
+    ("@buenavista", "Qué bacano el live"),
+)
+
 
 def tiene_tecla(teclas, codigo):
     """Permite usar tanto el vector de teclas sostenidas como eventos inyectados."""
@@ -45,7 +62,16 @@ class EmojiCatch:
 
     def __init__(self):
         revisar_recursos("emoji_catch")
-        self.fondo = cargar_imagen("fondo_concentracion_microjuego.png", (ANCHO, ALTO), alpha=False)
+        fondo_propio = RAIZ / "assets/emoji_catch/fondo_emoji_catch.png"
+        if fondo_propio.is_file():
+            self.fondo = pygame.transform.smoothscale(pygame.image.load(str(fondo_propio)).convert(), (ANCHO, ALTO))
+        else:
+            self.fondo = cargar_imagen("fondo_concentracion_microjuego.png", (ANCHO, ALTO), alpha=False)
+        self.marco_live = sprite_opcional("marco_live.png", "emoji")
+        self.avatares = {
+            k: sprite_opcional(f"avatar_{k}.png", "emoji")
+            for k in ("feliz", "neutral", "estresado")
+        }
         self.sprites = {n: cargar_sprite(f"{n}.png", "emoji") for n in SPRITES}
         self.decoracion = {n: cargar_sprite(f"{n}.png", "emoji") for n in (
             "titulo", "tiempo", "tarjeta_mano_izq", "tarjeta_mano_der", "barra_negatividad", "barra_positividad", "mano_morada", "mano_azul_der")}
@@ -121,6 +147,7 @@ class EmojiCatch:
         self.elapsed=0.0;self.victoria=False;self.estrellas=0
         self.salud_visual=float(self.salud);self.salud_flash=0.0;self.salud_flash_color=(70,190,115)
         self.salud_floaters=[];self.animo_activo=0.0;self.animo_enfriamiento=0.0
+        self.chat_feed=[];self.chat_clock=1.2;self.hand_floaters=[];self.viewers=1240
 
     def mover_manos(self, teclas, dt):
         """A/D mueven exclusivamente la mano morada; J/L exclusivamente la azul."""
@@ -135,6 +162,12 @@ class EmojiCatch:
 
     def _aviso(self, frase, color=(255,245,224), tiempo=2.2):
         self.avisos.append({"texto":frase,"color":color,"t":tiempo})
+
+    def _push_chat(self, negativo):
+        user, msg = random.choice(COMENTARIOS_HATER if negativo else COMENTARIOS_APOYO)
+        self.chat_feed.append({"user": user, "texto": msg, "negativo": negativo, "t": 4.2})
+        if len(self.chat_feed) > 2:
+            self.chat_feed.pop(0)
 
     def _nuevo_item(self, tipo=None, x=None, mega=False, troll=False):
         tipo=tipo or random.choice(SPRITES)
@@ -172,7 +205,13 @@ class EmojiCatch:
         if self.mega_clock<=0:
             self._nuevo_item("emoji_enojado_rojo",random.uniform(350,1570),mega=True)
             self._aviso("¡MEGA-HATER! 3 bloqueos para frenarlo",(255,224,220),2.8)
+            self._push_chat(True)
             self.mega_clock=random.uniform(21,26)
+        self.chat_clock-=dt
+        if self.chat_clock<=0:
+            neg = True if self.wave_kind=="raid" else False if self.wave_kind=="trend" else random.choice((True, False))
+            self._push_chat(neg)
+            self.chat_clock=random.uniform(3.0, 4.6)
 
     def _puntos_captura(self, mano, item):
         tipo=item["kind"]
@@ -200,7 +239,11 @@ class EmojiCatch:
                 try:self.sonido_bloqueo.play()
                 except pygame.error:pass
             self._aviso("¡USUARIO BLOQUEADO!"+(f"   +{score}" if mult==1 else f"   COMBO x{mult} +{score}"),(241,228,255))
-        else:self._aviso(f"+{score} pts"+(f"  COMBO x{mult}" if mult>1 else ""),(226,243,255))
+            self.hand_floaters.append({"x":item["x"],"y":item["y"]-28,"texto":f"BLOQUEADO +{score}","color":(225,180,255),"t":0.9})
+        else:
+            self._aviso(f"+{score} pts"+(f"  COMBO x{mult}" if mult>1 else ""),(226,243,255))
+            self.hand_floaters.append({"x":item["x"],"y":item["y"]-28,"texto":f"¡APOYO! +{score}","color":(180,235,255),"t":0.9})
+            self.viewers+=random.randint(3,12)
         if tipo=="emoji_bolsa_dinero":self.sponsor=6.0;self._aviso("PATROCINIO ACTIVO · 6 s de puntos dobles",(255,244,211),3.0)
 
     def _cambiar_salud(self, cantidad):
@@ -266,6 +309,10 @@ class EmojiCatch:
         self.pulso=[max(0,p-dt) for p in self.pulso];self.screen_shake=max(0,self.screen_shake-dt)
         for floater in self.salud_floaters:floater["t"]-=dt
         self.salud_floaters=[f for f in self.salud_floaters if f["t"]>0]
+        for cf in self.chat_feed:cf["t"]-=dt
+        self.chat_feed=[c for c in self.chat_feed if c["t"]>0]
+        for hf in self.hand_floaters:hf["t"]-=dt;hf["y"]-=55*dt
+        self.hand_floaters=[h for h in self.hand_floaters if h["t"]>0]
         if not self.final and self.tiempo<=0 and self.salud>0:
             self.final="BALANCE LOGRADO";self.victoria=True
             self.estrellas=1+int(self.salud>=60)+int(self.salud>=85)
@@ -274,8 +321,9 @@ class EmojiCatch:
         if self.fondo:s.blit(self.fondo,(0,0))
         else:s.fill((248,227,241))
         tinte=pygame.Surface((ANCHO,ALTO),pygame.SRCALPHA)
-        pygame.draw.rect(tinte,(157,91,191,24),(0,0,ANCHO//2,ALTO));pygame.draw.rect(tinte,(77,169,220,22),(ANCHO//2,0,ANCHO//2,ALTO));s.blit(tinte,(0,0))
-        pygame.draw.line(s,(119,111,144),(ANCHO//2,130),(ANCHO//2,ALTO-120),2)
+        pygame.draw.rect(tinte,(157,91,191,18),(0,0,ANCHO//2,ALTO));pygame.draw.rect(tinte,(77,169,220,16),(ANCHO//2,0,ANCHO//2,ALTO))
+        pygame.draw.line(tinte,(119,111,144,65),(ANCHO//2,140),(ANCHO//2,ALTO-110),2)
+        s.blit(tinte,(0,0))
         # destellos suaves ligeros sobre el fondo existente
         for i in range(22):
             x=(i*173+int(self.elapsed*13))%(ANCHO-100)+50;y=250+(i*97)%490
@@ -283,7 +331,7 @@ class EmojiCatch:
             pygame.draw.circle(s,(255,255,255),(x,y),3+(i%3),0)
 
     def _draw_balance(self,s):
-        x,y=960,186;dif=max(-1,min(1,(self.negatividad-self.positividad)/60))
+        x,y=960,175;dif=max(-1,min(1,(self.negatividad-self.positividad)/60))
         propio=sprite_opcional("balanza.png","emoji")
         if propio is not None:
             img=pygame.transform.smoothscale_by(propio,190/max(propio.get_size()));img=pygame.transform.rotate(img,-dif*14)
@@ -295,21 +343,19 @@ class EmojiCatch:
             pygame.draw.polygon(s,(214,160,92),[(x-26,y+44),(x+26,y+44),(x,y+3)]);pygame.draw.polygon(s,TINTA,[(x-26,y+44),(x+26,y+44),(x,y+3)],3)
             for (px,py),c in zip(brazo,(COLOR_MORADO,COLOR_AZUL)):
                 bola=circulo_acuarela(30,c);s.blit(bola,bola.get_rect(center=(px,py)))
-        texto_con_contorno(s,"Balance",(x,y+80),24,(255,247,230),TINTA,centro=True,grosor=2)
+        texto_con_contorno(s,"Balance",(x,y+72),22,(255,247,230),TINTA,centro=True,grosor=2)
 
     def _draw_barras(self,s):
-        for key,x,val,color in (("barra_negatividad",40,self.negatividad,COLOR_MORADO),("barra_positividad",ANCHO-40-152,self.positividad,COLOR_AZUL)):
-            data=self.barras.get(key)
-            if not data:continue
-            frame,inside=data;dest=(x,300);iw,ih=inside.size
-            fill_h=int(ih*min(1,val/100));local=pygame.Rect(inside.x,inside.y+ih-fill_h,iw,fill_h)
-            surface=pygame.Surface(frame.get_size(),pygame.SRCALPHA)
+        for label,x,val,color in (("NEG",36,self.negatividad,COLOR_MORADO),("POS",ANCHO-54,self.positividad,COLOR_AZUL)):
+            y,w,h=280,18,240
+            fondo=pygame.Surface((w,h),pygame.SRCALPHA)
+            pygame.draw.rect(fondo,(250,242,230,170),(0,0,w,h),border_radius=9)
+            fill_h=int(h*min(1,val/100))
             if fill_h:
-                pygame.draw.rect(surface,(*color,230),local,border_radius=12)
-                shine=pygame.Surface((iw,max(1,fill_h//3)),pygame.SRCALPHA);shine.fill((255,255,255,58))
-                surface.blit(shine,(local.x,local.y))
-            s.blit(surface,(x,dest[1]));s.blit(frame,(x,dest[1]))
-            # El marco conserva el tubo original de la hoja de sprites.
+                pygame.draw.rect(fondo,(*color,230),(2,h-fill_h+2,w-4,max(1,fill_h-4)),border_radius=7)
+            pygame.draw.rect(fondo,TINTA,(0,0,w,h),2,border_radius=9)
+            s.blit(fondo,(x,y))
+            texto_con_contorno(s,label,(x+w//2,y-18),18,(255,247,230),TINTA,centro=True,grosor=2)
 
     def _draw_sprite(self,s,nombre,center,size=None,angle=0):
         sprite=self.sprites.get(nombre)
@@ -342,9 +388,33 @@ class EmojiCatch:
             img=base
             if escala!=1:img=pygame.transform.smoothscale(base,(int(base.get_width()*escala),int(base.get_height()*escala)))
             img=pygame.transform.rotate(img,-self.direccion[i]*8)
-            if self.combo>=5:
-                halo=pygame.Surface((img.get_width()+38,img.get_height()+38),pygame.SRCALPHA);pygame.draw.ellipse(halo,(*color,65),(0,0,halo.get_width(),halo.get_height()),10);s.blit(halo,halo.get_rect(center=(int(x),ALTO-172)))
             s.blit(img,img.get_rect(midbottom=(int(x),ALTO-54)))
+
+    def _draw_live_hud(self,s):
+        if self.marco_live is not None:
+            s.blit(pygame.transform.smoothscale(self.marco_live,(ANCHO,min(140,self.marco_live.get_height()))),(0,0))
+        # Pill LIVE · CurramGram debajo de la barra de Salud Mental (izquierda)
+        live_pill=pygame.Surface((268,32),pygame.SRCALPHA)
+        pygame.draw.rect(live_pill,(250,242,232,205),(0,0,268,32),border_radius=16)
+        pygame.draw.rect(live_pill,TINTA,(0,0,268,32),2,border_radius=16)
+        pulso_rojo=220+int(35*math.sin(self.elapsed*5))
+        pygame.draw.circle(live_pill,(pulso_rojo,55,70,240),(18,16),6)
+        s.blit(live_pill,(48,178))
+        texto_con_contorno(s,f"LIVE · CurramGram · {self.viewers/1000:.1f}k",(190,194),17,(255,247,230),TINTA,centro=True,grosor=2)
+        # Mini-chat del feed arriba a la derecha (debajo del puntaje, sin tapar caída)
+        cy=124
+        for c in self.chat_feed:
+            alpha=min(230,int(230*min(1.0,c["t"])))
+            borde=COLOR_MORADO if c["negativo"] else COLOR_AZUL
+            box=pygame.Surface((430,44),pygame.SRCALPHA)
+            pygame.draw.rect(box,(252,246,238,alpha),(0,0,430,44),border_radius=14)
+            pygame.draw.rect(box,(*borde,alpha),(0,0,430,44),2,border_radius=14)
+            u_surf=fuente(17,True).render(c["user"],True,borde)
+            m_surf=fuente(17,False).render(c["texto"],True,TINTA)
+            u_surf.set_alpha(alpha);m_surf.set_alpha(alpha)
+            box.blit(u_surf,(14,5));box.blit(m_surf,(14,22))
+            s.blit(box,(ANCHO-478,cy))
+            cy+=50
 
     def _draw_efectos(self,s):
         if self.screen_shake>0:
@@ -353,12 +423,12 @@ class EmojiCatch:
             overlay=s.copy();s.fill((248,239,247));s.blit(overlay,offset)
         for p in self.particulas:
             alpha=max(20,min(240,int(255*p["t"])));pygame.draw.circle(s,(*p["color"],alpha),(int(p["x"]),int(p["y"])),max(1,p["r"]))
-        for g in self.grietas:
-            x,y=int(g["x"]),int(g["y"]);pygame.draw.lines(s,(102,66,79),False,[(x,y),(x-28,y-22),(x-15,y-53),(x-42,y-79)],4);pygame.draw.lines(s,(102,66,79),False,[(x-15,y-53),(x+13,y-67),(x+20,y-101)],3)
+        for hf in self.hand_floaters:
+            texto_con_contorno(s,hf["texto"],(int(hf["x"]),int(hf["y"])),22,hf["color"],TINTA,centro=True,grosor=2)
         if self.avisos:
-            a=self.avisos[-1];cartel(s,a["texto"],(960,335),780,74,None,30)
+            a=self.avisos[-1];texto_con_contorno(s,a["texto"],(960,295),28,(255,247,230),TINTA,centro=True,grosor=3)
         if self.wave_left>0 and self.wave_label and not self.avisos:
-            cartel(s,self.wave_label,(960,335),520,70,(214,82,120),32)
+            texto_con_contorno(s,self.wave_label,(960,295),30,(255,210,225),TINTA,centro=True,grosor=3)
 
     def draw(self,s,mouse=(960,540)):
         self._draw_fondo(s)
@@ -369,28 +439,36 @@ class EmojiCatch:
         # La barra de tiempo común va arriba al centro (TIME_BAR_LAYOUT del minijuego).
         estado=f"Ánimo x2 · {self.animo_activo:.0f}s" if self.animo_activo>0 else "¡A jugar!"
         cartel(s,f"Puntaje {self.puntos}  ·  {estado}",(1625,64),520,80,(140,205,120) if self.animo_activo>0 else None,32)
-        self._draw_balance(s);self._draw_barras(s);self._draw_items(s);self._draw_manos(s)
-        # Tarjetas originales de controles quedan abajo dentro del margen.
-        for k,x in (("tarjeta_mano_izq",45),("tarjeta_mano_der",ANCHO-45-168)):
-            img=self.decoracion.get(k)
-            if img:s.blit(pygame.transform.smoothscale(img,(168,190)),(x,ALTO-226))
+        self._draw_balance(s);self._draw_barras(s);self._draw_live_hud(s);self._draw_items(s);self._draw_manos(s)
+        # Badges limpios de controles y rol en las esquinas inferiores.
+        for label,color,cx in (("A / D · BLOQUEAR",COLOR_MORADO,148),("J / L · APOYAR",COLOR_AZUL,ANCHO-148)):
+            pill=pygame.Surface((220,38),pygame.SRCALPHA)
+            pygame.draw.rect(pill,(*color,215),(0,0,220,38),border_radius=19)
+            pygame.draw.rect(pill,TINTA,(0,0,220,38),2,border_radius=19)
+            s.blit(pill,pill.get_rect(center=(cx,ALTO-42)))
+            texto_con_contorno(s,label,(cx,ALTO-42),20,(255,255,255),TINTA,centro=True,grosor=2)
         # Medidor independiente: la salud solo cambia con capturas y escapes.
-        x,y,w,h=690,894,560,50
+        x,y,w,h=48,136,380,32
         pulso=1+int(3*math.sin(self.elapsed*9)) if self.salud<25 else 0
         relleno=round((w-62)*max(0,min(100,self.salud_visual))/100)
-        color=None if self.salud_visual>35 else (225,83,102)
+        color=(230,105,130) if self.salud_visual>35 else (225,65,85)
         barra_acuarela(s,pygame.Rect(x-pulso,y-pulso,w-50+2*pulso,h+2*pulso),self.salud_visual/100,color)
         if self.salud_flash>0 and relleno:
-            glow=pygame.Surface((relleno,20),pygame.SRCALPHA);glow.fill((*self.salud_flash_color,int(90*self.salud_flash/.65)));s.blit(glow,(x+16,y+h//2-10))
-        texto_con_contorno(s,f"Salud mental  {round(self.salud_visual)}%",(x+w//2-25,y-22),30,(255,247,230),TINTA,centro=True,grosor=3)
-        cara="emoji_triste" if self.salud_visual<30 else "emoji_sonriente" if self.salud_visual>70 else "emoji_cara_azul"
-        cara_img=pygame.transform.smoothscale(self.sprites[cara],(58,58))
+            glow=pygame.Surface((relleno,14),pygame.SRCALPHA);glow.fill((*self.salud_flash_color,int(90*self.salud_flash/.65)));s.blit(glow,(x+16,y+h//2-7))
+        texto_con_contorno(s,f"Salud mental  {round(self.salud_visual)}%",(x+w//2-25,y-16),22,(255,247,230),TINTA,centro=True,grosor=2)
+        estado_av="estresado" if self.salud_visual<30 else "feliz" if self.salud_visual>70 else "neutral"
+        avatar_custom=self.avatares.get(estado_av)
+        if avatar_custom is not None:
+            cara_img=pygame.transform.smoothscale(avatar_custom,(46,46))
+        else:
+            cara="emoji_triste" if estado_av=="estresado" else "emoji_sonriente" if estado_av=="feliz" else "emoji_cara_azul"
+            cara_img=pygame.transform.smoothscale(self.sprites[cara],(40,40))
         s.blit(cara_img,cara_img.get_rect(center=(x+w-14,y+h//2)))
         if self.salud_floaters:
-            f=self.salud_floaters[-1];alpha=max(0,min(255,round(255*f["t"])));lab=fuente(30,True).render(f["texto"],True,self.salud_flash_color)
-            lab.set_alpha(alpha);s.blit(lab,(x+14+relleno,y-12-round((1-f["t"])*28)))
+            f=self.salud_floaters[-1];alpha=max(0,min(255,round(255*f["t"])));lab=fuente(24,True).render(f["texto"],True,self.salud_flash_color)
+            lab.set_alpha(alpha);s.blit(lab,(x+14+relleno,y+h+4+round((1-f["t"])*16)))
         if self.MOSTRAR_BARRA_TIEMPO_PROPIA:
-            pygame.draw.rect(s,(76,74,99),(x+6,846,w-12,10),border_radius=5)
-            pygame.draw.rect(s,(90,155,210),(x+6,846,round((w-12)*self.tiempo/DURACION),10),border_radius=5)
-        if self.animo_activo>0:texto_con_contorno(s,f"¡Ánimo a tope! Puntos x2 · {self.animo_activo:.0f}s",(960,822),28,(214,255,204),TINTA,centro=True,grosor=3)
+            pygame.draw.rect(s,(76,74,99),(700,78,520,10),border_radius=5)
+            pygame.draw.rect(s,(90,155,210),(700,78,round(520*self.tiempo/DURACION),10),border_radius=5)
+        if self.animo_activo>0:texto_con_contorno(s,f"¡Ánimo a tope! Puntos x2 · {self.animo_activo:.0f}s",(960,ALTO-42),28,(214,255,204),TINTA,centro=True,grosor=3)
         self._draw_efectos(s)

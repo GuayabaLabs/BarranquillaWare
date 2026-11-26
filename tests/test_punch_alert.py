@@ -84,5 +84,44 @@ def test_punch_alert_standalone():
 
     print("TEST STANDALONE PASSED: PunchAlertMicrogame funciona correctamente.")
 
+
+def test_punch_alert_ignores_residual_menu_ok_gesture(monkeypatch):
+    from types import SimpleNamespace
+    from core.camera_gestures import CameraGestureInput
+    from core.microgame_pause import MicrogamePauseState
+
+    cam = CameraGestureInput()
+    cam.enabled = True
+    cam._punch_just_pressed = True
+    cam._fist_just_pressed = True
+    cam._pinch_just_pressed = True
+    monkeypatch.setattr(CameraGestureInput, "_instance", cam)
+
+    game = PunchAlertMicrogame()
+    game.camera_input = cam
+    game.phase = game.PHASE_PLAY
+    game.etapa = "juego"
+    game.cooldown_timer = 0.0
+    game.is_punching = False
+
+    # Reanudar desde menú de pausa limpia gestos pendientes y da gracia de reanudación
+    pause = MicrogamePauseState(previous=game)
+    pause._resume()
+    assert not cam.consume_punch()
+    assert not cam.consume_fist()
+
+    # Incluso si llega un puño residual dentro de la ventana de gracia, no pega sin querer
+    cam._fist_just_pressed = True
+    game.update_game(0.05)
+    assert game.is_punching is False
+
+    # Pasada la ventana de gracia (0.25s), un puño intencional sí dispara el golpe
+    for _ in range(5):
+        game.update_game(0.05)
+    cam._punch_just_pressed = True
+    game.update_game(0.016)
+    assert game.is_punching is True
+
+
 if __name__ == "__main__":
     test_punch_alert_standalone()

@@ -18,6 +18,10 @@ def set_input_device(device: str) -> None:
     LAST_INPUT_DEVICE = device
 
 
+def get_input_device() -> str:
+    return LAST_INPUT_DEVICE
+
+
 def is_gamepad_active() -> bool:
     return LAST_INPUT_DEVICE == "gamepad"
 

@@ -15,10 +15,7 @@ from microgames.uninorte_sprint import UninorteSprintMicrogame
 from microgames.ventana_colores import VentanaColoresMicrogame
 from microgames.malecon_rueda import MaleconRuedaMicrogame
 from microgames.metropolitano_penalty import MetropolitanoPenaltyMicrogame
-from microgames.aeropuerto_aterrizaje import AeropuertoAterrizajeMicrogame
 from microgames.fritanga_84 import Fritanga84Microgame
-from microgames.curramgram_go import CurramGramGoMicrogame
-from microgames.emoji_catch import EmojiCatchMicrogame
 from microgames.troja_baile import TrojaBaileMicrogame
 from microgames.uninorte_concentrate import UninorteConcentrateMicrogame
 from microgames.buenavista_trend import BuenavistaTrendMicrogame
@@ -59,6 +56,7 @@ def _wrap_text(font: pygame.font.Font, text: str, max_width: int, max_lines: int
 
 
 class FreePlayScene(BaseState):
+    CAMERA_POINTER: bool = False
     """
     Modo Libre / Catálogo Completo de Minijuegos de BarranquillaWare (Estilo Acuarela Cozy 1920x1080):
     - Fondo acuarela pre-escalado cacheado (cero degradados por línea en cada frame).
@@ -84,6 +82,7 @@ class FreePlayScene(BaseState):
 
         self.timer = 0.0
         self._active_microgame = None
+        self._input_block_timer = 0.0
 
         # 1. Fondo acuarela pre-escalado cacheado
         raw_bg = self.assets.load_surface("fondo_modo_libre.png", has_alpha=False)
@@ -155,24 +154,6 @@ class FreePlayScene(BaseState):
                 "difficulty": 3,
                 "theme_color": (222, 148, 38),
                 "cls": Fritanga84Microgame,
-            },
-            {
-                "id": "curramgram_go",
-                "title": "CURRAMGRAM GO!",
-                "district": "AEROPUERTO CORTISSOZ",
-                "desc": "Llega a la puerta 7 sin exponer a nadie: verifica antes de publicar.",
-                "difficulty": 3,
-                "theme_color": (85, 170, 215),
-                "cls": CurramGramGoMicrogame,
-            },
-            {
-                "id": "emoji_catch",
-                "title": "EMOJI CATCH: BALANCE!",
-                "district": "TU FEED · SALUD MENTAL",
-                "desc": "Bloquea a los haters y atrapa lo positivo sin perder el balance.",
-                "difficulty": 3,
-                "theme_color": (150, 95, 205),
-                "cls": EmojiCatchMicrogame,
             },
         ]
 
@@ -271,6 +252,9 @@ class FreePlayScene(BaseState):
     def enter(self, params: Optional[dict] = None) -> None:
         if params and "character_id" in params:
             self.character_id = params["character_id"]
+        self._active_microgame = None
+        self.selected_card_pos = -1
+        self._input_block_timer = 0.25
         self.audio.play_bgm("dodo_airlines_acnh_ost_seleccion_modo.ogg")
 
     def _handle_focus_key(self, key: int) -> bool:
@@ -288,6 +272,12 @@ class FreePlayScene(BaseState):
         return False
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self._input_block_timer > 0.0 and event.type in (
+            pygame.KEYDOWN,
+            pygame.MOUSEBUTTONDOWN,
+            pygame.JOYBUTTONDOWN,
+        ):
+            return
         if event.type == pygame.MOUSEMOTION:
             self.selected_card_pos = -1
         if event.type == pygame.KEYDOWN:
@@ -362,6 +352,8 @@ class FreePlayScene(BaseState):
 
     def update(self, dt: float) -> None:
         self.timer += dt
+        if self._input_block_timer > 0.0:
+            self._input_block_timer = max(0.0, self._input_block_timer - dt)
         self.btn_back.update(dt)
         if self.total_pages > 1:
             self.btn_prev_page.update(dt)
