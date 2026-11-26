@@ -1723,10 +1723,9 @@ class StoryMapScene(BaseState):
             if getattr(microgame, "paloma_intro", None) is not None:
                 microgame.paloma_intro = None
             if stages and idx + 1 < len(stages):
-                # Ronda intermedia del nivel: mostrar resultado breve ("¡Ganaste!" / "¡Perdiste!") y pasar rápido a la siguiente ronda
+                # Ronda intermedia del nivel: mostrar cartelito de resultado y pasar a la siguiente ronda
                 microgame.show_outro_banner = True
                 microgame.outro_duration = 1.25
-                microgame.skip_outro_story_card = True
             elif stages and idx + 1 == len(stages):
                 # Última ronda que completa el nivel
                 microgame.show_outro_banner = True
