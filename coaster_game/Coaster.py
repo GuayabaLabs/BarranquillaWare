@@ -2268,6 +2268,8 @@ class Juego:
         self.tiempo = 0.0
         self.camara = None
         self.modo = "raton"
+        self.posRatonEvento = None
+        self.botonRatonEvento = False
         self.aviso, self.avisoHasta = "", 0.0
         if usarCamara:
             if cv2 is None:
@@ -2535,8 +2537,12 @@ class Juego:
                 self.cursor = (interpolar(self.cursor[0], meta[0], 0.45), interpolar(self.cursor[1], meta[1], 0.45))
             self.abajo = self.cursor is not None
         else:
-            self.cursor = pygame.mouse.get_pos()
-            self.abajo = pygame.mouse.get_pressed()[0]
+            if not self.auto_flip or self.posRatonEvento is not None:
+                self.cursor = self.posRatonEvento
+                self.abajo = self.botonRatonEvento
+            else:
+                self.cursor = pygame.mouse.get_pos()
+                self.abajo = pygame.mouse.get_pressed()[0]
 
     def actualizarBotones(self, delta):
         if self.modo != "camara":
@@ -3382,6 +3388,16 @@ class Juego:
     def manejar(self, ev):
         if ev.type == pygame.QUIT:
             return False
+        if ev.type == pygame.MOUSEMOTION:
+            self.posRatonEvento = ev.pos
+            if hasattr(ev, "buttons"):
+                self.botonRatonEvento = bool(ev.buttons[0])
+        elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            self.posRatonEvento = ev.pos
+            self.botonRatonEvento = True
+        elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+            self.posRatonEvento = ev.pos
+            self.botonRatonEvento = False
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and self.estado == "revelacion":
             if self.revelacionLista():
                 self.pasarAlResultado()

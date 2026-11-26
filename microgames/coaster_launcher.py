@@ -81,6 +81,8 @@ def _get_cached_coaster_module(coaster_dir: str, coaster_file: str):
 
 
 class CoasterLauncherState(BaseState):
+    CAMERA_POINTER: bool = False
+
     def __init__(self, on_complete_callback: Optional[Callable[[bool], None]] = None, calibration_only: bool = False) -> None:
         super().__init__()
         self.on_complete_callback = on_complete_callback
@@ -136,10 +138,12 @@ class CoasterLauncherState(BaseState):
             return
         forwarded = event
         if hasattr(event, "pos"):
-            sx = 1100 / 1920
-            sy = 700 / 1080
+            w = self.legacy_surface.get_width() if self.legacy_surface is not None else 1100
+            h = self.legacy_surface.get_height() if self.legacy_surface is not None else 700
+            sx = w / 1920.0
+            sy = h / 1080.0
             data = dict(event.__dict__)
-            data["pos"] = (int(event.pos[0] * sx), int(event.pos[1] * sy))
+            data["pos"] = (round(event.pos[0] * sx), round(event.pos[1] * sy))
             forwarded = pygame.event.Event(event.type, data)
         previous_state = self.game.estado
         previous_level = self.game.numNivel
