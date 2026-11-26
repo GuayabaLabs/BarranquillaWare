@@ -379,7 +379,8 @@ class Engine:
     def _dispatch_event(self, event: pygame.event.Event) -> None:
         """Despacha un evento de entrada respetando la pausa global de microjuegos."""
         if (event.type in (pygame.KEYDOWN, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP)
-                and not getattr(event, "gamepad", False)):
+                and not getattr(event, "gamepad", False)
+                and not getattr(event, "camera_pointer", False)):
             from core import input_state
             input_state.set_input_device("keyboard")
         current = self.state_machine.current_state
@@ -612,8 +613,14 @@ class Engine:
             return
 
         hand_x, hand_y = self.camera_input.get_position()
-        target_x = max(10.0, min(float(self.VIRTUAL_WIDTH - 10), hand_x * self.VIRTUAL_WIDTH))
-        target_y = max(10.0, min(float(self.VIRTUAL_HEIGHT - 10), hand_y * self.VIRTUAL_HEIGHT))
+        margin = max(0.0, min(0.25, float(getattr(current, "CAMERA_POINTER_MARGIN", 0.0))))
+        if margin > 0.0:
+            norm_x = max(0.0, min(1.0, (hand_x - margin) / (1.0 - 2.0 * margin)))
+            norm_y = max(0.0, min(1.0, (hand_y - margin) / (1.0 - 2.0 * margin)))
+        else:
+            norm_x, norm_y = hand_x, hand_y
+        target_x = max(10.0, min(float(self.VIRTUAL_WIDTH - 10), norm_x * self.VIRTUAL_WIDTH))
+        target_y = max(10.0, min(float(self.VIRTUAL_HEIGHT - 10), norm_y * self.VIRTUAL_HEIGHT))
 
         # LERP suave para amortiguar jitter (más firme en el instante inicial del pellizco para no desviar el clic)
         smooth = min(1.0, dt * 22.0)
@@ -649,6 +656,8 @@ class Engine:
 
             if not self._cam_pointer_down:
                 if (pinching or clicked_edge) and self.cam_click_cooldown <= 0.0:
+                    from core import input_state
+                    input_state.set_input_device("camera")
                     self._cam_pointer_down = True
                     self._cam_pointer_down_time = 0.0
                     self._cam_pointer_release_grace = 0.0
@@ -674,7 +683,7 @@ class Engine:
                         self._cam_pointer_down_time = 0.0
                         self._cam_pointer_release_grace = 0.0
                         self._cam_pointer_state = None
-                        self.cam_click_cooldown = 0.28
+                        self.cam_click_cooldown = float(getattr(current, "CAMERA_CLICK_COOLDOWN", 0.28))
             return
 
         # Despachar MOUSEMOTION virtual para activar hovers en botones
@@ -710,6 +719,8 @@ class Engine:
         gesture_triggered = self.camera_input.consume_click() and self.cam_click_cooldown <= 0.0
 
         if hover_triggered or gesture_triggered:
+            from core import input_state
+            input_state.set_input_device("camera")
             # Emitir clic virtual en la posición del lapicero
             down_evt = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": virt_pos, "button": 1})
             up_evt = pygame.event.Event(pygame.MOUSEBUTTONUP, {"pos": virt_pos, "button": 1})

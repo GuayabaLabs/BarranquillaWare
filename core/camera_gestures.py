@@ -25,6 +25,9 @@ except Exception as exc:
 class CameraGestureInput:
     """Detector singleton mínimo y reutilizable de gestos y visión MediaPipe."""
     _instance: Optional['CameraGestureInput'] = None
+    MIN_HAND_SCALE: float = 0.065
+    RELATIVE_SCALE_RATIO: float = 0.55
+    MAX_TRACK_JUMP: float = 0.30
 
     @classmethod
     def get_instance(cls) -> 'CameraGestureInput':
@@ -60,6 +63,9 @@ class CameraGestureInput:
         self._previous_fist = False
         self._previous_raised = False
         self._previous_hand_y = 0.5
+        self._tracked_palm: Optional[tuple[float, float]] = None
+        self._tracked_lost_frames: int = 0
+        self._hands: list[tuple[float, float]] = []
 
     def start(self) -> bool:
         from core.settings import SettingsManager
@@ -135,6 +141,9 @@ class CameraGestureInput:
             self._previous_fist = False
             self._previous_raised = False
             self.open_palm = False
+            self._tracked_palm = None
+            self._tracked_lost_frames = 0
+            self._hands = []
 
     def consume_finger(self, index: int) -> bool:
         if not 0 <= index < 4:
@@ -214,6 +223,64 @@ class CameraGestureInput:
             return self.pointing_direction if (self.enabled and self.hand_detected) else None
 
     @staticmethod
+    def _hand_scale(lm) -> float:
+        """Estima el tamaño aparente de la mano (muñeca LM 0 a nudillo medio LM 9)."""
+        return ((lm[0].x - lm[9].x) ** 2 + (lm[0].y - lm[9].y) ** 2) ** 0.5
+
+    @classmethod
+    def _filter_foreground_hands(
+        cls,
+        hand_landmarks_list: list,
+        min_scale: Optional[float] = None,
+        rel_ratio: Optional[float] = None,
+    ) -> list:
+        """Descarta manos lejanas o de fondo y conserva hasta 2 manos de primer plano."""
+        if not hand_landmarks_list:
+            return []
+        min_sc = cls.MIN_HAND_SCALE if min_scale is None else min_scale
+        ratio = cls.RELATIVE_SCALE_RATIO if rel_ratio is None else rel_ratio
+        scaled = []
+        for hand in hand_landmarks_list:
+            scale = cls._hand_scale(hand.landmark)
+            if scale >= min_sc:
+                scaled.append((scale, hand))
+        if not scaled:
+            return []
+        max_scale = max(scale for scale, _ in scaled)
+        foreground = [
+            (scale, hand)
+            for scale, hand in scaled
+            if scale >= max_scale * ratio
+        ]
+        foreground.sort(key=lambda item: item[0], reverse=True)
+        return [hand for _, hand in foreground[:2]]
+
+    @classmethod
+    def _select_primary_hand(
+        cls,
+        foreground_hands: list,
+        tracked_palm: Optional[tuple[float, float]],
+        max_jump: Optional[float] = None,
+    ):
+        """Mantiene la mano principal en seguimiento para evitar saltos con una segunda mano."""
+        if not foreground_hands:
+            return None, None
+        limit = cls.MAX_TRACK_JUMP if max_jump is None else max_jump
+        if len(foreground_hands) == 1 or tracked_palm is None:
+            chosen = foreground_hands[0]
+            lm = chosen.landmark
+            return chosen, (lm[9].x, lm[9].y)
+        tx, ty = tracked_palm
+        best = min(
+            foreground_hands,
+            key=lambda h: ((h.landmark[9].x - tx) ** 2 + (h.landmark[9].y - ty) ** 2) ** 0.5,
+        )
+        dist = ((best.landmark[9].x - tx) ** 2 + (best.landmark[9].y - ty) ** 2) ** 0.5
+        chosen = best if dist <= limit else foreground_hands[0]
+        lm = chosen.landmark
+        return chosen, (lm[9].x, lm[9].y)
+
+    @staticmethod
     def _detect_pointing_direction(lm) -> Optional[tuple[float, float]]:
         """Detecta hacia qué dirección cardinal apunta el índice (con anular y meñique plegados)."""
         def dist(a, b):
@@ -246,8 +313,8 @@ class CameraGestureInput:
         hands = None
         try:
             hands = mp.solutions.hands.Hands(
-                static_image_mode=False, max_num_hands=2,
-                min_detection_confidence=0.6, min_tracking_confidence=0.55
+                static_image_mode=False, max_num_hands=3,
+                min_detection_confidence=0.65, min_tracking_confidence=0.60
             )
             last = time.monotonic()
             while self.enabled and not self._stop.is_set():
@@ -270,12 +337,16 @@ class CameraGestureInput:
                 pinch = False
                 pointing_dir = None
                 hands_list: list[tuple[float, float]] = []
-                if result.multi_hand_landmarks:
+                foreground = self._filter_foreground_hands(result.multi_hand_landmarks) if result.multi_hand_landmarks else []
+                if foreground:
                     detected = True
-                    hands_list = [(h.landmark[9].x, h.landmark[9].y) for h in result.multi_hand_landmarks[:2]]
-                    lm = result.multi_hand_landmarks[0].landmark
+                    hands_list = [(h.landmark[9].x, h.landmark[9].y) for h in foreground]
+                    primary_h, palm_pos = self._select_primary_hand(foreground, self._tracked_palm)
+                    self._tracked_palm = palm_pos
+                    self._tracked_lost_frames = 0
+                    lm = primary_h.landmark
                     # Preferir la mano derecha (en imagen espejada) para apuntar direcciones en el mapa.
-                    right_hand_lm = max(result.multi_hand_landmarks[:2], key=lambda h: h.landmark[9].x).landmark
+                    right_hand_lm = max(foreground, key=lambda h: h.landmark[9].x).landmark
                     pointing_dir = self._detect_pointing_direction(right_hand_lm)
                     # Seguimiento focal en la punta del dedo índice (LM 8) para que el lápiz apunte donde apunta el dedo
                     hand_x, hand_y = lm[8].x, lm[8].y
@@ -291,6 +362,10 @@ class CameraGestureInput:
                         piano_fingers[i] = lm[tip].y > lm[pip].y + 0.012
                     raised = sum(extended_fingers) >= 4
                     fist = bool(piano_fingers[0] and sum(piano_fingers) >= 3)
+                else:
+                    self._tracked_lost_frames += 1
+                    if self._tracked_lost_frames >= 8:
+                        self._tracked_palm = None
                 with self._lock:
                     moving_up = self._previous_hand_y - hand_y > 0.035
                     self.hand_detected = detected

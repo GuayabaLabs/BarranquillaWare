@@ -218,3 +218,83 @@ def test_fritanga_gamepad_pointer_flips_spills_and_delivers(isolated_engine):
     engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
     assert game.estadoVaso == "entregando"
     assert game.cliente["estado"] == "contento"
+
+
+def test_fritanga_gamepad_keeps_standard_rules_even_with_camera_enabled(isolated_engine):
+    from microgames.fritanga_84 import Fritanga84Microgame
+
+    class _PassiveActiveCam:
+        enabled = True
+        def is_hand_present(self): return True
+        def get_position(self): return (0.5, 0.5)
+        def is_pinching(self): return False
+        def consume_click(self): return False
+        def consume_hand_raise(self): return False
+
+    engine = isolated_engine
+    cam = _PassiveActiveCam()
+    engine.camera_input = cam
+
+    game = Fritanga84Microgame(character_id="westcol")
+    game.camara = cam
+    game.phase = BaseMicrogame.PHASE_PLAY
+    game.tutorialPendiente = False
+    game.tutorial = None
+    game.escribiendo = 0.0
+    game.trol["estado"] = "calma"
+    game.cliente = {"cual": 0, "estado": "esperando", "tiempo": 0.0, "paciencia": 12.0}
+    engine.state_machine.change_state(game)
+
+    # Aunque la cámara esté activa y haya mano de fondo, el puntero pasivo NO activa ayudas
+    engine._update_camera_cursor_interaction(0.05)
+
+    # Jugar con mando mantiene velocidad 1.0x de cocción (incluso si antes hubo interacción de cámara)
+    game._control_camara_activo = True
+    engine._dispatch_input_event(pygame.event.Event(pygame.JOYAXISMOTION, {"axis": 0, "value": 0.4}))
+    assert input_state.is_gamepad_active() is True
+    assert game._camara_es_control_activo() is False
+
+    a0 = game.arepas[0]
+    a0["entrada"] = 1.0
+    a0["volteo"] = 0.0
+    a0["sacando"] = 0.0
+    a0["quemada"] = 0.0
+    a0["seVuela"] = 0.0
+    a0["lado"] = 1
+    a0["coccion"] = 1.05
+    a0["velocidad"] = 0.20
+    game.update_game(0.10)
+    assert a0["coccion"] == pytest.approx(1.05 + 0.20 * 0.10, abs=1e-5)
+
+    # Hitbox de arepa con mando sigue estricto (sin snap de cámara)
+    a0["coccion"] = 0.85
+    punto_desviado = (a0["x"] - 108, a0["y"])
+    assert game.arepaEn(punto_desviado, es_camara=True) is a0
+    engine.joy_cursor_x, engine.joy_cursor_y = punto_desviado
+    engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+    engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+    assert a0["lado"] == 1
+
+    # Llenado de patillazo con mando sobre 0.80 mantiene tasa normal 0.85/s (sin x0.55)
+    game.llenado = 0.82
+    game.estadoVaso = "listo"
+    zona = game.zonaServir()
+    engine.joy_cursor_x, engine.joy_cursor_y = zona.center
+    engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+    assert game.mouseServir is True and game._servir_por_camara is False
+    antes = game.llenado
+    game.update(0.10)
+    assert game.llenado - antes == pytest.approx(0.85 * 0.10, abs=1e-4)
+    engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+
+    # Suelta con mando fuera de cajaCliente().inflate(120, 160) devuelve el vaso (sin zona amplia de cámara)
+    game.llenado = 0.88
+    game.estadoVaso = "listo"
+    engine.joy_cursor_x, engine.joy_cursor_y = game.cajaVasoQuieto().center
+    engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+    assert game.estadoVaso == "arrastrando" and game._arrastre_por_camara is False
+    engine.joy_cursor_x, engine.joy_cursor_y = (1290.0, 200.0)
+    engine._update_gamepad_cursor_interaction(0.016)
+    engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+    assert game.estadoVaso == "volviendo"
+    assert game.cliente["estado"] == "esperando"

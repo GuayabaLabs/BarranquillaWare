@@ -61,7 +61,14 @@ def isolated_engine(tmp_path, monkeypatch):
 
 
 def _move_cam_to_px(engine: Engine, cam: _FakeDragCam, px: tuple[float, float], steps: int = 8, dt: float = 0.05) -> None:
-    cam.pos = (px[0] / engine.VIRTUAL_WIDTH, px[1] / engine.VIRTUAL_HEIGHT)
+    current = engine.state_machine.current_state
+    margin = max(0.0, min(0.25, float(getattr(current, "CAMERA_POINTER_MARGIN", 0.0))))
+    nx = px[0] / engine.VIRTUAL_WIDTH
+    ny = px[1] / engine.VIRTUAL_HEIGHT
+    if margin > 0.0:
+        nx = margin + nx * (1.0 - 2.0 * margin)
+        ny = margin + ny * (1.0 - 2.0 * margin)
+    cam.pos = (nx, ny)
     for _ in range(steps):
         engine._update_camera_cursor_interaction(dt)
 
@@ -321,7 +328,7 @@ def test_fritanga_camera_pours_and_spills_without_auto_delivery(isolated_engine)
     assert game.mouseServir is True
 
     # Mover > 30 px dentro de zonaServir mientras se llena pasado 0.8 hasta derramar
-    for i in range(30):
+    for i in range(40):
         dx = 32 if (i % 2 == 0) else -10
         _move_cam_to_px(engine, cam, (zona.centerx + dx, zona.centery), steps=2, dt=0.05)
         game.update(0.05)
@@ -346,3 +353,106 @@ def test_camera_pointer_does_not_skip_outro_early(isolated_engine):
     # Clic de mouse real sí conserva su comportamiento original
     game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": (500, 500), "button": 1}))
     assert skipped == [True]
+
+
+def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
+    from microgames.fritanga_84 import Fritanga84Microgame
+
+    engine = isolated_engine
+    cam = _FakeDragCam()
+    engine.camera_input = cam
+
+    game = Fritanga84Microgame(character_id="westcol")
+    game.camara = cam
+    game.phase = BaseMicrogame.PHASE_PLAY
+    game.tutorialPendiente = False
+    game.tutorial = None
+    game.escribiendo = 0.0
+    game.trol["estado"] = "calma"
+    game.cliente = {"cual": 0, "estado": "esperando", "tiempo": 0.0, "paciencia": 12.0}
+    engine.state_machine.change_state(game)
+
+    # 1. Margen útil (0.08): hand_x = 0.92 alcanza el borde derecho / zonaServir
+    cam.pos = (0.92, 0.70)
+    for _ in range(10):
+        engine._update_camera_cursor_interaction(0.05)
+    assert engine.cam_cursor_x >= 1880.0
+
+    # 2. Corte instantáneo (0 ms) al abrir pellizco + zona dulce x0.55 en [0.80, 1.08]
+    game.llenado = 0.0
+    game.estadoVaso = "listo"
+    _move_cam_to_px(engine, cam, game.zonaServir().center)
+    cam.set_pinch(True)
+    engine._update_camera_cursor_interaction(0.016)
+    assert game.mouseServir is True and game._servir_por_camara is True
+
+    # Llenar hasta entrar en la zona dulce (>= 0.80) y verificar tasa x0.55 mientras mantiene pellizco
+    for _ in range(20):
+        game.update(0.05)
+    assert 0.80 <= game.llenado < 1.0
+    antes = game.llenado
+    game.update(0.10)
+    assert game.llenado - antes == pytest.approx(0.85 * 0.55 * 0.10, abs=1e-4)
+
+    # Al abrir pellizco, incluso dentro de la gracia de 0.14s del motor, deja de llenar al instante
+    cam.set_pinch(False)
+    engine._update_camera_cursor_interaction(0.04)  # < 0.14s (engine aún no emite MOUSEBUTTONUP)
+    llenado_corte = game.llenado
+    game.update(0.10)
+    assert game.llenado == pytest.approx(llenado_corte)
+    engine._update_camera_cursor_interaction(0.12)  # termina de soltar drag en motor
+
+    # 3. Snap de arepaEn con camera_pointer=True priorizando arepa lista sobre desvío leve
+    a0, a1 = game.arepas[0], game.arepas[1]
+    for a in game.arepas:
+        a["entrada"] = 1.0
+        a["volteo"] = 0.0
+        a["sacando"] = 0.0
+        a["quemada"] = 0.0
+        a["seVuela"] = 0.0
+        a["lado"] = 1
+        a["coccion"] = 0.2
+    a1["coccion"] = 0.85
+    # Punto fuera de la elipse estricta de a1 (dy=72 > 55*sqrt(1.3)=62.7) pero dentro de 1.45x
+    punto_desviado = (a1["x"], a1["y"] + 72)
+    assert game.arepaEn(punto_desviado, es_camara=False) is None
+    assert game.arepaEn(punto_desviado, es_camara=True) is a1
+
+    # 4. Entrega directa pellizcando al cliente con vaso lleno
+    engine.cam_click_cooldown = 0.0
+    game.llenado = 0.88
+    game.estadoVaso = "listo"
+    _move_cam_to_px(engine, cam, game.cajaCliente().center)
+    cam.set_pinch(True)
+    engine._update_camera_cursor_interaction(0.016)
+    cam.set_pinch(False)
+    engine._update_camera_cursor_interaction(0.08)
+    engine._update_camera_cursor_interaction(0.08)
+    assert game.estadoVaso == "entregando"
+    assert game.cliente["estado"] == "contento"
+
+    # 5. Entrega por zona amplia al soltar arrastre (pos[0] >= 1280 and pos[1] <= 860)
+    game.llenado = 0.88
+    game.estadoVaso = "listo"
+    game.cliente = {"cual": 0, "estado": "esperando", "tiempo": 0.0, "paciencia": 12.0}
+    game.agarrarVaso(game.cajaVasoQuieto().center, es_camara=True)
+    game.soltarVaso((1290, 420), es_camara=True)
+    assert game.estadoVaso == "entregando"
+
+    # 6. Compensación de cocción activa solo tras interacción de cámara
+    a0["coccion"] = 0.40
+    a0["velocidad"] = 0.20
+    game.estadoVaso = "listo"
+    game.mouseServir = False
+    game.teclaServir = False
+    game.gestoServir = False
+    game.update_game(0.10)
+    assert a0["coccion"] == pytest.approx(0.40 + 0.20 * 0.10 * 0.80, abs=1e-5)
+
+    # Con coccion >= 1.0 y sirviendo por cámara, aplica x0.65 adicional
+    a0["coccion"] = 1.05
+    cam.set_pinch(True)
+    game.mouseServir = True
+    game._servir_por_camara = True
+    game.update_game(0.10)
+    assert a0["coccion"] == pytest.approx(1.05 + 0.20 * 0.10 * 0.80 * 0.65, abs=1e-5)
