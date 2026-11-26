@@ -133,8 +133,11 @@ class UninorteSprintMicrogame(BaseMicrogame):
             on_complete_callback=on_complete_callback
         )
 
+    CAMERA_POINTER = False
+
     def enter(self, params: Optional[dict] = None) -> None:
         self.audio.play_bgm("contraRelojMusic.mp3")
+        pygame.mouse.set_visible(False)
 
     def setup_game(self) -> None:
         self._last_walk_finger: Optional[int] = None
@@ -532,6 +535,7 @@ class UninorteSprintMicrogame(BaseMicrogame):
 
     def exit(self) -> None:
         # La cámara pertenece al motor y se comparte con el resto de escenas.
+        pygame.mouse.set_visible(True)
         self.callarTictac()
         super().exit()
 

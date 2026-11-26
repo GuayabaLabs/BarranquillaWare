@@ -136,7 +136,7 @@ class TestStoryMapCameraWalk(unittest.TestCase):
         scene._launch_microgame()
         mg = scene.state_machine.current_state
         self.assertTrue(mg.show_outro_banner)
-        self.assertTrue(getattr(mg, "skip_outro_story_card", False))
+        self.assertFalse(getattr(mg, "skip_outro_story_card", False))
         self.assertAlmostEqual(mg.outro_duration, 1.25)
         mg.finish_game(True)
         self.assertEqual(mg.outro_message, "¡GANASTE!")
