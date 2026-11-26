@@ -23,6 +23,7 @@ from microgames.metropolitano_moderacion import MetropolitanoModeracionMicrogame
 from microgames.punch_alert import PunchAlertMicrogame
 from microgames.buenavista_cine import BuenavistaCineMicrogame
 from microgames.heladero_metro import HeladeroMetroMicrogame
+from microgames.coaster_launcher import CoasterLauncherState
 
 
 INK_DARK = (78, 51, 35)       # #4E3323 Tinta café principal
@@ -154,6 +155,15 @@ class FreePlayScene(BaseState):
                 "difficulty": 3,
                 "theme_color": (222, 148, 38),
                 "cls": Fritanga84Microgame,
+            },
+            {
+                "id": "coaster",
+                "title": "COASTER · LUNA DEL RÍO",
+                "district": "GRAN MALECÓN DEL RÍO",
+                "desc": "Traza tu propia montaña rusa frente al río sin dejarte llevar por el algoritmo.",
+                "difficulty": 4,
+                "theme_color": (92, 164, 156),
+                "cls": CoasterLauncherState,
             },
         ]
 

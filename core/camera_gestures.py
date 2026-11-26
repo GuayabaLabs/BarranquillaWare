@@ -6,6 +6,7 @@ permisos, el adaptador queda inactivo y el juego conserva sus controles normales
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 from typing import Optional
@@ -303,13 +304,35 @@ class CameraGestureInput:
         return (0.0, 1.0) if vy > 0 else (0.0, -1.0)
 
     def _run(self) -> None:
-        cap = cv2.VideoCapture(0)
+        cap = None
+        if sys.platform.startswith("win") and hasattr(cv2, "CAP_DSHOW"):
+            try:
+                cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                if not cap.isOpened():
+                    cap.release()
+                    cap = None
+            except TypeError:
+                cap = None
+        if cap is None:
+            cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             self.error = "No se pudo abrir la cámara"
             self.available = False
             self.enabled = False
             cap.release()
             return
+        if hasattr(cap, "set"):
+            for prop_name, value in (
+                ("CAP_PROP_FRAME_WIDTH", 640),
+                ("CAP_PROP_FRAME_HEIGHT", 480),
+                ("CAP_PROP_BUFFERSIZE", 1),
+            ):
+                prop = getattr(cv2, prop_name, None)
+                if prop is not None:
+                    try:
+                        cap.set(prop, value)
+                    except Exception:
+                        pass
         hands = None
         try:
             hands = mp.solutions.hands.Hands(
@@ -390,7 +413,7 @@ class CameraGestureInput:
                         if self._finger_just_pressed[i]:
                             self._cooldowns[i] = 0.22
                         self._previous[i] = piano_fingers[i]
-                time.sleep(0.01)
+                time.sleep(0.001)
         except Exception as exc:
             self.error = f"Error de MediaPipe: {exc}"
             self.available = False

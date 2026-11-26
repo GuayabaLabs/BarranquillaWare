@@ -128,12 +128,14 @@ class Fritanga84Microgame(BaseMicrogame):
     fraseRedes = "Usa las redes pa' compartir lo bueno, no pa' pelear."
 
     GAMEPAD_POINTER = True
+    GAMEPAD_CURSOR_SPEED = 1280.0
     GAMEPAD_BUTTON_KEYS = {2: pygame.K_p, 3: pygame.K_e}
     CAMERA_POINTER = True
     CAMERA_POINTER_DRAG = True
+    CAMERA_POINTER_FLUID = True
     CAMERA_DWELL_CLICK = False
-    CAMERA_CLICK_COOLDOWN = 0.14
-    CAMERA_POINTER_MARGIN = 0.08
+    CAMERA_CLICK_COOLDOWN = 0.10
+    CAMERA_POINTER_MARGIN = 0.20
     def __init__(
         self,
         character_id: str = "westcol",
@@ -2743,7 +2745,16 @@ class Fritanga84Microgame(BaseMicrogame):
         surface.blit(sombra, sombra.get_rect(center=(x, y + 30)))
         surface.blit(lleno, lleno.get_rect(midbottom=(x, y)))
         caja = self.cajaCliente()
-        if caja is not None and self.clienteEsperando() and caja.inflate(120, 160).collidepoint(self.posArrastre):
+        en_zona_entrega = False
+        if caja is not None and self.clienteEsperando():
+            if self._arrastre_por_camara:
+                en_zona_entrega = (
+                    caja.inflate(180, 200).collidepoint(self.posArrastre)
+                    or (self.posArrastre[0] >= 1280 and self.posArrastre[1] <= 860)
+                )
+            else:
+                en_zona_entrega = caja.inflate(120, 160).collidepoint(self.posArrastre)
+        if en_zona_entrega:
             if "soltar" not in self.globosHechos:
                 self.globosHechos["soltar"] = self.textoBorde(self.fuenteArepa, "¡Suéltalo!", (255, 248, 236), (40, 100, 60))
             surface.blit(self.globosHechos["soltar"], self.globosHechos["soltar"].get_rect(midbottom=(x, y - lleno.get_height() - 6)))

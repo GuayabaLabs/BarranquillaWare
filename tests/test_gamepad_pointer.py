@@ -298,3 +298,127 @@ def test_fritanga_gamepad_keeps_standard_rules_even_with_camera_enabled(isolated
     engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
     assert game.estadoVaso == "volviendo"
     assert game.cliente["estado"] == "esperando"
+
+
+def test_coaster_gamepad_pointer_draws_clicks_shortcuts_and_switches_from_camera(isolated_engine, monkeypatch):
+    from microgames.coaster_launcher import CoasterLauncherState
+    from core.microgame_pause import MicrogamePauseState
+
+    def _to_virt(pt):
+        return (pt[0] * 1920.0 / 1100.0, pt[1] * 1080.0 / 700.0)
+
+    engine = isolated_engine
+    state = CoasterLauncherState(
+        on_complete_callback=lambda _ok: None,
+        character_id="westcol",
+    )
+    state.pause_menu_callback = lambda: None
+
+    assert state.CAMERA_POINTER is False
+    assert state.GAMEPAD_POINTER is True
+    assert state.GAMEPAD_POINTER_SHOW_CURSOR is False
+    assert state.GAMEPAD_POINTER_DPAD is True
+
+    engine.state_machine.change_state(state)
+    try:
+        assert state.game is not None
+        assert state.game.estado == "intro"
+
+        # 1. El motor NO dibuja un segundo cursor de lápiz sobre Coaster
+        drawn = []
+        monkeypatch.setattr(engine, "_draw_pointer_cursor", lambda *a, **k: drawn.append(True))
+        input_state.set_input_device("gamepad")
+        engine._render_gamepad_cursor(engine.virtual_surface)
+        assert not drawn
+
+        # 2. Botón A adelanta y termina la intro -> tutorial
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+        assert state.game.introLista() is True
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+        assert state.game.estado == "tutorial"
+
+        # 3. Apuntar con el stick al botón Saltar del tutorial y pulsar A -> dibujar
+        _move_joy_to_px(engine, _to_virt(state.game.botSaltar.caja.center), update_game=state.update)
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+        assert state.game.estado == "dibujar"
+
+        # 4. D-pad también mueve el cursor en Coaster
+        x_antes = engine.joy_cursor_x
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYHATMOTION, {"value": (1, 0)}))
+        engine._update_gamepad_cursor_interaction(0.05)
+        assert engine.joy_cursor_x > x_antes
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYHATMOTION, {"value": (0, 0)}))
+
+        # 5. Dibujar vía arrastrando desde salida hacia la derecha, probar B (deshacer) y Y (borrar)
+        salida = state.game.nivel["salida"]
+        _move_joy_to_px(engine, _to_virt(salida), update_game=state.update)
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+        state.update(0.016)
+        assert state.game.trazoActivo is True
+        _move_joy_to_px(engine, _to_virt((salida[0] + 180, salida[1] + 50)), update_game=state.update)
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+        state.update(0.016)
+        assert len(state.game.pts) >= 2
+        assert state.game.trazoActivo is False
+
+        # B deshace el trazo; Y borra toda la vía
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 1}))
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 1}))
+        assert state.game.pts == []
+
+        _move_joy_to_px(engine, _to_virt(salida), update_game=state.update)
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+        state.update(0.016)
+        _move_joy_to_px(engine, _to_virt((salida[0] + 160, salida[1] + 40)), update_game=state.update)
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+        state.update(0.016)
+        assert len(state.game.pts) >= 2
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 3}))
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 3}))
+        assert state.game.pts == []
+
+        # 6. Trazar hasta la meta con el stick + A lanza automáticamente los carros
+        _move_joy_to_px(engine, _to_virt(salida), update_game=state.update)
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 0}))
+        state.update(0.016)
+        meta = state.game.nivel["meta"]
+        _move_joy_to_px(engine, _to_virt((540, 320)), update_game=state.update)
+        _move_joy_to_px(engine, _to_virt(meta), update_game=state.update)
+        assert state.game.pts and state.game.pts[-1] == meta
+        assert state.game.llegando is True or state.game.estado == "viajando"
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 0}))
+        for _ in range(15):
+            if state.game.estado == "viajando":
+                break
+            state.update(0.05)
+        assert state.game.estado == "viajando"
+
+        # 7. X también puede probar la vía desde dibujar
+        state.game.estado = "dibujar"
+        state.game.viaje = None
+        state.game.pts = [salida, (400, 260), (700, 310), meta]
+        state.game.refrescar()
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 2}))
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 2}))
+        assert state.game.estado == "viajando"
+
+        # 8. Cambio sin ruido desde calibrar en modo cámara: solo movimiento real o A sale de calibrar
+        state.game.modo = "camara"
+        state.game.estado = "calibrar"
+        state.handle_event(pygame.event.Event(pygame.MOUSEMOTION, {"pos": (960, 540), "rel": (0, 0), "buttons": (0, 0, 0), "gamepad_pointer": True}))
+        assert state.game.modo == "camara" and state.game.estado == "calibrar"
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYAXISMOTION, {"axis": 0, "value": 0.9}))
+        engine._update_gamepad_cursor_interaction(0.05)
+        assert state.game.modo == "raton" and state.game.estado != "calibrar"
+
+        # 9. Start (botón 7) abre el menú de pausa
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONDOWN, {"button": 7}))
+        engine._dispatch_input_event(pygame.event.Event(pygame.JOYBUTTONUP, {"button": 7}))
+        assert isinstance(engine.state_machine.current_state, MicrogamePauseState)
+        engine.state_machine.pop_state()
+    finally:
+        input_state.clear()
+        state.exit()

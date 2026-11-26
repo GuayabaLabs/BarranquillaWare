@@ -372,11 +372,38 @@ def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
     game.cliente = {"cual": 0, "estado": "esperando", "tiempo": 0.0, "paciencia": 12.0}
     engine.state_machine.change_state(game)
 
-    # 1. Margen útil (0.08): hand_x = 0.92 alcanza el borde derecho / zonaServir
-    cam.pos = (0.92, 0.70)
-    for _ in range(10):
+    # 1. Margen útil ampliado (0.20) y suavizado adaptativo fluido en Fritanga
+    assert Fritanga84Microgame.CAMERA_POINTER_MARGIN == pytest.approx(0.20)
+    assert Fritanga84Microgame.CAMERA_POINTER_FLUID is True
+    cam.pos = (0.80, 0.80)
+    for _ in range(12):
         engine._update_camera_cursor_interaction(0.05)
-    assert engine.cam_cursor_x >= 1880.0
+    assert engine.cam_cursor_x >= 1880.0 and engine.cam_cursor_y >= 1040.0
+
+    cam.pos = (0.20, 0.20)
+    for _ in range(12):
+        engine._update_camera_cursor_interaction(0.05)
+    assert engine.cam_cursor_x <= 40.0 and engine.cam_cursor_y <= 40.0
+
+    # Fluidez adaptativa: barrido amplio avanza mucho más rápido en 16ms que jitter corto
+    # y un arrastre rápido (>= 48 px) en los primeros 75ms del pellizco no se frena
+    _move_cam_to_px(engine, cam, (400.0, 400.0), steps=12, dt=0.05)
+    engine.cam_cursor_x, engine.cam_cursor_y = 400.0, 400.0
+    _move_cam_to_px(engine, cam, (405.0, 400.0), steps=1, dt=0.016)
+    jitter_step = engine.cam_cursor_x - 400.0
+
+    engine.cam_cursor_x, engine.cam_cursor_y = 400.0, 400.0
+    _move_cam_to_px(engine, cam, (1000.0, 400.0), steps=1, dt=0.016)
+    sweep_step = engine.cam_cursor_x - 400.0
+    assert sweep_step > jitter_step * 40.0
+
+    engine.cam_cursor_x, engine.cam_cursor_y = 400.0, 400.0
+    engine._cam_pointer_down = True
+    engine._cam_pointer_down_time = 0.02
+    _move_cam_to_px(engine, cam, (700.0, 400.0), steps=1, dt=0.016)
+    assert engine.cam_cursor_x - 400.0 >= 140.0
+    engine._cam_pointer_down = False
+    engine._cam_pointer_down_time = 0.0
 
     # 2. Corte instantáneo (0 ms) al abrir pellizco + zona dulce x0.55 en [0.80, 1.08]
     game.llenado = 0.0
