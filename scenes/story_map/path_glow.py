@@ -631,6 +631,25 @@ class WatercolorRouteRenderer:
         add_buckets[q] = surf
         return surf
 
+    def iluminar_mapa_luz(
+        self,
+        lm: pygame.Surface,
+        route_data: Dict[str, Any],
+        cam_x: int,
+        cam_y: int,
+        tier: str = "completed",
+        intensity: float = 1.0,
+    ) -> None:
+        """Suma el brillo (ya en caché) del camino al mapa de luz de la noche: la calle bajo el camino se ve alumbrada."""
+        bbox: pygame.Rect = route_data["bbox"]
+        sx, sy = bbox.x - cam_x, bbox.y - cam_y
+        if sx + bbox.width < 0 or sy + bbox.height < 0 or sx > lm.get_width() or sy > lm.get_height():
+            return
+        _, add_base_f32, add_buckets = self._get_night_glow_surfaces(route_data, tier=tier)
+        add_surf = self._get_quantized_add_surf(add_base_f32, add_buckets, max(0.0, min(1.0, intensity)))
+        if add_surf is not None:
+            lm.blit(add_surf, (sx, sy), special_flags=pygame.BLEND_RGB_ADD)
+
     def render_night_glow_route(
         self,
         surface: pygame.Surface,

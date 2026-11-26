@@ -128,3 +128,13 @@ El código ya está listo; mientras falten estos archivos se usan iconos dibujad
 Iconos: mismo estilo que los de `assets/Punch/tarjetas.png` (acuarela suave, contorno marrón), **solo el icono,
 sin la tarjeta y sin texto**, fondo blanco puro, cuadrado, 400×400 o más. El código lo pone dentro de la tarjeta
 y escribe el texto con la fuente de las demás tarjetas.
+
+---
+
+## Heladero del Metro: voz del pregón
+
+| Archivo | Dónde se usa | Qué decir |
+|---|---|---|
+| `assets/voces/heladero_pregon.mp3` (o `.ogg`) | Suena cuando aparece en la intro la línea "¡Heladooo! ¡Helado de coco y de corozo, pa'l calor del Metro!" | Pregón de vendedor callejero barranquillero: **"¡Heladooo! ¡Helado de coco y de corozo, pa'l calor del Metro!"** |
+
+Mientras falte, la línea se muestra igual (con el sonido de máquina de escribir) y sin voz.

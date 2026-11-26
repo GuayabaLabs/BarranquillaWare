@@ -337,19 +337,22 @@ class PunchAlertMicrogame(BaseMicrogame):
         )
 
     def enter(self, params: Optional[dict] = None) -> None:
-        if pygame.mixer.get_init():
-            pygame.mixer.music.fadeout(400)
-        self.audio.current_track = None
+        self.villancicoSonando = False
+        self.audio.fadeout_music(400)
 
     def ponerMusica(self) -> None:
+        # Si ya cayó el villancico, esa es la música de la publicación: no se vuelve a poner la del juego.
+        if getattr(self, "villancicoSonando", False):
+            return
         self.audio.play_bgm("PunchMusic.mp3", volume_scale=0.35)
 
     def ponerVillancico(self) -> bool:
         """La publicación ya tiene el villancico: suena "Los peces en el río" en lugar de la música del juego."""
         for nombre in musicaVillancico:
             if os.path.exists(os.path.join(self.audio.base_assets_dir, nombre)):
-                self.audio.play_bgm(nombre, volume_scale=0.5)
                 self.villancicoSonando = True
+                self.audio.stop_music()  # Apagar la música del juego antes de que entre el villancico
+                self.audio.play_bgm(nombre, volume_scale=0.5)
                 return True
         return False
 
@@ -1127,9 +1130,7 @@ class PunchAlertMicrogame(BaseMicrogame):
         t = self.outro_timer - inicio
         if not getattr(self, "musicaApagada", False):
             self.musicaApagada = True
-            if pygame.mixer.get_init():
-                pygame.mixer.music.fadeout(700)
-            self.audio.current_track = None
+            self.audio.fadeout_music(700)
         lineas = self.lineasFinales()
         horario = self.horarioFinal()
         if hasattr(self.audio, "sonarEscritura"):

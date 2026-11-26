@@ -215,7 +215,8 @@ def test_free_play_pagination_launches_new_games_with_keyboard(monkeypatch):
     from scenes.free_play import FreePlayScene
     scene = FreePlayScene()
     ids = [g["id"] for g in scene.games_data]
-    assert len(ids) == len(set(ids)) == 15
+    # Modo Libre quedó con los 8 juegos principales (commit 9823a21); sin repetidos
+    assert len(ids) == len(set(ids)) == 8
     calls = []
     monkeypatch.setattr(scene, "_launch_game", calls.append)
     for game_id in ("curramgram_go", "emoji_catch"):

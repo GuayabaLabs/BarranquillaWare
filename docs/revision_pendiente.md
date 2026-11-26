@@ -116,3 +116,31 @@ python microgames/emoji_catch.py
       las luces lo siguen; si se cambia su dibujo, ajustar `BORDE_A`, `BORDE_B`, `CABECERA_*` y `TORRE`.
 - [ ] Rendimiento medido sin pantalla: unos 11 ms por cuadro de mediana, con picos de 20-30 ms durante el
       anochecer. Revisar en el PC real que no se note tironeo al caer la noche.
+
+## 9. Música única y voz del heladero
+
+- [ ] Punch: al caer la tarjeta del villancico se apaga la música del juego y suena solo "Los peces en el río";
+      sigue sonando en el menú de pausa y nada vuelve a poner la música del Punch. (No se pudo reproducir el
+      "dos canciones" en pruebas: se blindó para que cualquier música nueva apague la anterior.)
+- [ ] Una sola canción en todo el juego: `AudioManager.play_bgm` apaga la anterior y también las canciones que un
+      minijuego suene como efecto (p. ej. la del trol de la Fritanga). La canción del trol ahora sigue en la pausa.
+- [ ] Heladero: el pregón "¡Heladooo!..." se oye cuando aparece la línea (`assets/voces/heladero_pregon.ogg`).
+      La línea espera a que termine la voz antes de pasar.
+
+## 10. Arreglos tras el merge con main (pruebas que fallaban)
+
+- [ ] **Noche del mapa**: el merge con la rama de SEOR (81ce55b) había quitado el "mapa de luz" y de noche el mapa se
+      veía casi igual que de día. Se restauró dentro del nuevo orden de dibujo (paso 2A de `render` en
+      `scenes/story_map/scene.py`, método `_aplicar_luz_del_dia`): calles oscuras, lugares, faroles y Cami iluminados.
+      Se conservan los caminos nocturnos, luciérnagas y halos de SEOR. Ya no se pinta el velo plano de noche ni el de
+      atardecer (lo hace la luz de la hora). Medido sin pantalla: ~8 ms por cuadro de día, ~19 ms de noche.
+- [ ] **Voz de la Paloma en los minijuegos**: antes sonaba al *construir* el minijuego; en el Modo Historia eso
+      cortaba el "¡Coronaste!" de SEOR entre rondas aunque el diálogo no se mostrara. Ahora suena una vez al entrar
+      (`core/microgame.py`, `ui/paloma_intro.py`).
+- [ ] **Trend**: si existe `en_barranquilla_me_quedo_piano.mp3` (además del .ogg) se usa; si no, la de respaldo.
+      Ojo: ese archivo **no está en el repo**, hoy suena `imitadora_ost_piano_tiles_microjuego.ogg`.
+- [ ] Cámara: se agregó la ayuda del Heladero (índice = coco, medio = corozo, puño/pellizco = entregar).
+- Pruebas actualizadas a los cambios del equipo (no son fallos del juego): pantalla de carga (en pruebas carga al
+  instante, `tests/conftest.py`), diálogo de la Paloma al inicio del Trend/Punch/Concentración, Ventana con dos rondas
+  (Punch + Emoji Catch), Modo Libre con 8 juegos, Punch sin recuperar vidas y 10 tarjetas, `settings.json` local
+  fuera del hash protegido, y la prueba de volumen que necesita `ffmpeg` se salta si no está instalado.

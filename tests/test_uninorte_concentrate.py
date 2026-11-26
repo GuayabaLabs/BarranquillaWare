@@ -19,6 +19,7 @@ def test_uninorte_concentrate_components_and_loop() -> None:
     pygame.display.set_mode((1920, 1080), pygame.NOFRAME)
 
     game = UninorteConcentrateMicrogame(character_id="valdiri")
+    game.paloma_intro = None  # prueba del juego en sí, sin el diálogo de la Paloma (como en el Modo Historia)
     surface = pygame.Surface((1920, 1080))
 
     # 1. Validar carga de las 6 nubes de redes sociales y duración de 25s

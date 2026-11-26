@@ -61,7 +61,8 @@ def test_story_campaign_4_levels_and_paloma_dialogs():
     # 1. Verificar orden de los 4 niveles y configuración de etapas
     assert STORY_CAMPAIGN_ORDER == ["uninorte", "ventana", "buenavista", "metropolitano", "aleta"]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["uninorte"]] == [UninorteSprintMicrogame, UninorteConcentrateMicrogame]
-    assert [s["cls"] for s in STORY_LEVEL_STAGES["ventana"]] == [PunchAlertMicrogame]
+    from microgames.emoji_catch import EmojiCatchMicrogame
+    assert [s["cls"] for s in STORY_LEVEL_STAGES["ventana"]] == [PunchAlertMicrogame, EmojiCatchMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["buenavista"]] == [BuenavistaTrendMicrogame]
     assert [s["cls"] for s in STORY_LEVEL_STAGES["metropolitano"]] in ([HeladeroMetroMicrogame], [MetropolitanoModeracionMicrogame], [MetropolitanoModeracionMicrogame, HeladeroMetroMicrogame])
     # El aeropuerto es un nivel extra que se juega con CurramGram Go!
@@ -232,8 +233,8 @@ def test_social_metrics_and_save_load_flow():
     # 5. Probar botón CONTINUAR PARTIDA: carga directamente StoryMapScene con 'char' y sus métricas
     mode_scene._on_continue_story_clicked()
     assert mode_scene.story_save_modal_open is False
-    assert isinstance(sm.current_state, SlideTransitionState)
-    continued_map = sm.current_state.to_scene
+    # Ahora pasa por la pantalla de carga (en pruebas se construye al instante) o por la transición
+    continued_map = sm.current_state.to_scene if isinstance(sm.current_state, SlideTransitionState) else sm.current_state
     assert isinstance(continued_map, StoryMapScene)
     assert continued_map.character_id == "char"
     assert continued_map.social_hud.pills["seguidores"].value_text == "840K"

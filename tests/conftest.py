@@ -87,3 +87,23 @@ def restore_audio_and_settings_between_tests(isolate_workspace_settings):
                 pygame.mixer.music.stop()
             except Exception:
                 pass
+
+
+@pytest.fixture(autouse=True)
+def carga_inmediata(monkeypatch, request):
+    """La pantalla de carga construye la escena en un hilo; en pruebas se construye al instante.
+
+    Así `change_state(LoadingScene(build))` deja directamente la escena destino, como antes de
+    que existiera la pantalla de carga. Para probar la propia pantalla: @pytest.mark.carga_real.
+    """
+    if request.node.get_closest_marker("carga_real"):
+        yield
+        return
+    import scenes.loading_scene as carga
+
+    monkeypatch.setattr(carga, "LoadingScene", lambda loader_fn, *a, **k: loader_fn())
+    yield
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "carga_real: usa la pantalla de carga real (con hilo)")

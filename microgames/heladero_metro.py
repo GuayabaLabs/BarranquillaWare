@@ -128,6 +128,11 @@ finalCompanero = [
 escenaIntro = [("", "Hoy se cumplen diez años vendiendo helado aquí, afuera del Metro."),
                ("", "Diez años de sol, de partidos del Junior... y de gente que se va contenta."),
                ("", "¡Heladooo! ¡Helado de coco y de corozo, pa'l calor del Metro!")]
+# Voz doblada de algunas líneas de las escenas: texto exacto → archivo en assets/voces/ (o assets/).
+# Suena cuando la línea aparece en pantalla; si falta el archivo, la línea se muestra igual sin voz.
+vocesEscena = {
+    "¡Heladooo! ¡Helado de coco y de corozo, pa'l calor del Metro!": ("heladero_pregon.mp3", "heladero_pregon.ogg"),
+}
 ordenCombos = [[0], [1], [0, 0], [1, 1], [0, 1]]
 archivosClientes = [
     "clienteNino.jpg",
@@ -171,11 +176,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
                          time_limit=130.0, on_complete_callback=on_complete_callback)
 
     def enter(self, params: Optional[dict] = None) -> None:
-        try:
-            if pygame.mixer.get_init():
-                pygame.mixer.music.fadeout(600)
-        except pygame.error:
-            pass
+        self.audio.fadeout_music(600)
 
     def ponerMusica(self) -> None:
         self.audio.play_bgm("JuniorCancion.mp3", volume_scale=0.45)
@@ -1182,6 +1183,16 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         seguir.center = (1450, 760)
         return ver, seguir
 
+    def sonarVozLinea(self, texto: str) -> float:
+        """Reproduce la voz doblada de una línea (si existe). Devuelve su duración en segundos (0 si no hay)."""
+        for archivo in vocesEscena.get(texto, ()):
+            if hasattr(self.audio, "resolve_voice_path") and self.audio.resolve_voice_path(archivo):
+                canal = self.audio.play_voice(archivo, volume_scale=1.0)
+                if canal is None:
+                    return 0.0  # Voces desactivadas en Opciones
+                return float(self.audio.get_voice_duration(archivo))
+        return 0.0
+
     def iniciarEscena(self, lineas: list, alFinal=None, negra: bool = False, enLinea: bool = False) -> None:
         self.soltarCuchara()
         self.arrastrandoCono = False
@@ -1400,11 +1411,17 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             self.time_left += dt
             if self.escena is not None:
                 e = self.escena
-                e["t"] += dt
                 texto = e["lineas"][e["i"]][1]
+                if e.get("vozDe") != e["i"]:
+                    # Línea nueva: si tiene voz doblada, suena al aparecer en pantalla
+                    e["vozDe"] = e["i"]
+                    e["durVoz"] = self.sonarVozLinea(texto)
+                e["t"] += dt
+                conVoz = e.get("durVoz", 0.0) > 0.0
                 if hasattr(self.audio, "sonarEscritura"):
-                    self.audio.sonarEscritura(e["t"] < len(texto) / 30.0 and not e.get("enLinea"))
-                if e["t"] >= len(texto) / 30.0 + 3.0:
+                    # Mientras habla la voz no suena el tecleo de la máquina de escribir
+                    self.audio.sonarEscritura(e["t"] < len(texto) / 30.0 and not e.get("enLinea") and not conVoz)
+                if e["t"] >= max(len(texto) / 30.0 + 3.0, e.get("durVoz", 0.0) + 0.8):
                     self.avanzarEscena()
             if self.decision is not None:
                 self.decision["t"] += dt
@@ -1548,8 +1565,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         if getattr(self, "finLetrero", None):
             self.outro_duration = max(self.outro_duration, self.finLetrero + self.horarioFinal()[-1] + 3.0)
         try:
-            if pygame.mixer.get_init():
-                pygame.mixer.music.fadeout(1500)
+            self.audio.fadeout_music(1500)
         except pygame.error:
             pass
 

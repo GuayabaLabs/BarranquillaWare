@@ -3451,7 +3451,14 @@ class StoryMapScene(BaseState):
         if start_nid is None or goal_nid is None or start_nid == goal_nid:
             return None
         nodes, edges, node_map, _adj, edge_map = self._get_street_graph()
-        node_path = compute_campaign_dijkstra_path(nodes, edges, start_nid, goal_nid)
+        # El Dijkstra se guarda por par de nodos mientras el grafo de calles no cambie (antes se calculaba cada cuadro)
+        clave = (id(nodes), id(edges), len(nodes), len(edges), start_nid, goal_nid)
+        cache_rutas = self.__dict__.setdefault("_cache_dijkstra", {})
+        if clave not in cache_rutas:
+            if len(cache_rutas) > 64:
+                cache_rutas.clear()
+            cache_rutas[clave] = compute_campaign_dijkstra_path(nodes, edges, start_nid, goal_nid)
+        node_path = cache_rutas[clave]
         if not node_path or len(node_path) < 2:
             return None
         return self.path_glow_renderer.get_or_build_route(
@@ -3993,6 +4000,30 @@ class StoryMapScene(BaseState):
         tx, ty = getattr(self, "holiday_tree_pos", (1250, 1225))
         self._render_single_tree(surface, cam_x, cam_y, tx, ty, nm)
 
+    def _aplicar_luz_del_dia(self, surface: pygame.Surface, cam_x: int, cam_y: int) -> None:
+        """Multiplica lo ya dibujado del mapa por la luz de la hora (con faroles, Cami y lugares encendidos)."""
+        oscuridad = self.ciclo.oscuridad()
+        lm = self.ciclo.mapa_luz(surface.get_size())
+        hubo_luces = False
+        if oscuridad > 0.28:
+            hubo_luces = self.faroles.iluminar(lm, cam_x, cam_y, oscuridad, self.timer)
+            fuerza = min(1.0, (oscuridad - 0.28) / 0.4)
+            if fuerza > 0.05:
+                px = int(self.player_pos[0] - cam_x)
+                py = int(self.player_pos[1] - cam_y)
+                halo = self.halos_cami[min(11, int(fuerza * 12))]
+                lm.blit(halo, halo.get_rect(center=(px, py + 10)), special_flags=pygame.BLEND_RGB_ADD)
+                self.luces_lugares.iluminar(lm, cam_x, cam_y, fuerza)
+                # Los caminos de la campaña también alumbran la calle por donde pasan
+                if hasattr(self, "path_glow_renderer"):
+                    for par in getattr(self, "_unlocked_path_pairs", []):
+                        ruta = self._build_campaign_route(*par)
+                        if ruta is not None:
+                            self.path_glow_renderer.iluminar_mapa_luz(lm, ruta, cam_x, cam_y, "completed", fuerza)
+                hubo_luces = True
+        self.ciclo._hubo_luces = hubo_luces
+        self.ciclo.aplicar(surface, lm)
+
     def render(self, surface: pygame.Surface) -> None:
         # 1. Renderizar el mapa mundial continuo con offset de cámara cinética
         cam_x = int(self.camera.x)
@@ -4017,16 +4048,13 @@ class StoryMapScene(BaseState):
         if night_mix <= 0.01:
             self._render_level_stops(surface, cam_x, cam_y)
 
-        # 2B. Tinte nocturno -> caminos nocturnos -> paradas -> charcos de luz en el suelo
+        # 2A. Luz de la hora del día (ciclo_dia.py): un mapa de luz con el color de la hora al que se le suman
+        #     los charcos de los faroles, el halo de Cami y los lugares emblemáticos; luego multiplica el mapa.
+        #     Así de noche las calles quedan oscuras y los lugares se ven iluminados (reemplaza el velo plano).
+        self._aplicar_luz_del_dia(surface, cam_x, cam_y)
+
+        # 2B. Caminos nocturnos -> paradas -> charcos de luz en el suelo
         if night_mix > 0.01:
-            night_overlay = self.weather_overlays.get("night")
-            if night_overlay is not None:
-                if night_mix < 0.99:
-                    night_overlay.set_alpha(int(round(255 * night_mix)))
-                    surface.blit(night_overlay, (0, 0))
-                    night_overlay.set_alpha(255)
-                else:
-                    surface.blit(night_overlay, (0, 0))
 
             self._render_night_campaign_paths(surface, cam_x, cam_y, intensity=night_mix)
             self._render_level_stops(surface, cam_x, cam_y)
@@ -4116,8 +4144,8 @@ class StoryMapScene(BaseState):
                     surface.blit(night_c, (cloud_screen_x, cloud_screen_y))
                     night_c.set_alpha(255)
 
-        # 6. Overlays atmosféricos no nocturnos (Atardecer / Lluvia) interpolados
-        for mode in ("sunset", "rain"):
+        # 6. Velo de lluvia interpolado (el atardecer ya lo pinta la luz de la hora del día, paso 2A)
+        for mode in ("rain",):
             w_mode = max(0.0, min(1.0, float(weather_weights.get(mode, 0.0))))
             if w_mode > 0.01:
                 ov = self.weather_overlays.get(mode)
@@ -4133,6 +4161,7 @@ class StoryMapScene(BaseState):
         oscuridad = self.ciclo.oscuridad()
         if oscuridad > 0.28:
             self.faroles.render(surface, cam_x, cam_y, oscuridad, self.timer)
+            self.luces_lugares.brillar_estrellas(surface, pines, min(1.0, (oscuridad - 0.28) / 0.4), self.timer)
         aero = self.poi_registry.get("aeropuerto")
         if aero:
             self.luces_lugares.luces_aeropuerto(surface, aero["rect"], cam_x, cam_y, oscuridad, self.timer)

@@ -132,6 +132,8 @@ def test_paloma_mouth_rests_when_voice_stops_and_animates_while_speaking(monkeyp
     assert stop_calls == [100]
 
     intro = PalomaIntro([["Línea 1", "Línea 2"], ["Línea 3"]])
+    assert play_calls == []  # construirlo no suena: la voz arranca al entrar al minijuego
+    intro._play_voice()
     assert play_calls == ["paloma_animo.ogg"]
     intro.advance()
     assert intro.page == 1

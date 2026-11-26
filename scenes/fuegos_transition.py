@@ -154,7 +154,7 @@ class FuegosTransitionState(BaseState):
         self.flash = 1.0
         SonidoFuegos.get().estallar()
         try:
-            pygame.mixer.music.fadeout(1800)
+            __import__("core.audio_manager", fromlist=["AudioManager"]).AudioManager.get_instance().fadeout_music(1800)
         except pygame.error:
             pass
         cx, cy = self.estallidoCentro

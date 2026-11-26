@@ -105,12 +105,13 @@ class BaseMicrogame(BaseState):
 
     def enter(self, params=None) -> None:
         super().enter(params)
+        # La voz de la Paloma suena una sola vez, cuando el diálogo se muestra de verdad (al entrar).
         if (
             self.paloma_intro is not None
             and self.paloma_intro.active
-            and hasattr(self.audio, "is_voice_playing")
-            and not self.audio.is_voice_playing()
+            and not getattr(self.paloma_intro, "vozSonada", False)
         ):
+            self.paloma_intro.vozSonada = True
             self.paloma_intro._play_voice()
 
     def update_camera_actions(self, camera) -> None:
@@ -283,7 +284,7 @@ class BaseMicrogame(BaseState):
         return None
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        if self.paloma_intro is not None and self.paloma_intro.active:
+        if self.paloma_intro is not None and self.paloma_intro.active and self.phase != self.PHASE_OUTRO:
             self.paloma_intro.handle_event(event)
             return
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:

@@ -327,6 +327,8 @@ def test_audio_mp3_fallback_and_preload(monkeypatch):
     def fake_exists_none(path):
         if os.path.normpath(path) in (os.path.normpath(ogg_path), os.path.normpath(mp3_path)):
             return False
+        if "imitadora_ost_piano_tiles_microjuego" in str(path):  # ni la canción de respaldo
+            return False
         return real_exists(path)
 
     monkeypatch.setattr(os.path, "exists", fake_exists_none)
@@ -472,3 +474,10 @@ def test_arcade_short_time_limit_keeps_snappy_outro():
     assert game.outro_duration <= 3.0
 
     game.cleanup()
+
+
+@pytest.fixture(autouse=True)
+def _trend_sin_dialogo_paloma(monkeypatch):
+    """Estas pruebas son del juego en sí: arrancan sin el diálogo de la Paloma (como en el Modo Historia)."""
+    from microgames.buenavista_trend import BuenavistaTrendMicrogame as _Trend
+    monkeypatch.setattr(_Trend, "dialogoPaloma", None)

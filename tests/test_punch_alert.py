@@ -17,9 +17,11 @@ def test_punch_alert_standalone():
 
     pygame.mixer.init()
     game = PunchAlertMicrogame(character_id="valdiri", time_limit=15.0)
+    game.paloma_intro = None  # prueba del juego en sí, sin el diálogo de la Paloma (como en el Modo Historia)
     surface = pygame.Surface((1920, 1080))
 
-    assert game.total_wave_count == len(game.wave_queue) == 6
+    # Con tarjetas cada 0,8 s, 15 s alcanzan para el tope de 10 tarjetas
+    assert game.total_wave_count == len(game.wave_queue) == 10
     assert len(game.safe_sprites) == 12  # 8 originales + nieve, foto antigua, hashtag y comentario
     assert len(game.trash_sprites) == 8
     assert game.wave_queue[0]["is_safe"] is False
@@ -68,7 +70,7 @@ def test_punch_alert_standalone():
     game.strikes = 1
     buena.update(spawned=True, state="falling", y=float(game.hit_zone_y_max + 30))
     game.update(1.0 / 60.0)
-    assert game.strikes == 0
+    assert game.strikes == 1  # dejar pasar una tarjeta segura ya no devuelve vidas (commit 1fdd621)
     assert buena["resultado"] == "publicada"
 
     game.empezarPublicacion(True)

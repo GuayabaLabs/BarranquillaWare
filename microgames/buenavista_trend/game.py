@@ -90,7 +90,7 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         self._music_started_own_track: bool = False
         self.music_track_name: str = (
             "en_barranquilla_me_quedo_piano.ogg"
-            if os.path.exists(os.path.join("assets", "en_barranquilla_me_quedo_piano.ogg"))
+            if any(os.path.exists(os.path.join("assets", "en_barranquilla_me_quedo_piano" + ext)) for ext in (".ogg", ".mp3"))
             else "imitadora_ost_piano_tiles_microjuego.ogg"
         )
         self.spritesheet_name: str = "spritesheet_teclas_costenas_piano.png"
@@ -772,7 +772,8 @@ class BuenavistaTrendMicrogame(BaseMicrogame):
         """
         self.song_elapsed += dt
         if (
-            self._music_started_own_track
+            dt > 0.0  # un cuadro sin tiempo (pausa, dt=0) no mueve el reloj musical
+            and self._music_started_own_track
             and getattr(self.audio, "current_track", None) == self.music_track_name
             and pygame.mixer.get_init()
             and getattr(self.audio, "music_enabled", True)

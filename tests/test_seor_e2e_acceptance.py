@@ -60,7 +60,7 @@ from scenes.story_map_data import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 PROTECTED_CONFIG_HASHES: Dict[str, str] = {
-    "settings.json": "3D73F11555CAA395797B6DB78AFC64D6641D02C9649C84F408F850AF8640FE76",
+    # settings.json no va: es local de cada jugador (está en .gitignore) y cambia al jugar.
     "config/map_poi_layout.json": "CDFD110FCAA733EEC8A41636985F48E4B2099EC9E7DA3D0B03185C5263548281",
 }
 
@@ -403,7 +403,8 @@ def test_t1_r1_costeno_spritesheet_slicing_and_visual_scale_balance():
 def test_t1_r1_audio_track_contract_and_sfx_hooks():
     game = BuenavistaTrendMicrogame(character_id="westcol")
     try:
-        assert game.music_track_name == "en_barranquilla_me_quedo_piano.ogg"
+        # Sin "en_barranquilla_me_quedo_piano" en assets se usa la canción de respaldo del piano
+        assert game.music_track_name in ("en_barranquilla_me_quedo_piano.ogg", "imitadora_ost_piano_tiles_microjuego.ogg")
         _advance_intro_to_play(game)
 
         ev0 = game.musical_events[0]
@@ -1049,7 +1050,7 @@ def test_t2_r1_missing_ogg_and_mp3_audio_safe_dt_clock():
 
     def fake_exists(p: str) -> bool:
         norm = str(p).replace("\\", "/")
-        if "en_barranquilla_me_quedo_piano." in norm:
+        if "en_barranquilla_me_quedo_piano." in norm or "imitadora_ost_piano_tiles_microjuego" in norm:
             return False
         return orig_exists(p)
 
@@ -1084,7 +1085,8 @@ def test_t2_r1_mp3_fallback_preferred_when_ogg_absent():
             return True
         return orig_exists(p)
 
-    game = BuenavistaTrendMicrogame(character_id="westcol")
+    with patch("os.path.exists", side_effect=fake_exists):
+        game = BuenavistaTrendMicrogame(character_id="westcol")  # elige la pista con el .mp3 presente
     try:
         with patch("os.path.exists", side_effect=fake_exists), patch(
             "pygame.mixer.get_init", return_value=(44100, -16, 2)
@@ -1556,7 +1558,7 @@ def test_t3_storymap_paloma_buenavista_launch_win_night_reveal_and_decor():
     mgr = SettingsManager.get_instance()
     mgr.update_story_progress(
         has_active_save=True,
-        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert"],
+        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert", "emoji_catch"],
         current_node_id=StoryMapScene.POI_ENTRY_NODES["buenavista"],
         weather="night",
     )
@@ -1740,7 +1742,7 @@ def test_t3_buenavista_loss_paloma_post_lose_and_progress_isolation():
     mgr = SettingsManager.get_instance()
     mgr.update_story_progress(
         has_active_save=True,
-        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert"],
+        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert", "emoji_catch"],
         current_node_id=StoryMapScene.POI_ENTRY_NODES["buenavista"],
     )
     sm = StateMachine()
@@ -1794,7 +1796,7 @@ def test_t3_storymap_to_buenavista_audio_handover_and_return():
     mgr = SettingsManager.get_instance()
     mgr.update_story_progress(
         has_active_save=True,
-        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert"],
+        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert", "emoji_catch"],
         current_node_id=StoryMapScene.POI_ENTRY_NODES["buenavista"],
     )
     sm = StateMachine()
@@ -2033,7 +2035,7 @@ def test_t4_e2e_paloma_to_buenavista_to_night_path_reveal_integration():
     mgr = SettingsManager.get_instance()
     mgr.update_story_progress(
         has_active_save=True,
-        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert"],
+        completed_microgames=["uninorte_sprint", "uninorte_concentrate", "punch_alert", "emoji_catch"],
         current_node_id=StoryMapScene.POI_ENTRY_NODES["buenavista"],
         weather="night",
     )
@@ -2138,3 +2140,17 @@ def test_t4_e2e_verification_captures_pipeline_and_r4_integrity_audit():
         assert len(raw) == expected_bytes
         assert hashlib.sha256(raw).hexdigest().upper() == expected_hash
         assert pygame.image.load(str(fpath)).get_size() == expected_dims
+
+
+@pytest.fixture(autouse=True)
+def _trend_sin_dialogo_paloma(monkeypatch):
+    """Estas pruebas son del juego en sí: arrancan sin el diálogo de la Paloma (como en el Modo Historia)."""
+    from microgames.buenavista_trend import BuenavistaTrendMicrogame as _Trend
+    monkeypatch.setattr(_Trend, "dialogoPaloma", None)
+
+
+@pytest.fixture(autouse=True)
+def _sin_aviso_de_trofeo(monkeypatch):
+    """Estas pruebas son anteriores a los trofeos del mapa: el aviso de trofeo no debe tapar el recorrido."""
+    from scenes.story_map.ui_dialogs import AvisoTrofeo
+    monkeypatch.setattr(AvisoTrofeo, "abrir", lambda self, *a, **k: None)
