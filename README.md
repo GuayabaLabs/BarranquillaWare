@@ -63,18 +63,6 @@ python main.py
 
 ---
 
-## 🧪 Pruebas automatizadas
-
-Para ejecutar la suite de pruebas en modo *headless* (sin abrir ventana ni audio):
-
-```powershell
-$env:SDL_VIDEODRIVER = "dummy"
-$env:SDL_AUDIODRIVER = "dummy"
-python -m pytest -q
-```
-
----
-
 ## 📁 Estructura del proyecto
 
 | Carpeta / Archivo | Descripción |
