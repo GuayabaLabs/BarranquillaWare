@@ -1,5 +1,6 @@
 """Pruebas unitarias de filtrado multi-mano y sticky tracking en CameraGestureInput."""
 from types import SimpleNamespace
+import pytest
 
 from core.camera_gestures import CameraGestureInput
 
@@ -58,3 +59,52 @@ def test_select_primary_hand_keeps_tracked_palm_when_second_hand_enters():
     reacquired, pos2 = CameraGestureInput._select_primary_hand([far_a, far_b], tracked_palm=(0.15, 0.50))
     assert reacquired is far_a
     assert pos2 == (0.82, 0.20)
+
+
+def test_palm_anchor_stays_stable_when_fingers_curl():
+    hand = _make_hand(0.50, 0.50, 0.20)
+    open_anchor = CameraGestureInput._palm_anchor(hand.landmark)
+    assert open_anchor == pytest.approx((0.50, 0.556), abs=1e-6)
+
+    # Al cerrar el índice hacia la palma/puño (LM 8 cae 32% en pantalla), la ancla palmar no se mueve
+    hand.landmark[8] = SimpleNamespace(x=0.50, y=0.66)
+    closed_anchor = CameraGestureInput._palm_anchor(hand.landmark)
+    assert closed_anchor == pytest.approx(open_anchor, abs=1e-6)
+
+
+def test_detect_fist_is_rotation_invariant_and_has_hysteresis():
+    def _build_hand_with_fingers(curled_flags, rot_90: bool = False):
+        # Construir en espacio local (muñeca en (0, +0.2), palma en (0, 0)) y rotar opcionalmente 90°
+        pts = [(0.0, 0.0) for _ in range(21)]
+        pts[0] = (0.0, 0.20)
+        pts[9] = (0.0, 0.0)
+        xs = (-0.06, -0.02, 0.02, 0.06)
+        for (tip_i, pip_i), fx, curled in zip(((8, 6), (12, 10), (16, 14), (20, 18)), xs, curled_flags):
+            pts[pip_i] = (fx, -0.06)
+            if curled:
+                pts[tip_i] = (fx, 0.06)   # más cerca de muñeca y palma que el nudillo
+            else:
+                pts[tip_i] = (fx, -0.22)  # dedo extendido
+        if rot_90:
+            pts = [(-y, x) for x, y in pts]
+        return [SimpleNamespace(x=0.5 + x, y=0.5 + y) for x, y in pts]
+
+    open_lm = _build_hand_with_fingers((False, False, False, False))
+    point_lm = _build_hand_with_fingers((False, True, True, True))
+    fist_lm = _build_hand_with_fingers((True, True, True, True))
+    tilted_fist_lm = _build_hand_with_fingers((True, True, True, True), rot_90=True)
+
+    assert CameraGestureInput._detect_fist(open_lm, was_fist=False) is False
+    assert CameraGestureInput._detect_fist(point_lm, was_fist=False) is False
+    assert CameraGestureInput._detect_fist(fist_lm, was_fist=False) is True
+    assert CameraGestureInput._detect_fist(tilted_fist_lm, was_fist=False) is True
+
+    # Histéresis en umbral intermedio: no dispara entrada falsa, pero sostiene un puño ya activo
+    border_lm = [SimpleNamespace(x=0.5, y=0.5) for _ in range(21)]
+    border_lm[0] = SimpleNamespace(x=0.5, y=0.70)   # scale = 0.20
+    border_lm[9] = SimpleNamespace(x=0.5, y=0.50)
+    for tip_i, pip_i in ((8, 6), (12, 10), (16, 14), (20, 18)):
+        border_lm[pip_i] = SimpleNamespace(x=0.5, y=0.45)   # dist(pip, wrist) = 0.25
+        border_lm[tip_i] = SimpleNamespace(x=0.5, y=0.31)   # dist(tip, palm)=0.19 (0.95*scale), dist(tip, wrist)=0.39 (>1.08*0.25)
+    assert CameraGestureInput._detect_fist(border_lm, was_fist=False) is False
+    assert CameraGestureInput._detect_fist(border_lm, was_fist=True) is True

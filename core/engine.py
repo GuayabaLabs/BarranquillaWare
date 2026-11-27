@@ -97,6 +97,7 @@ class Engine:
         self._joy_hat_x: float = 0.0
         self._joy_hat_y: float = 0.0
         self._joy_synced_state: Optional[object] = None
+        self._pointer_ring_cache: dict = {}
         self.cam_pencil_surf: Optional[pygame.Surface] = None
         self._init_cam_pencil_sprite()
 
@@ -623,7 +624,11 @@ class Engine:
             self._cam_dwell_fired = False
             return
 
-        hand_x, hand_y = self.camera_input.get_position()
+        anchor_mode = getattr(current, "CAMERA_POINTER_ANCHOR", "index")
+        if anchor_mode == "palm" and hasattr(self.camera_input, "get_palm_position"):
+            hand_x, hand_y = self.camera_input.get_palm_position()
+        else:
+            hand_x, hand_y = self.camera_input.get_position()
         margin = max(0.0, min(0.25, float(getattr(current, "CAMERA_POINTER_MARGIN", 0.0))))
         if margin > 0.0:
             norm_x = max(0.0, min(1.0, (hand_x - margin) / (1.0 - 2.0 * margin)))
@@ -633,13 +638,13 @@ class Engine:
         target_x = max(10.0, min(float(self.VIRTUAL_WIDTH - 10), norm_x * self.VIRTUAL_WIDTH))
         target_y = max(10.0, min(float(self.VIRTUAL_HEIGHT - 10), norm_y * self.VIRTUAL_HEIGHT))
 
-        # LERP suave para amortiguar jitter (más firme en el instante inicial del pellizco para no desviar el clic)
+        # LERP suave para amortiguar jitter (sin frenado al cerrar puño en modo palma)
         if bool(getattr(current, "CAMERA_POINTER_FLUID", False)):
             dist = math.hypot(target_x - self.cam_cursor_x, target_y - self.cam_cursor_y)
-            speed_t = min(1.0, max(0.0, (dist - 8.0) / 102.0))
-            rate = 16.0 + 28.0 * speed_t
+            speed_t = min(1.0, max(0.0, (dist - 6.0) / 84.0))
+            rate = 18.0 + 34.0 * speed_t
             smooth = 1.0 - math.exp(-rate * dt)
-            if self._cam_pointer_down and self._cam_pointer_down_time < 0.075 and dist < 48.0:
+            if anchor_mode != "palm" and self._cam_pointer_down and self._cam_pointer_down_time < 0.075 and dist < 48.0:
                 smooth *= 0.45
         else:
             smooth = min(1.0, dt * 22.0)
@@ -655,8 +660,22 @@ class Engine:
 
         drag_mode = bool(getattr(current, "CAMERA_POINTER_DRAG", False))
         if drag_mode:
-            pinching = bool(getattr(self.camera_input, "is_pinching", lambda: False)())
-            clicked_edge = bool(self.camera_input.consume_click())
+            gesture_mode = getattr(current, "CAMERA_POINTER_GESTURE", "pinch")
+            if gesture_mode == "fist":
+                grab_active = bool(getattr(self.camera_input, "is_fist", lambda: False)())
+                grab_edge = bool(getattr(self.camera_input, "consume_fist", lambda: False)())
+            elif gesture_mode == "both":
+                grab_active = bool(
+                    getattr(self.camera_input, "is_fist", lambda: False)()
+                    or getattr(self.camera_input, "is_pinching", lambda: False)()
+                )
+                grab_edge = bool(
+                    getattr(self.camera_input, "consume_fist", lambda: False)()
+                    or self.camera_input.consume_click()
+                )
+            else:
+                grab_active = bool(getattr(self.camera_input, "is_pinching", lambda: False)())
+                grab_edge = bool(self.camera_input.consume_click())
 
             motion_evt = pygame.event.Event(
                 pygame.MOUSEMOTION,
@@ -674,7 +693,7 @@ class Engine:
             self.cam_hover_time = 0.0
 
             if not self._cam_pointer_down:
-                if (pinching or clicked_edge) and self.cam_click_cooldown <= 0.0:
+                if (grab_active or grab_edge) and self.cam_click_cooldown <= 0.0:
                     from core import input_state
                     input_state.set_input_device("camera")
                     self._cam_pointer_down = True
@@ -688,11 +707,12 @@ class Engine:
                     self.state_machine.handle_event(down_evt)
             else:
                 self._cam_pointer_down_time += dt
-                if pinching:
+                if grab_active:
                     self._cam_pointer_release_grace = 0.0
                 else:
                     self._cam_pointer_release_grace += dt
-                    if self._cam_pointer_release_grace >= self._cam_pointer_release_delay:
+                    release_delay = float(getattr(current, "CAMERA_RELEASE_DELAY", self._cam_pointer_release_delay))
+                    if self._cam_pointer_release_grace >= release_delay:
                         up_evt = pygame.event.Event(
                             pygame.MOUSEBUTTONUP,
                             {"pos": virt_pos, "button": 1, "camera_pointer": True},
@@ -822,24 +842,46 @@ class Engine:
         cy: int,
         active_down: bool,
         hover_progress: float = 0.0,
+        ring_radius: int = 0,
+        has_target: bool = False,
     ) -> None:
-        radius = 28
-        halo_surf = pygame.Surface((radius * 2 + 10, radius * 2 + 10), pygame.SRCALPHA)
-        rc = radius + 5
-
-        if active_down:
-            pygame.draw.circle(halo_surf, (80, 235, 140, 50), (rc, rc), radius)
-            pygame.draw.circle(halo_surf, (80, 235, 140, 220), (rc, rc), radius, width=4)
+        if ring_radius > 0:
+            cache_key = (int(ring_radius), bool(active_down), bool(has_target))
+            ring_surf = self._pointer_ring_cache.get(cache_key)
+            rc = int(ring_radius) + 6
+            if ring_surf is None:
+                size = rc * 2
+                ring_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+                if active_down:
+                    pygame.draw.circle(ring_surf, (80, 235, 140, 56), (rc, rc), int(ring_radius))
+                    pygame.draw.circle(ring_surf, (80, 235, 140, 235), (rc, rc), int(ring_radius), width=5)
+                    pygame.draw.circle(ring_surf, (80, 235, 140, 240), (rc, rc), 6)
+                elif has_target:
+                    pygame.draw.circle(ring_surf, (105, 240, 145, 28), (rc, rc), int(ring_radius))
+                    pygame.draw.circle(ring_surf, (105, 240, 145, 220), (rc, rc), int(ring_radius), width=4)
+                    pygame.draw.circle(ring_surf, (115, 245, 155, 230), (rc, rc), 5)
+                else:
+                    pygame.draw.circle(ring_surf, (90, 215, 255, 155), (rc, rc), int(ring_radius), width=3)
+                    pygame.draw.circle(ring_surf, (255, 235, 120, 210), (rc, rc), 5)
+                self._pointer_ring_cache[cache_key] = ring_surf
+            surface.blit(ring_surf, (cx - rc, cy - rc))
         else:
-            pygame.draw.circle(halo_surf, (255, 230, 90, 50), (rc, rc), radius, width=2)
-            if hover_progress > 0.04:
-                import math
-                start_angle = -math.pi / 2.0
-                end_angle = start_angle + math.pi * 2.0 * hover_progress
-                arc_rect = pygame.Rect(rc - radius, rc - radius, radius * 2, radius * 2)
-                pygame.draw.arc(halo_surf, (255, 220, 50, 220), arc_rect, start_angle, end_angle, 4)
+            radius = 28
+            halo_surf = pygame.Surface((radius * 2 + 10, radius * 2 + 10), pygame.SRCALPHA)
+            rc = radius + 5
 
-        surface.blit(halo_surf, (cx - rc, cy - rc))
+            if active_down:
+                pygame.draw.circle(halo_surf, (80, 235, 140, 50), (rc, rc), radius)
+                pygame.draw.circle(halo_surf, (80, 235, 140, 220), (rc, rc), radius, width=4)
+            else:
+                pygame.draw.circle(halo_surf, (255, 230, 90, 50), (rc, rc), radius, width=2)
+                if hover_progress > 0.04:
+                    start_angle = -math.pi / 2.0
+                    end_angle = start_angle + math.pi * 2.0 * hover_progress
+                    arc_rect = pygame.Rect(rc - radius, rc - radius, radius * 2, radius * 2)
+                    pygame.draw.arc(halo_surf, (255, 220, 50, 220), arc_rect, start_angle, end_angle, 4)
+
+            surface.blit(halo_surf, (cx - rc, cy - rc))
 
         if self.cam_pencil_surf:
             pw = self.cam_pencil_surf.get_width()
@@ -871,7 +913,19 @@ class Engine:
 
         cx, cy = int(self.cam_cursor_x), int(self.cam_cursor_y)
         progress = max(0.0, min(1.0, self.cam_hover_time / max(0.01, self.cam_hover_duration)))
-        self._draw_pointer_cursor(surface, cx, cy, self._cam_pointer_down, progress)
+        current = self.state_machine.current_state
+        ring_radius = int(getattr(current, "CAMERA_POINTER_RING_RADIUS", 0))
+        target_fn = getattr(current, "camera_has_target", None)
+        has_target = bool(target_fn((cx, cy))) if callable(target_fn) else False
+        self._draw_pointer_cursor(
+            surface,
+            cx,
+            cy,
+            self._cam_pointer_down,
+            progress,
+            ring_radius=ring_radius,
+            has_target=has_target,
+        )
 
     def shutdown(self) -> None:
         if hasattr(self, "camera_input") and self.camera_input:

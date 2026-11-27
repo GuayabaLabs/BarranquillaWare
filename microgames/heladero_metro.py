@@ -170,6 +170,13 @@ class HeladeroMetroMicrogame(BaseMicrogame):
     CAMERA_ACTIONS = {}
     CAMERA_POINTER = True
     CAMERA_POINTER_DRAG = True
+    CAMERA_POINTER_FLUID = True
+    CAMERA_POINTER_ANCHOR = "palm"
+    CAMERA_POINTER_GESTURE = "fist"
+    CAMERA_POINTER_RING_RADIUS = 84
+    CAMERA_RELEASE_DELAY = 0.08
+    CAMERA_CLICK_COOLDOWN = 0.08
+    CAMERA_POINTER_MARGIN = 0.20
     CAMERA_DWELL_CLICK = False
     TIME_BAR_LAYOUT = (1585, 48, 470)
     fraseRedes = "Usa las redes pa' inspirarte, no pa' compararte."
@@ -269,6 +276,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         self.sabor = 0
         self.raspando = False
         self.teclaRaspar = False
+        self._raspando_por_camara = False
         self.vueltas = 0.0
         self.ultimoPunto = None
         self.cono: List[dict] = []
@@ -278,6 +286,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         self.ratonPos = (960, 540)
         self.temblor = 0.0
         self.arrastrandoCono = False
+        self._arrastrando_cono_por_camara = False
         self.posCono = list(self.puntoCono)
         self.conoViaje = None
 
@@ -1035,12 +1044,14 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         self.vueltas = 0.0
         self.raspando = False
         self.teclaRaspar = False
+        self._raspando_por_camara = False
         self.ultimoPunto = None
 
     def entregar(self) -> None:
         c = self.cliente
         if not self.cono or c is None or c["estado"] != "esperando" or self.volando:
             return
+        self._arrastrando_cono_por_camara = False
         pedido = sorted(c["pedido"])
         servido = sorted(b["sabor"] for b in self.cono)
         calidad = sum(max(0.0, b["calidad"] - b.get("derretido", 0.0)) for b in self.cono) / max(1, len(c["pedido"]))
@@ -1122,6 +1133,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             return
         self.soltarCuchara()
         self.arrastrandoCono = False
+        self._arrastrando_cono_por_camara = False
         self.decision = {"post": self.cualPost, "t": 0.0, "opcion": 1}
         self.desdeUltimoPost = 0.0
         self.pensamiento = None
@@ -1297,6 +1309,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
     def iniciarEscena(self, lineas: list, alFinal=None, negra: bool = False, enLinea: bool = False) -> None:
         self.soltarCuchara()
         self.arrastrandoCono = False
+        self._arrastrando_cono_por_camara = False
         self.pensamiento = None
         self.escena = {"lineas": lineas, "i": 0, "t": 0.0, "alFinal": alFinal, "negra": negra, "enLinea": enLinea}
 
@@ -1325,11 +1338,18 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         self.pensamiento = {"lineas": lineas, "t": 0.0, "dur": 2.6}
         self.postAbierto = None
 
-    def tinaEn(self, pos) -> Optional[int]:
+    def tinaEn(self, pos, es_camara: bool = False) -> Optional[int]:
+        if not es_camara:
+            for i, tina in enumerate(self.tinas):
+                if tina.inflate(30, 40).collidepoint(pos):
+                    return i
+            return None
+        candidatas = []
         for i, tina in enumerate(self.tinas):
-            if tina.inflate(30, 40).collidepoint(pos):
-                return i
-        return None
+            if tina.inflate(90, 90).collidepoint(pos):
+                dist = math.hypot(pos[0] - tina.centerx, pos[1] - tina.centery)
+                candidatas.append((dist, i))
+        return min(candidatas)[1] if candidatas else None
 
     def cajaBotar(self) -> pygame.Rect:
         caja = pygame.Rect(0, 0, 210, 64)
@@ -1341,6 +1361,7 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             return
         self.cono = []
         self.arrastrandoCono = False
+        self._arrastrando_cono_por_camara = False
         self.decir("¡A rehacerlo!", self.puntoCono[0], self.puntoCono[1] - 80, (255, 236, 200), (130, 40, 30))
         if hasattr(self.audio, "play_miss"):
             self.audio.play_miss()
@@ -1391,7 +1412,37 @@ class HeladeroMetroMicrogame(BaseMicrogame):
         callar = pygame.Rect(ver.right + 14, ver.y, ver.w, 54)
         return ver, callar
 
+    def camera_has_target(self, pos) -> bool:
+        if self.phase != self.PHASE_PLAY or self.is_finished or self.finalPendiente is not None:
+            return False
+        if self.escena is not None or self.postAbierto is not None:
+            return False
+        if self.decision is not None:
+            ver, seguir = self.botonesDecision()
+            return ver.inflate(50, 40).collidepoint(pos) or seguir.inflate(50, 40).collidepoint(pos)
+        if self.arrastrandoCono:
+            return bool(
+                self.cliente is not None
+                and self.cliente["estado"] == "esperando"
+                and (self.cajaCliente().inflate(140, 140).collidepoint(pos) or pos[0] > 1260)
+            )
+        if self.cono and not self.volando:
+            if self.cajaBotar().inflate(70, 50).collidepoint(pos):
+                return True
+            if self.cajaCono().inflate(110, 100).collidepoint(pos):
+                return True
+            if (
+                self.cliente is not None
+                and self.cliente["estado"] == "esperando"
+                and self.cajaCliente().inflate(120, 120).collidepoint(pos)
+            ):
+                return True
+        if len(self.cono) + len(self.volando) < 2 and self.tinaEn(pos, es_camara=True) is not None:
+            return True
+        return False
+
     def handle_game_event(self, event: pygame.event.Event) -> None:
+        es_cam = bool(getattr(event, "camera_pointer", False))
         if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP) and hasattr(event, "pos"):
             self.ratonPos = event.pos
         if self.finalPendiente is not None:
@@ -1402,6 +1453,8 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             return
         if self.decision is not None:
             ver, seguir = self.botonesDecision()
+            ver_zona = ver.inflate(50, 40) if es_cam else ver
+            seguir_zona = seguir.inflate(50, 40) if es_cam else seguir
             if self.decision["t"] < 0.6 and event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 return
             if event.type == pygame.KEYDOWN:
@@ -1419,14 +1472,14 @@ class HeladeroMetroMicrogame(BaseMicrogame):
                     else:
                         self.silenciar()
             elif event.type == pygame.MOUSEMOTION:
-                if ver.collidepoint(event.pos):
+                if ver_zona.collidepoint(event.pos):
                     self.decision["opcion"] = 0
-                elif seguir.collidepoint(event.pos):
+                elif seguir_zona.collidepoint(event.pos):
                     self.decision["opcion"] = 1
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if ver.collidepoint(event.pos):
+                if ver_zona.collidepoint(event.pos):
                     self.abrirPost()
-                elif seguir.collidepoint(event.pos):
+                elif seguir_zona.collidepoint(event.pos):
                     self.silenciar()
             return
         if self.postAbierto is not None:
@@ -1449,21 +1502,42 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             if self.teclaRaspar:
                 self.soltarCuchara()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.cono and self.cajaBotar().collidepoint(event.pos) and not self.volando:
+            caja_botar = self.cajaBotar().inflate(70, 50) if es_cam else self.cajaBotar()
+            if self.cono and caja_botar.collidepoint(event.pos) and not self.volando:
                 self.botarCono()
                 return
-            if self.cono and self.cajaCono().collidepoint(event.pos) and not self.volando:
+            caja_cono = self.cajaCono().inflate(110, 100) if es_cam else self.cajaCono()
+            if self.cono and caja_cono.collidepoint(event.pos) and not self.volando:
                 self.arrastrandoCono = True
+                self._arrastrando_cono_por_camara = es_cam
                 return
-            tina = self.tinaEn(event.pos)
+            if (
+                es_cam
+                and self.cono
+                and not self.volando
+                and self.cliente is not None
+                and self.cliente["estado"] == "esperando"
+                and self.cajaCliente().inflate(120, 120).collidepoint(event.pos)
+            ):
+                self.mandarCono()
+                return
+            tina = self.tinaEn(event.pos, es_camara=es_cam)
             if tina is not None and len(self.cono) + len(self.volando) < 2:
                 self.elegirSabor(tina)
                 self.raspando = True
+                self._raspando_por_camara = es_cam
                 self.ultimoPunto = event.pos
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if self.arrastrandoCono:
                 self.arrastrandoCono = False
-                if self.cajaCliente().collidepoint(event.pos) or event.pos[0] > 1380:
+                es_cam_drag = self._arrastrando_cono_por_camara or es_cam
+                self._arrastrando_cono_por_camara = False
+                en_cliente = (
+                    (self.cajaCliente().inflate(140, 140).collidepoint(event.pos) or event.pos[0] > 1260)
+                    if es_cam_drag
+                    else (self.cajaCliente().collidepoint(event.pos) or event.pos[0] > 1380)
+                )
+                if en_cliente:
                     self.entregar()
                 else:
                     self.conoViaje = {"desde": tuple(self.posCono), "hasta": self.puntoCono, "t": 0.0, "entrega": False}
@@ -1549,7 +1623,8 @@ class HeladeroMetroMicrogame(BaseMicrogame):
             if self.ultimoPunto is not None:
                 recorrido = math.hypot(mx - self.ultimoPunto[0], my - self.ultimoPunto[1])
                 if recorrido > 1.0:
-                    self.pasarCuchara(recorrido / 520.0)
+                    divisor = 420.0 if self._raspando_por_camara else 520.0
+                    self.pasarCuchara(recorrido / divisor)
                     self.marcarSurco((mx, my))
             self.ultimoPunto = (mx, my)
             objetivo = (mx, my)
