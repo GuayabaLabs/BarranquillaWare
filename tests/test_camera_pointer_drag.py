@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+from typing import Optional
 import pygame
 import pytest
 
@@ -18,9 +19,12 @@ class _FakeDragCam:
 
     def __init__(self, x: float = 0.5, y: float = 0.5) -> None:
         self.pos = (x, y)
+        self.palm_pos: Optional[tuple[float, float]] = None
         self.present = True
         self.pinching = False
         self._click_edge = False
+        self.fist = False
+        self._fist_edge = False
         self.hand_raised = False
 
     def set_pinch(self, active: bool) -> None:
@@ -28,18 +32,34 @@ class _FakeDragCam:
             self._click_edge = True
         self.pinching = active
 
+    def set_fist(self, active: bool) -> None:
+        if active and not self.fist:
+            self._fist_edge = True
+        self.fist = active
+
     def is_hand_present(self) -> bool:
         return self.present
 
     def get_position(self):
         return self.pos
 
+    def get_palm_position(self):
+        return self.pos if self.palm_pos is None else self.palm_pos
+
     def is_pinching(self) -> bool:
         return self.present and self.pinching
+
+    def is_fist(self) -> bool:
+        return self.present and self.fist
 
     def consume_click(self) -> bool:
         had = self._click_edge
         self._click_edge = False
+        return had
+
+    def consume_fist(self) -> bool:
+        had = self._fist_edge
+        self._fist_edge = False
         return had
 
     def consume_hand_raise(self) -> bool:
@@ -150,10 +170,21 @@ def test_heladero_camera_drag_scrapes_serves_drops_and_delivers(isolated_engine)
     game.cliente = {"tipo": 0, "pedido": [0], "estado": "esperando", "paciencia": 25.0, "t": 0.0, "esCompanero": False}
     engine.state_machine.change_state(game)
 
-    # 1. Raspar en tina 0 (coco)
+    assert HeladeroMetroMicrogame.CAMERA_POINTER_ANCHOR == "palm"
+    assert HeladeroMetroMicrogame.CAMERA_POINTER_GESTURE == "fist"
+    assert HeladeroMetroMicrogame.CAMERA_POINTER_RING_RADIUS == 84
+    assert HeladeroMetroMicrogame.CAMERA_POINTER_MARGIN == pytest.approx(0.20)
+
+    # 1. Rango ampliado + indicador AoE + raspar en tina 0 (coco) con puño cerrado
     tina0 = game.tinas[0]
+    assert game.camera_has_target(tina0.center) is True
+    assert game.camera_has_target((200, 200)) is False
+    borde_tina0 = (tina0.left - 25, tina0.centery)
+    assert game.tinaEn(borde_tina0, es_camara=False) is None
+    assert game.tinaEn(borde_tina0, es_camara=True) == 0
+
     _move_cam_to_px(engine, cam, (tina0.left + 25, tina0.centery))
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
     assert game.raspando is True
     assert game.sabor == 0
@@ -164,40 +195,40 @@ def test_heladero_camera_drag_scrapes_serves_drops_and_delivers(isolated_engine)
         game.update(0.05)
     assert game.vueltas >= 0.3
 
-    # Soltar para servir la bola al cono
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    # Abrir mano -> sirve la bola al cono
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     assert game.raspando is False
     for _ in range(25):
         game.update(0.05)
     assert len(game.cono) == 1
     assert game.cono[0]["sabor"] == 0
 
-    # 2. Botar cono apuntando a cajaBotar()
+    # 2. Botar cono apuntando a cajaBotar() con puño
     engine.cam_click_cooldown = 0.0
     _move_cam_to_px(engine, cam, game.cajaBotar().center)
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     assert len(game.cono) == 0
 
-    # 3. Raspar en tina 1 (corozo) y entregar arrastrando el cono al cliente
+    # 3. Raspar en tina 1 (corozo) y entregar arrastrando el cono al cliente con puño
     engine.cam_click_cooldown = 0.0
     tina1 = game.tinas[1]
     _move_cam_to_px(engine, cam, (tina1.left + 25, tina1.centery))
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
     assert game.sabor == 1
     for offset in (40, 90, 140, 190):
         x = min(tina1.right - 15, tina1.left + offset)
         _move_cam_to_px(engine, cam, (x, tina1.centery), steps=3, dt=0.05)
         game.update(0.05)
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     for _ in range(25):
         game.update(0.05)
     assert len(game.cono) == 1
@@ -206,14 +237,30 @@ def test_heladero_camera_drag_scrapes_serves_drops_and_delivers(isolated_engine)
     # Arrastrar desde cajaCono() a cajaCliente()
     engine.cam_click_cooldown = 0.0
     _move_cam_to_px(engine, cam, game.cajaCono().center)
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
     assert game.arrastrandoCono is True
     _move_cam_to_px(engine, cam, game.cajaCliente().center, steps=10, dt=0.05)
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     assert game.servidos == 1
+    assert game.cono == []
+
+    # 4. Entrega directa cerrando el puño sobre el cliente con cono listo
+    engine.cam_click_cooldown = 0.0
+    game.cono = [{"sabor": 0, "calidad": 1.0}]
+    game.cliente = {"tipo": 0, "pedido": [0], "estado": "esperando", "paciencia": 25.0, "t": 0.0, "esCompanero": False}
+    assert game.camera_has_target(game.cajaCliente().center) is True
+    _move_cam_to_px(engine, cam, game.cajaCliente().center)
+    cam.set_fist(True)
+    engine._update_camera_cursor_interaction(0.016)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
+    for _ in range(15):
+        game.update(0.05)
+    assert game.servidos == 2
     assert game.cono == []
 
 
@@ -247,31 +294,31 @@ def test_fritanga_camera_drag_flips_specific_arepa_pours_and_delivers(isolated_e
     a_urgente["coccion"] = 0.85
     a_elegida["coccion"] = 0.65
 
-    # 1. Apuntar exactamente a a_elegida y pellizcar: voltea esa arepa, no a_urgente
+    # 1. Apuntar exactamente a a_elegida y cerrar puño: voltea esa arepa, no a_urgente
     _move_cam_to_px(engine, cam, (a_elegida["x"], a_elegida["y"]))
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     assert a_elegida["lado"] == 2
     assert a_urgente["lado"] == 1
 
-    # 2. Servir patillazo manteniendo pellizco en zonaServir() y detener al soltar
+    # 2. Servir patillazo manteniendo puño en zonaServir() y detener al abrir mano
     engine.cam_click_cooldown = 0.0
     game.llenado = 0.0
     game.estadoVaso = "listo"
     _move_cam_to_px(engine, cam, game.zonaServir().center)
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
     assert game.mouseServir is True
     for _ in range(10):
         game.update(0.05)
     assert game.llenado > 0.35
 
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     assert game.mouseServir is False
     llenado_al_soltar = game.llenado
     game.update(0.05)
@@ -282,13 +329,13 @@ def test_fritanga_camera_drag_flips_specific_arepa_pours_and_delivers(isolated_e
     game.llenado = 0.82
     game.estadoVaso = "listo"
     _move_cam_to_px(engine, cam, game.cajaVasoQuieto().center)
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
     assert game.estadoVaso == "arrastrando"
     _move_cam_to_px(engine, cam, game.cajaCliente().center, steps=10, dt=0.05)
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     assert game.estadoVaso == "entregando"
     assert game.cliente["estado"] == "contento"
 
@@ -318,12 +365,12 @@ def test_fritanga_camera_pours_and_spills_without_auto_delivery(isolated_engine)
     assert game.estadoVaso == "listo"
     assert game.cliente["estado"] == "esperando"
 
-    # 2. Mantener pellizco dentro de zonaServir() con jitter > 25px pasado 0.8 NO corta el chorro y SÍ riega el vaso
+    # 2. Mantener puño dentro de zonaServir() con jitter > 25px pasado 0.8 NO corta el chorro y SÍ riega el vaso
     game.llenado = 0.0
     game.estadoVaso = "listo"
     zona = game.zonaServir()
     _move_cam_to_px(engine, cam, (zona.centerx - 15, zona.centery))
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
     assert game.mouseServir is True
 
@@ -372,9 +419,22 @@ def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
     game.cliente = {"cual": 0, "estado": "esperando", "tiempo": 0.0, "paciencia": 12.0}
     engine.state_machine.change_state(game)
 
-    # 1. Margen útil ampliado (0.20) y suavizado adaptativo fluido en Fritanga
+    # 1. Margen útil ampliado (0.20), ancla palma/muñeca + puño, aro AoE y fluidez en Fritanga
     assert Fritanga84Microgame.CAMERA_POINTER_MARGIN == pytest.approx(0.20)
     assert Fritanga84Microgame.CAMERA_POINTER_FLUID is True
+    assert Fritanga84Microgame.CAMERA_POINTER_ANCHOR == "palm"
+    assert Fritanga84Microgame.CAMERA_POINTER_GESTURE == "fist"
+    assert Fritanga84Microgame.CAMERA_POINTER_RING_RADIUS == 84
+
+    # Ancla en palma/muñeca evita que el cursor baje si el índice (get_position) cae al cerrar la mano
+    cam.palm_pos = (0.50, 0.50)
+    cam.pos = (0.50, 0.65)
+    for _ in range(12):
+        engine._update_camera_cursor_interaction(0.05)
+    assert abs(engine.cam_cursor_x - 960.0) < 15.0
+    assert abs(engine.cam_cursor_y - 540.0) < 15.0
+    cam.palm_pos = None
+
     cam.pos = (0.80, 0.80)
     for _ in range(12):
         engine._update_camera_cursor_interaction(0.05)
@@ -385,8 +445,8 @@ def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
         engine._update_camera_cursor_interaction(0.05)
     assert engine.cam_cursor_x <= 40.0 and engine.cam_cursor_y <= 40.0
 
-    # Fluidez adaptativa: barrido amplio avanza mucho más rápido en 16ms que jitter corto
-    # y un arrastre rápido (>= 48 px) en los primeros 75ms del pellizco no se frena
+    # Fluidez adaptativa sin frenado de puño: barrido amplio avanza mucho más rápido en 16ms que jitter corto
+    # y un arrastre corto/rápido tras cerrar puño no se frena (anchor_mode == "palm")
     _move_cam_to_px(engine, cam, (400.0, 400.0), steps=12, dt=0.05)
     engine.cam_cursor_x, engine.cam_cursor_y = 400.0, 400.0
     _move_cam_to_px(engine, cam, (405.0, 400.0), steps=1, dt=0.016)
@@ -395,25 +455,25 @@ def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
     engine.cam_cursor_x, engine.cam_cursor_y = 400.0, 400.0
     _move_cam_to_px(engine, cam, (1000.0, 400.0), steps=1, dt=0.016)
     sweep_step = engine.cam_cursor_x - 400.0
-    assert sweep_step > jitter_step * 40.0
+    assert sweep_step > jitter_step * 35.0
 
     engine.cam_cursor_x, engine.cam_cursor_y = 400.0, 400.0
     engine._cam_pointer_down = True
     engine._cam_pointer_down_time = 0.02
-    _move_cam_to_px(engine, cam, (700.0, 400.0), steps=1, dt=0.016)
-    assert engine.cam_cursor_x - 400.0 >= 140.0
+    _move_cam_to_px(engine, cam, (430.0, 400.0), steps=1, dt=0.016)
+    assert engine.cam_cursor_x - 400.0 >= 7.0
     engine._cam_pointer_down = False
     engine._cam_pointer_down_time = 0.0
 
-    # 2. Corte instantáneo (0 ms) al abrir pellizco + zona dulce x0.55 en [0.80, 1.08]
+    # 2. Corte instantáneo (0 ms) al abrir el puño + zona dulce x0.55 en [0.80, 1.08]
     game.llenado = 0.0
     game.estadoVaso = "listo"
     _move_cam_to_px(engine, cam, game.zonaServir().center)
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
     assert game.mouseServir is True and game._servir_por_camara is True
 
-    # Llenar hasta entrar en la zona dulce (>= 0.80) y verificar tasa x0.55 mientras mantiene pellizco
+    # Llenar hasta entrar en la zona dulce (>= 0.80) y verificar tasa x0.55 mientras mantiene puño
     for _ in range(20):
         game.update(0.05)
     assert 0.80 <= game.llenado < 1.0
@@ -421,15 +481,15 @@ def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
     game.update(0.10)
     assert game.llenado - antes == pytest.approx(0.85 * 0.55 * 0.10, abs=1e-4)
 
-    # Al abrir pellizco, incluso dentro de la gracia de 0.14s del motor, deja de llenar al instante
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.04)  # < 0.14s (engine aún no emite MOUSEBUTTONUP)
+    # Al abrir la mano, incluso dentro de la gracia de 0.08s del motor, deja de llenar al instante
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.04)  # < 0.08s (engine aún no emite MOUSEBUTTONUP)
     llenado_corte = game.llenado
     game.update(0.10)
     assert game.llenado == pytest.approx(llenado_corte)
-    engine._update_camera_cursor_interaction(0.12)  # termina de soltar drag en motor
+    engine._update_camera_cursor_interaction(0.06)  # termina de soltar drag en motor
 
-    # 3. Snap de arepaEn con camera_pointer=True priorizando arepa lista sobre desvío leve
+    # 3. Snap ampliado (1.70x) de arepaEn + camera_has_target + renderizado del aro AoE
     a0, a1 = game.arepas[0], game.arepas[1]
     for a in game.arepas:
         a["entrada"] = 1.0
@@ -440,21 +500,35 @@ def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
         a["lado"] = 1
         a["coccion"] = 0.2
     a1["coccion"] = 0.85
-    # Punto fuera de la elipse estricta de a1 (dy=72 > 55*sqrt(1.3)=62.7) pero dentro de 1.45x
-    punto_desviado = (a1["x"], a1["y"] + 72)
+    # Punto fuera de la elipse estricta de a1 (dy=82 > 55*sqrt(1.3)=62.7) pero dentro de 1.70x
+    punto_desviado = (a1["x"], a1["y"] + 82)
     assert game.arepaEn(punto_desviado, es_camara=False) is None
     assert game.arepaEn(punto_desviado, es_camara=True) is a1
 
-    # 4. Entrega directa pellizcando al cliente con vaso lleno
+    assert game.camera_has_target(punto_desviado) is True
+    assert game.camera_has_target(game.zonaServir().center) is True
+    assert game.camera_has_target((100, 100)) is False
+    engine._render_camera_cursor(engine.virtual_surface)
+    _move_cam_to_px(engine, cam, punto_desviado)
+    engine._render_camera_cursor(engine.virtual_surface)
+    cam.set_fist(True)
+    engine._update_camera_cursor_interaction(0.016)
+    engine._render_camera_cursor(engine.virtual_surface)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
+
+    # 4. Entrega directa cerrando el puño al cliente con vaso lleno
     engine.cam_click_cooldown = 0.0
     game.llenado = 0.88
     game.estadoVaso = "listo"
+    assert game.camera_has_target(game.cajaCliente().center) is True
     _move_cam_to_px(engine, cam, game.cajaCliente().center)
-    cam.set_pinch(True)
+    cam.set_fist(True)
     engine._update_camera_cursor_interaction(0.016)
-    cam.set_pinch(False)
-    engine._update_camera_cursor_interaction(0.08)
-    engine._update_camera_cursor_interaction(0.08)
+    cam.set_fist(False)
+    engine._update_camera_cursor_interaction(0.05)
+    engine._update_camera_cursor_interaction(0.05)
     assert game.estadoVaso == "entregando"
     assert game.cliente["estado"] == "contento"
 
@@ -478,7 +552,7 @@ def test_fritanga_camera_option_c_accessibility_and_margins(isolated_engine):
 
     # Con coccion >= 1.0 y sirviendo por cámara, aplica x0.65 adicional
     a0["coccion"] = 1.05
-    cam.set_pinch(True)
+    cam.set_fist(True)
     game.mouseServir = True
     game._servir_por_camara = True
     game.update_game(0.10)

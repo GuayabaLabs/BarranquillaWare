@@ -51,6 +51,8 @@ class CameraGestureInput:
         self._cooldowns = [0.0] * 4
         self.hand_x = 0.5
         self.hand_y = 0.5
+        self.palm_x = 0.5
+        self.palm_y = 0.5
         self.hand_detected = False
         self.pointing_direction: Optional[tuple[float, float]] = None
         self.pinch_active = False
@@ -213,6 +215,39 @@ class CameraGestureInput:
         with self._lock:
             return self.hand_x, self.hand_y
 
+    def get_palm_position(self) -> tuple[float, float]:
+        with self._lock:
+            return self.palm_x, self.palm_y
+
+    @staticmethod
+    def _palm_anchor(lm) -> tuple[float, float]:
+        """Centro rígido palma/muñeca (LM 9 + LM 0) que no cae al cerrar los dedos."""
+        px = 0.72 * lm[9].x + 0.28 * lm[0].x
+        py = 0.72 * lm[9].y + 0.28 * lm[0].y
+        return (max(0.0, min(1.0, px)), max(0.0, min(1.0, py)))
+
+    @classmethod
+    def _detect_fist(cls, lm, was_fist: bool = False) -> bool:
+        """Detecta puño cerrado de forma invariante a la inclinación de la mano y con histéresis."""
+        def dist(a, b) -> float:
+            return ((a.x - b.x) ** 2 + (a.y - b.y) ** 2) ** 0.5
+
+        wrist = lm[0]
+        palm = lm[9]
+        scale = max(1e-4, dist(wrist, palm))
+        wrist_ratio = 1.24 if was_fist else 1.08
+        palm_ratio = 1.05 if was_fist else 0.85
+        curled = 0
+        index_curled = False
+        for idx, (tip_i, pip_i) in enumerate(((8, 6), (12, 10), (16, 14), (20, 18))):
+            tip = lm[tip_i]
+            pip = lm[pip_i]
+            if dist(tip, wrist) < dist(pip, wrist) * wrist_ratio or dist(tip, palm) < scale * palm_ratio:
+                curled += 1
+                if idx == 0:
+                    index_curled = True
+        return bool(index_curled and curled >= 3)
+
     def get_hands(self) -> list[tuple[float, float]]:
         """Devuelve la lista de posiciones (x, y) normalizadas de hasta 2 manos."""
         with self._lock:
@@ -335,10 +370,17 @@ class CameraGestureInput:
                         pass
         hands = None
         try:
-            hands = mp.solutions.hands.Hands(
-                static_image_mode=False, max_num_hands=3,
-                min_detection_confidence=0.65, min_tracking_confidence=0.60
-            )
+            try:
+                hands = mp.solutions.hands.Hands(
+                    static_image_mode=False, max_num_hands=3,
+                    model_complexity=0,
+                    min_detection_confidence=0.60, min_tracking_confidence=0.55
+                )
+            except TypeError:
+                hands = mp.solutions.hands.Hands(
+                    static_image_mode=False, max_num_hands=3,
+                    min_detection_confidence=0.60, min_tracking_confidence=0.55
+                )
             last = time.monotonic()
             while self.enabled and not self._stop.is_set():
                 ok, frame = cap.read()
@@ -354,6 +396,7 @@ class CameraGestureInput:
                 piano_fingers = [False] * 4
                 extended_fingers = [False] * 4
                 hand_x, hand_y = 0.5, 0.5
+                palm_x, palm_y = 0.5, 0.5
                 detected = False
                 raised = False
                 fist = False
@@ -371,8 +414,9 @@ class CameraGestureInput:
                     # Preferir la mano derecha (en imagen espejada) para apuntar direcciones en el mapa.
                     right_hand_lm = max(foreground, key=lambda h: h.landmark[9].x).landmark
                     pointing_dir = self._detect_pointing_direction(right_hand_lm)
-                    # Seguimiento focal en la punta del dedo índice (LM 8) para que el lápiz apunte donde apunta el dedo
+                    # Seguimiento focal en índice (LM 8) y centro rígido palma/muñeca (LM 9 + LM 0)
                     hand_x, hand_y = lm[8].x, lm[8].y
+                    palm_x, palm_y = self._palm_anchor(lm)
 
                     # Detección de pellizco con histéresis para evitar rebotes cerca del umbral
                     dist_pinch = ((lm[8].x - lm[4].x) ** 2 + (lm[8].y - lm[4].y) ** 2) ** 0.5
@@ -383,8 +427,8 @@ class CameraGestureInput:
                     for i, (tip, pip) in enumerate(((8, 6), (12, 10), (16, 14), (20, 18))):
                         extended_fingers[i] = lm[tip].y < lm[pip].y - 0.012
                         piano_fingers[i] = lm[tip].y > lm[pip].y + 0.012
-                    raised = sum(extended_fingers) >= 4
-                    fist = bool(piano_fingers[0] and sum(piano_fingers) >= 3)
+                    fist = self._detect_fist(lm, self._previous_fist)
+                    raised = bool(sum(extended_fingers) >= 4 and not fist)
                 else:
                     self._tracked_lost_frames += 1
                     if self._tracked_lost_frames >= 8:
@@ -393,6 +437,7 @@ class CameraGestureInput:
                     moving_up = self._previous_hand_y - hand_y > 0.035
                     self.hand_detected = detected
                     self.hand_x, self.hand_y = hand_x, hand_y
+                    self.palm_x, self.palm_y = palm_x, palm_y
                     self._hands = hands_list
                     self.pointing_direction = pointing_dir
                     self.hand_raised = raised

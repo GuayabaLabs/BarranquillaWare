@@ -227,8 +227,11 @@ def test_fritanga_gamepad_keeps_standard_rules_even_with_camera_enabled(isolated
         enabled = True
         def is_hand_present(self): return True
         def get_position(self): return (0.5, 0.5)
+        def get_palm_position(self): return (0.5, 0.5)
         def is_pinching(self): return False
+        def is_fist(self): return False
         def consume_click(self): return False
+        def consume_fist(self): return False
         def consume_hand_raise(self): return False
 
     engine = isolated_engine

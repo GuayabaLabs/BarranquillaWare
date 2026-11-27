@@ -133,8 +133,12 @@ class Fritanga84Microgame(BaseMicrogame):
     CAMERA_POINTER = True
     CAMERA_POINTER_DRAG = True
     CAMERA_POINTER_FLUID = True
+    CAMERA_POINTER_ANCHOR = "palm"
+    CAMERA_POINTER_GESTURE = "fist"
+    CAMERA_POINTER_RING_RADIUS = 84
+    CAMERA_RELEASE_DELAY = 0.08
     CAMERA_DWELL_CLICK = False
-    CAMERA_CLICK_COOLDOWN = 0.10
+    CAMERA_CLICK_COOLDOWN = 0.08
     CAMERA_POINTER_MARGIN = 0.20
     def __init__(
         self,
@@ -681,18 +685,17 @@ class Fritanga84Microgame(BaseMicrogame):
             self._control_camara_activo = True
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             es_cam = self._es_evento_camara(event)
-            if es_cam and self.vasoLleno() and self.estadoVaso == "listo" and self.clienteEsperando():
-                caja_cli = self.cajaCliente()
-                if caja_cli is not None:
-                    zona_cli = pygame.Rect(caja_cli.x - 80, caja_cli.y - 80, caja_cli.w + 80, caja_cli.h + 80)
-                    if zona_cli.collidepoint(event.pos):
-                        self.entregarVaso()
-                        return
-            margen_vaso = (70, 70) if es_cam else (40, 40)
+            margen_vaso = (110, 100) if es_cam else (40, 40)
             if self.vasoLleno() and self.estadoVaso == "listo" and self.cajaVasoQuieto().inflate(*margen_vaso).collidepoint(event.pos):
                 self.agarrarVaso(event.pos, es_camara=es_cam)
                 return
-            if self.zonaServir().collidepoint(event.pos):
+            if es_cam and self.vasoLleno() and self.estadoVaso == "listo" and self.clienteEsperando():
+                caja_cli = self.cajaCliente()
+                if caja_cli is not None:
+                    if caja_cli.inflate(180, 180).collidepoint(event.pos) or (event.pos[0] >= 1280 and event.pos[1] <= 860):
+                        self.entregarVaso()
+                        return
+            if self.zonaServir(es_camara=es_cam).collidepoint(event.pos):
                 self.mouseServir = True
                 self._servir_por_camara = es_cam
                 self.puntoApretado = event.pos
@@ -707,7 +710,7 @@ class Fritanga84Microgame(BaseMicrogame):
             elif apretado and self.mouseServir and self.vasoLleno() and self.estadoVaso == "listo":
                 es_cam = self._es_evento_camara(event)
                 es_virtual = bool(es_cam or getattr(event, "gamepad_pointer", False))
-                salio_botellon = (not self.zonaServir().collidepoint(event.pos)) if es_virtual else True
+                salio_botellon = (not self.zonaServir(es_camara=es_cam or self._servir_por_camara).collidepoint(event.pos)) if es_virtual else True
                 if salio_botellon and math.hypot(event.pos[0] - self.puntoApretado[0], event.pos[1] - self.puntoApretado[1]) > 25:
                     self.agarrarVaso(event.pos, es_camara=es_cam or self._servir_por_camara)
                     self.agarreVaso = (0, -70)
@@ -767,12 +770,13 @@ class Fritanga84Microgame(BaseMicrogame):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             super().handle_event(event)
             return
-        min_aviso = 1.1 if getattr(event, "camera_pointer", False) else 0.6
+        min_aviso = 0.75 if getattr(event, "camera_pointer", False) else 0.6
         if self.tiempoAviso < min_aviso:
             return
         if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+            es_cam = self._es_evento_camara(event)
             for i, caja in enumerate(self.botonesAviso):
-                if self.cajaBotonAviso(i).collidepoint(event.pos):
+                if self.cajaBotonAviso(i, es_camara=es_cam).collidepoint(event.pos):
                     if event.type == pygame.MOUSEMOTION and self.opcionAviso != i:
                         self.opcionAviso = i
                         if hasattr(self.audio, "play_hover"):
@@ -865,9 +869,10 @@ class Fritanga84Microgame(BaseMicrogame):
                 self.terminarTutorial()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             saltar, seguir = self.botonesTutorial()
-            if seguir.inflate(30, 20).collidepoint(event.pos):
+            margen_tut = (55, 40) if self._es_evento_camara(event) else (30, 20)
+            if seguir.inflate(*margen_tut).collidepoint(event.pos):
                 self.siguientePasoTutorial()
-            elif saltar.inflate(30, 20).collidepoint(event.pos):
+            elif saltar.inflate(*margen_tut).collidepoint(event.pos):
                 self.terminarTutorial()
 
     def revisarGestosTutorial(self) -> None:
@@ -978,27 +983,28 @@ class Fritanga84Microgame(BaseMicrogame):
             return 1.25 * (1.0 + 0.05 * math.sin(self.tiempoAviso * 8.0))
         return 0.85
 
-    def cajaBotonAviso(self, i: int) -> pygame.Rect:
+    def cajaBotonAviso(self, i: int, es_camara: bool = False) -> pygame.Rect:
         caja = self.botonesAviso[i]
         if self.listo:
             boton = self.botonRojo.get_rect()
             boton.size = (int(boton.w * self.escalaBotonAviso(i)), int(boton.h * self.escalaBotonAviso(i)))
             boton.center = caja.center
             caja = boton.union(caja)
-        return caja.inflate(40, 30)
+        return caja.inflate(70, 55) if es_camara else caja.inflate(40, 30)
 
     def revisarGestosAviso(self, dt: float = 1 / 60) -> None:
         camara = getattr(self, "camara", None)
-        if not camara or not camara.enabled or self.tiempoAviso < 0.6:
+        if not camara or not camara.enabled or self.tiempoAviso < 0.9:
             self.reset_binary_camera_choice()
             return
-        choice = self.poll_binary_camera_choice(camara, dt)
+        choice = self.poll_binary_camera_choice(camara, dt, hold_time=0.75)
         if choice is not None:
             self.elegirOpcion(choice)
 
-    def zonaServir(self) -> pygame.Rect:
-        return pygame.Rect(self.cajaBotellon.x - 20, self.cajaBotellon.y, self.cajaBotellon.w + 120,
+    def zonaServir(self, es_camara: bool = False) -> pygame.Rect:
+        rect = pygame.Rect(self.cajaBotellon.x - 20, self.cajaBotellon.y, self.cajaBotellon.w + 120,
                            self.baseVaso[1] - self.cajaBotellon.y)
+        return rect.inflate(90, 80) if es_camara else rect
 
     def arepaEn(self, pos, es_camara: bool = False) -> Optional[dict]:
         for arepa in self.arepas:
@@ -1012,8 +1018,8 @@ class Fritanga84Microgame(BaseMicrogame):
         for arepa in self.arepas:
             if not self.arepaLibre(arepa):
                 continue
-            dx = (pos[0] - arepa["x"]) / (85.0 * 1.45)
-            dy = (pos[1] - arepa["y"]) / (55.0 * 1.45)
+            dx = (pos[0] - arepa["x"]) / (85.0 * 1.70)
+            dy = (pos[1] - arepa["y"]) / (55.0 * 1.70)
             d2 = dx * dx + dy * dy
             if d2 <= 1.3:
                 candidatas.append((d2, arepa))
@@ -1023,6 +1029,35 @@ class Fritanga84Microgame(BaseMicrogame):
         if listas:
             return max(listas, key=lambda par: par[1]["coccion"])[1]
         return min(candidatas, key=lambda par: par[0])[1]
+
+    def camera_has_target(self, pos) -> bool:
+        if self.phase != self.PHASE_PLAY or self.is_finished or self.secuencia:
+            return False
+        if self.tutorial is not None:
+            saltar, seguir = self.botonesTutorial()
+            return seguir.inflate(55, 40).collidepoint(pos) or saltar.inflate(55, 40).collidepoint(pos)
+        if self.trol["estado"] == "aviso":
+            return any(self.cajaBotonAviso(i, es_camara=True).collidepoint(pos) for i in range(len(self.botonesAviso)))
+        if self.reflexion:
+            return False
+        if self.estadoVaso == "arrastrando":
+            caja_cli = self.cajaCliente()
+            if caja_cli is not None and self.clienteEsperando():
+                return caja_cli.inflate(180, 200).collidepoint(pos) or (pos[0] >= 1280 and pos[1] <= 860)
+            return False
+        if self.vasoLleno() and self.estadoVaso == "listo":
+            if self.clienteEsperando():
+                caja_cli = self.cajaCliente()
+                if caja_cli is not None and (
+                    caja_cli.inflate(180, 180).collidepoint(pos) or (pos[0] >= 1280 and pos[1] <= 860)
+                ):
+                    return True
+            if self.cajaVasoQuieto().inflate(110, 100).collidepoint(pos):
+                return True
+        if self.estadoVaso == "listo" and not self.vasoLleno() and self.zonaServir(es_camara=True).collidepoint(pos):
+            return True
+        arepa = self.arepaEn(pos, es_camara=True)
+        return bool(arepa is not None and arepa["coccion"] >= 0.55)
 
     def arepaMasUrgente(self) -> Optional[dict]:
         libres = [a for a in self.arepas if self.arepaLibre(a)]
@@ -1650,13 +1685,23 @@ class Fritanga84Microgame(BaseMicrogame):
                 elif hasattr(self.audio, "play_miss"):
                     self.audio.play_miss()
 
+    def _gesto_camara_sostenido(self) -> bool:
+        cam = getattr(self, "camara", None)
+        if cam is None:
+            return True
+        if self.CAMERA_POINTER_GESTURE == "fist":
+            if hasattr(cam, "is_fist"):
+                return bool(cam.is_fist())
+            return True
+        if hasattr(cam, "is_pinching"):
+            return bool(cam.is_pinching())
+        return True
+
     def sirviendo(self) -> bool:
         if self.escribiendo > 0.0:
             return False
-        if self.mouseServir and self._servir_por_camara:
-            cam = getattr(self, "camara", None)
-            if cam is not None and hasattr(cam, "is_pinching") and not cam.is_pinching():
-                return False
+        if self.mouseServir and self._servir_por_camara and not self._gesto_camara_sostenido():
+            return False
         return self.teclaServir or self.mouseServir or self.gestoServir
 
     def actualizarVaso(self, dt: float) -> None:
@@ -2740,8 +2785,11 @@ class Fritanga84Microgame(BaseMicrogame):
         if self.rabia > 0.5:
             x += int(math.sin(self.tiempoJugado * 40.0) * 6 * (self.rabia - 0.5) / 0.5)
         lleno = self.vasos[3]
-        sombra = pygame.Surface((lleno.get_width(), 24), pygame.SRCALPHA)
-        pygame.draw.ellipse(sombra, (40, 20, 10, 70), sombra.get_rect())
+        sombra = getattr(self, "_sombra_vaso", None)
+        if sombra is None or sombra.get_width() != lleno.get_width():
+            sombra = pygame.Surface((lleno.get_width(), 24), pygame.SRCALPHA)
+            pygame.draw.ellipse(sombra, (40, 20, 10, 70), sombra.get_rect())
+            self._sombra_vaso = sombra
         surface.blit(sombra, sombra.get_rect(center=(x, y + 30)))
         surface.blit(lleno, lleno.get_rect(midbottom=(x, y)))
         caja = self.cajaCliente()
@@ -2825,17 +2873,22 @@ class Fritanga84Microgame(BaseMicrogame):
     def armarTermometro(self) -> pygame.Surface:
         marco = self.marcoTermometro
         w, h = marco.get_size()
-        lienzo = pygame.Surface((w + 16, h), pygame.SRCALPHA)
         canal = self.canalTermometro.move(8, 0)
         ancho = int(canal.w * min(1.0, max(0.0, self.rabiaMostrada)))
+        temblor = 0
+        if self.calor() > 0.6:
+            temblor = int(math.sin(self.tiempoJugado * 45.0) * 4 * (self.calor() - 0.6) / 0.4)
+        clave = (ancho, temblor)
+        cache = getattr(self, "_cache_termometro", None)
+        if cache is not None and cache[0] == clave:
+            return cache[1]
+        lienzo = pygame.Surface((w + 16, h), pygame.SRCALPHA)
         corte = int(w * 0.88)
         lienzo.blit(marco, (8, 0), (0, 0, corte, h))
         if ancho >= 4:
             lienzo.blit(self.rellenoTermometro, canal.topleft, (0, 0, ancho, canal.h))
-        temblor = 0
-        if self.calor() > 0.6:
-            temblor = int(math.sin(self.tiempoJugado * 45.0) * 4 * (self.calor() - 0.6) / 0.4)
         lienzo.blit(marco, (8 + corte + temblor, 0), (corte, 0, w - corte, h))
+        self._cache_termometro = (clave, lienzo)
         return lienzo
 
     def dibujarTermometroDestacado(self, surface: pygame.Surface) -> None:
